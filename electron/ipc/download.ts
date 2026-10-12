@@ -2,7 +2,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { spawn, exec } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
-import { getYtDlpPath, getFfmpegPath, checkJsRuntime } from '../utils/binary'
+import { resolveDependency, getFfmpegLocation, checkJsRuntime } from '../utils/binary'
 import { getCookieAttempts, runWithCookies, cookieFailureHint } from '../utils/cookies'
 import { isDouyinUrl, isKuaishouUrl, ensureDownloadDir } from '../utils/platform'
 import { parseDouyinWithAPI, parseDouyinWithPuppeteer } from '../parsers/douyin'
@@ -261,9 +261,17 @@ export function registerDownloadIpc() {
       }
     }
 
-    const isYoutube = options.url.includes('youtube.com') || options.url.includes('youtu.be')
+    // 依赖不再随包分发，下载前先确认 yt-dlp / ffmpeg 可用
+    const ytdlpPath = await resolveDependency('yt-dlp')
     const isAudioOnly = options.downloadMode === 'audio'
     const isSubtitleOnly = options.downloadMode === 'subtitle'
+    // 字幕模式不需要 ffmpeg；其余模式缺失时给出可引导下载的报错
+    const ffmpegLocation = isSubtitleOnly ? '' : getFfmpegLocation()
+    if (!isSubtitleOnly && !ffmpegLocation) {
+      await resolveDependency('ffmpeg')
+    }
+
+    const isYoutube = options.url.includes('youtube.com') || options.url.includes('youtu.be')
     const userTemplate = options.filenameTemplate || '%(title)s'
     const outputTemplate = path.join(outputDir, `${userTemplate}.%(ext)s`)
 
@@ -275,8 +283,9 @@ export function registerDownloadIpc() {
       '--print', isSubtitleOnly ? `after_move:${SUBS_PREFIX}%(requested_subtitles)j` : `after_move:${FILE_PREFIX}%(filepath)s`,
       // HLS/DASH 分片并发下载
       '--concurrent-fragments', '8',
-      '--ffmpeg-location', getFfmpegPath(),
     ]
+    // 传目录而不是文件路径：yt-dlp 会在该目录里同时找 ffmpeg 与 ffprobe
+    if (ffmpegLocation) args.push('--ffmpeg-location', ffmpegLocation)
 
     if (isSubtitleOnly) {
       args.push('--skip-download', '--write-subs', '--sub-langs', options.subtitles?.join(',') || 'all', '--convert-subs', 'srt')
@@ -303,14 +312,13 @@ export function registerDownloadIpc() {
     }
     args.push(...getExtractorArgs(options.url))
 
-    const ytdlpPath = getYtDlpPath()
     let isPaused = false
     let downloadedFile = ''
     let hasStarted = false
 
     // 单次运行 yt-dlp；source 为 URL 或 --load-info-json 参数
     const runOnce = (source: string[], cookieArgs: string[]) => new Promise<{ code: number | null; stderr: string }>((resolve, reject) => {
-      const child = spawn(ytdlpPath, [...args, ...cookieArgs, ...source], { cwd: path.dirname(ytdlpPath) })
+      const child = spawn(ytdlpPath!, [...args, ...cookieArgs, ...source], { cwd: path.dirname(ytdlpPath!) })
       let stderr = ''
 
       activeDownloads.set(options.taskId, { child, options, status: 'downloading', setPaused: (v: boolean) => { isPaused = v } })

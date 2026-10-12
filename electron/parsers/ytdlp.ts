@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import path from 'node:path'
-import { getYtDlpPath, checkJsRuntime } from '../utils/binary'
+import { resolveDependency, checkJsRuntime } from '../utils/binary'
 import { getCookieAttempts, runWithCookies, cookieFailureHint } from '../utils/cookies'
 import { isTwitterUrl } from '../utils/platform'
 import { LANG_NAMES } from '../constants'
@@ -42,14 +42,17 @@ function applyYoutubeRuntime(args: string[]) {
   }
 }
 
-function runYtdlp(args: string[]): Promise<{ code: number | null; stdout: string; stderr: string }> {
+async function runYtdlp(args: string[]): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  // 依赖不随包分发：解析前先确认 yt-dlp 存在，缺失时抛出可引导下载的错误
+  const ytdlpPath = await resolveDependency('yt-dlp')
+  // resolveDependency 在 required=true 时不会返回 null；这里显式兜一次让类型收敛
+  if (!ytdlpPath) throw new Error('未找到可用的 yt-dlp')
   return new Promise((resolve, reject) => {
-    const ytdlpPath = getYtDlpPath()
     const child = spawn(ytdlpPath, args, { cwd: path.dirname(ytdlpPath) })
     let stdout = ''
     let stderr = ''
-    child.stdout?.on('data', (d: Buffer) => { stdout += d.toString() })
-    child.stderr?.on('data', (d: Buffer) => { stderr += d.toString() })
+    child.stdout.on('data', (d: Buffer) => { stdout += d.toString() })
+    child.stderr.on('data', (d: Buffer) => { stderr += d.toString() })
     child.on('close', (code) => resolve({ code, stdout, stderr }))
     child.on('error', reject)
   })

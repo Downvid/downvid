@@ -5,6 +5,7 @@ import fs from 'node:fs'
 import { setMainWindow } from './store'
 import { createMenu } from './menu'
 import { registerAppIpc } from './ipc/app'
+import { registerDepsIpc } from './ipc/deps'
 import { registerDownloadIpc } from './ipc/download'
 import { registerHistoryIpc } from './ipc/history'
 import { registerSystemIpc } from './ipc/system'
@@ -142,6 +143,7 @@ function createWindow() {
 
 // 注册 IPC
 registerAppIpc()
+registerDepsIpc()
 registerDownloadIpc()
 registerHistoryIpc()
 registerSystemIpc()
@@ -182,4 +184,20 @@ app.whenReady().then(() => {
   createWindow()
   createMenu()
   log('[LIFECYCLE] Window and menu created')
+  // 依赖探测放在窗口创建之后：首次启动即在后台跑 Go 侧车，
+  // 用户粘贴链接时通常已拿到结果，不阻塞开窗。
+  void warmUpRuntime()
 })
+
+/** 后台预热依赖探测，失败只记日志（用户仍可在设置里手动重新检测） */
+async function warmUpRuntime() {
+  try {
+    const { getRuntimeStatus } = await import('./utils/runtime')
+    const status = await getRuntimeStatus()
+    for (const dep of status.results) {
+      log(`[DEPS] ${dep.kind}: ${dep.found ? `${dep.version} @ ${dep.path} (${dep.source})` : `缺失 — ${dep.reason}`}`)
+    }
+  } catch (e: any) {
+    log(`[DEPS] 依赖探测失败：${e?.message || e}`)
+  }
+}
