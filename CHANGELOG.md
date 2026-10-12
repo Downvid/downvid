@@ -2,43 +2,88 @@
 
 本文件记录 DownVid 的所有版本更新。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
-## [Unreleased]
+## [1.3.0] - 2026-10-12
 
-### 文档与工程规范
-- 新增 [安全政策](./SECURITY.md)（漏洞报告渠道、响应时限、安全边界与已知取舍）、[贡献者行为准则](./CODE_OF_CONDUCT.md)
-- 新增 [仓库规范](./docs/standards.md)：分支/提交规范、Issue 与 PR 流程、**改动落点清单**（IPC 三处同步、设置形状、运行依赖、发布产物的同步要求）、废弃流程与依赖引入原则
-- 新增 [发布流程](./docs/release.md)：版本语义（哪些改动属于 MAJOR）、发布步骤、**产物命名契约**（改名会让存量用户无法自动更新）、更新清单生成方式、回滚预案
-- 新增 `.github/CODEOWNERS`，发布与供应链相关路径（workflows、updater、依赖清单）纳入必需评审
-- 修正架构文档：删除了已不存在的 `bin/<platform>/<arch>` 内置二进制描述，改为 Go 依赖边车（探测 + 下载）与 `deps:*` IPC
-- 补齐 CI 安全能力：新增 CodeQL 扫描（TypeScript/Vue + Go）与 Dependency Review（高危拦截 + 许可证白名单）；全部 job 补 `timeout-minutes`，GitHub Actions 版本统一并升到最新主版本
-- Dependabot 增加 Go 模块与分组提交信息，忽略 Electron 大版本（原生 ABI 变更需人工验证）
+> **升级提示**：本版起安装包不再内置 yt-dlp 与 ffmpeg。升级后如果机器上没有这两个工具，
+> DownVid 会在「设置 → 运行依赖」中提示，点一下即可自动下载安装（带 SHA-256 校验）。
+> 如果你已用 Homebrew / winget / apt 等装过，会自动识别并直接复用，无需任何操作。
 
-### 文档与统计口径
-- Release 正文顶部新增「点徽章即下载」引导区（`scripts/gen-release-notes.mjs`）：Release 里 CHANGELOG 较长，此前用户常找不到下载入口。链接按实际产物生成，不会出现死链
-- 新增「如何统计真实的下载量 / 装机量」说明：release 资源下载量总和会被 `latest*.yml`（每次检查更新都请求）与 `*.blockmap`（仅自动更新的差分）放大，需按资源类型区分口径
-- 明确**不引入客户端匿名统计**：GitHub 公开数据的口径已覆盖最常问的问题，而客户端统计的独有价值（留存/崩溃率）在当前装机量级下样本不足，代价却是端点、知情同意与隐私说明
+### 重要变更
 
-### 内部改进（工程规范）
-- 仓库坐标与外部链接集中到 `shared/app.ts`（此前散落在 9 处，改仓库需全局搜索且极易漏改），新增 `pnpm lint:ipc` 静态校验 IPC 三处同步、`src/env.d.ts` 的全局脚本约束、以及产物命名契约
-- 拆分超长文件：`electron/ipc/download.ts` 445 → 95 行（直链/yt-dlp/进度上报拆到 `electron/download/`）；`douyin.ts` 与 `kuaishou.ts` 抽出共用的 `parsers/shared.ts`；`UpdateModal.vue` 467 → 344 行（更新状态机抽为 `composables/useUpdater.ts`）
-- `buildYtdlpArgs` 改为纯函数；顺带修正非 Electron 环境下缺 JS 运行时被静默跳过的问题
-- 引入 Vitest 与 47 个纯逻辑单测（格式选择、依赖错误识别、yt-dlp 参数组装、解析器共用工具、更新状态机），已接入 CI
-
-### 变更（破坏性）
-- **安装包不再内置 yt-dlp 与 ffmpeg**：启动时由新增的 Go 依赖边车（`backend/cmd/downvid-deps`）按「系统优先」的顺序识别机器上已安装的版本并直接复用——手动指定的路径 → `userData/runtime/bin/` 托管目录 → 登录 shell 的 `PATH` 与各平台常见安装目录（Homebrew / MacPorts / scoop / winget / apt 等）。macOS / Linux 从桌面启动时 `PATH` 很精简，边车会额外执行一次登录 shell 来补全 `~/.local/bin`、`/opt/homebrew/bin` 等目录
-- 安装包体积因此大幅下降（此前每个架构约 80 MB，现仅携带约 10 MB 边车）；仓库移除 `bin/` 目录与 Git LFS 追踪，不再把二进制提交进版本库
+- **安装包不再内置 yt-dlp 与 ffmpeg**，改为运行时按「系统优先，缺失才下载」的顺序解析：
+  手动指定的路径 → DownVid 托管目录（`userData/runtime/bin/`）→ 登录 shell 的 PATH 与
+  各平台常见安装目录（Homebrew / MacPorts / scoop / winget / apt）→ 裸命令名。
+  代价是首次使用若两侧都没有，需要点一下「下载」；收益是安装包体积减小约 30%
+  （macOS arm64 从 182.6 MB 降到 128.8 MB），且不再重复占用磁盘
+- 仓库移除 `bin/` 目录与 Git LFS 追踪（此前 `.git` 已膨胀到 804 MB）
 
 ### 新增
-- 依赖检测不到时可一键下载：「设置 → 运行依赖」常驻依赖管理板块（显示来源、版本、路径、缺失原因，支持逐个下载/更新/取消、打开安装目录）；解析或下载因缺依赖失败时也会弹出「下载并继续」引导
-- 依赖下载带 SHA-256 校验，先校验后解压安装，写入 `userData/runtime/bin/`，不污染系统；支持 API 代理设置。macOS 上自动去除隔离属性并做 ad-hoc 签名（否则 Apple Silicon 会直接 `killed: 9`）
-- 进阶设置可手动指定 yt-dlp / ffmpeg / ffprobe 的绝对路径，自动检测不到或要固定版本时使用
-- Go 侧车带有单元测试（版本解析、候选路径优先级、下载校验与重试、进度上报、清单完整性），CI 会运行 `gofmt` / `go vet` / `go test`
-- 新增 `pnpm deps:manifest` 与 `Update dependencies manifest` 工作流：从上游抓取版本号与 SHA-256 生成清单，`pnpm deps:manifest:check` 在 CI 中校验清单未落后
+
+- **运行依赖管理**：「设置 → 运行依赖」显示每个依赖的版本、来源（系统安装 / DownVid 托管 /
+  手动指定）、完整路径与未找到的原因；支持逐个下载、更新、取消与打开安装目录
+- **缺依赖时一键下载引导**：启动检测、解析失败、开始下载前三处都会拦截并给出下载入口，
+  而不是丢一句「未找到 yt-dlp」让用户自己猜
+- 依赖下载带 SHA-256 校验，先校验后解压安装，写入 DownVid 自己的目录，不污染系统；
+  macOS 上自动去除隔离属性并做 ad-hoc 签名（否则 Apple Silicon 会直接 `killed: 9`）
+- 进阶设置可手动指定 yt-dlp / ffmpeg / ffprobe 的绝对路径
+- **Cookie 使用引导浮窗**：说明自动读取与手动导入两种方式，并提供一键跳到 Cookie 设置；
+  不再跳转仓库 wiki
+- 关于页新增「开源组件」致谢（Material Symbols / yt-dlp / FFmpeg 等及其许可）
+- 新增 `pnpm deps:manifest` 与「更新运行依赖清单」工作流：从上游抓取版本号与 SHA-256
+
+### 修复
+
+- **macOS 上 Logo 不显示**：Header 为避让原生红绿灯按钮留出了左内边距，但 Logo 被
+  `v-if="!isMac"` 排除了，那块位置一直空着
+- **Windows 多出一条菜单栏**：应用菜单在所有平台注册，而 Windows/Linux 的 Electron 会把它
+  渲染成窗口内的菜单栏，与自绘标题栏重复；改为仅 macOS 注册
+- **Cookie 提示误报**：此前仅按 URL 域名就提示「需要 Cookie」，即使用户已配好、上次解析也
+  成功读到登录态；现在依据真实的 Cookie 来源状态决定是否提示
+- **macOS 读取 Safari Cookie 失败会导致整个解析失败**：权限错误
+  （`Operation not permitted ... Cookies.binarycookies`）未被识别为「Cookie 读取失败」，
+  因而没有退到下一个浏览器来源。现会正确跳过并继续尝试
+- **任务队列的文件夹图标点了没反应**：用的是"用系统程序打开文件"（视频会直接播放）而不是
+  定位目录，且失败时静默；改为在文件管理器中定位并选中，失败时给出提示
+- **代理测试结果不可信**：原实现没有真正走代理（用全局 fetch，既不读参数也不读环境变量），
+  实际只在测「本机能否直连 google.com」——代理挂掉也会报成功。现改为通过一次性 session
+  真实请求，并加直连对照与错误原因翻译
+- **界面路径暴露用户名**：下载目录等改为显示成 `~/Downloads/DownVid`，悬停仍可看到完整路径
+- 解析进度条此前是虚构的百分比（与真实进度无关），改为不确定进度条 + 已用时间
+- 检查更新重复点击每次都发请求：加 60 秒结果缓存与并发合并，下载完成后失效缓存
+- 图标字体改为内嵌，修掉离线或网络受限时图标退化成文字的问题；并修复
+  `high_definition`（不是有效的 Material Symbols 名，会渲染成文字「HIGH_DEFINITION」）
+
+### 改进
+
+- 应用菜单（仅 macOS）新增「设置…」⌘,
+- 设置改为居中模态浮窗（与错误 / 更新提示同一形态），并修掉打开慢的问题：
+  依赖探测曾阻塞首帧渲染（需启动 Go 边车，冷启动 1~3 秒），现改为后台进行
+- 打包排除 asar 内的 `node_modules`（依赖已被内联进构建产物），asar 40 MB → 3.8 MB
+- 图标、按钮与状态标签补齐图标；技术栈徽章更新并补上 Go 与 Vitest
+
+### 文档与工程
+
+- 新增[安全政策](./SECURITY.md)、[贡献者行为准则](./CODE_OF_CONDUCT.md)、
+  [仓库规范](./docs/standards.md)、[发布流程](./docs/release.md)、[项目结构](./docs/project-structure.md)、
+  `.github/CODEOWNERS`
+- Release 正文顶部新增「点徽章即下载」引导区，链接按实际产物生成，不会死链
+- 文档记录真实的下载量口径：release 资源下载量总和会被 `latest*.yml`（每次检查更新都请求）
+  与 `*.blockmap`（仅自动更新）放大，不能直接当作装机量
+- 明确不引入客户端匿名统计，理由与替代口径见 `docs/release.md`
+- CI 新增 CodeQL 扫描、依赖审查、Go 检查、单元测试与图标名 / IPC 契约校验
+- 引入 Vitest 与 57 个纯逻辑单测（格式选择、依赖错误识别、yt-dlp 参数组装、
+  解析器共用工具、Cookie 错误识别）
+- 拆分超长文件：`electron/ipc/download.ts` 445 → 95 行；
+  `UpdateModal.vue` 467 → 344 行（更新状态机抽为 `composables/useUpdater.ts`）；
+  抖音与快手抽出共用的 `parsers/shared.ts`
+- 仓库坐标与外部链接集中到 `shared/app.ts`（此前散落 9 处）
+- 修正架构文档中已不存在的内置二进制描述
 
 ### 移除
-- `bin/` 目录、`bin/download-deps.sh` 与 `pnpm download-deps*` 系列脚本
-- `Update binaries` 工作流（由 `Update dependencies manifest` 取代）
-- `.gitattributes` 中的 LFS 追踪规则
+
+- `bin/` 目录、`bin/download-deps.sh` 与 `pnpm download-deps*` 脚本
+- 「更新二进制」工作流（由「更新运行依赖清单」取代）
+- 解析页的「支持解析平台」区块（占版面，信息已在文档中）
 
 ---
 
