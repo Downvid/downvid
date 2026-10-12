@@ -35,10 +35,10 @@ function applyProxy(args: string[], proxy?: string) {
 }
 
 function applyYoutubeRuntime(args: string[]) {
-  const runtimeCheck = checkJsRuntime()
-  if (runtimeCheck.path) {
-    const isNode = runtimeCheck.path.includes('node')
-    args.push('--js-runtimes', `${isNode ? 'node' : 'deno'}:${runtimeCheck.path}`)
+  const runtime = checkJsRuntime()
+  // 依赖上面返回的 kind，而不是从路径猜运行时类型
+  if (runtime.path && runtime.kind) {
+    args.push('--js-runtimes', `${runtime.kind}:${runtime.path}`)
   }
 }
 

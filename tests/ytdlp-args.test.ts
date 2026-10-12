@@ -126,15 +126,15 @@ describe('buildYtdlpArgs', () => {
 
   it('YouTube 带 JS 运行时参数；node 与 deno 用不同前缀', () => {
     const yt: DownloadOptions = { ...base, url: 'https://www.youtube.com/watch?v=x' }
-    const withNode = buildYtdlpArgs(yt, OUT_DIR, { ...ctx, jsRuntime: { path: '/usr/bin/node', name: 'Node.js' } })
+    const withNode = buildYtdlpArgs(yt, OUT_DIR, { ...ctx, jsRuntime: { path: '/usr/bin/node', kind: 'node', name: 'Node.js' } })
     expect(valueAfter(withNode, '--js-runtimes')).toBe('node:/usr/bin/node')
 
-    const withDeno = buildYtdlpArgs(yt, OUT_DIR, { ...ctx, jsRuntime: { path: '/usr/bin/deno', name: 'Deno' } })
+    const withDeno = buildYtdlpArgs(yt, OUT_DIR, { ...ctx, jsRuntime: { path: '/usr/bin/deno', kind: 'deno', name: 'Deno' } })
     expect(valueAfter(withDeno, '--js-runtimes')).toBe('deno:/usr/bin/deno')
   })
 
   it('非 YouTube 不带 JS 运行时参数', () => {
-    const args = buildYtdlpArgs(base, OUT_DIR, { ...ctx, jsRuntime: { path: '/usr/bin/node', name: 'Node.js' } })
+    const args = buildYtdlpArgs(base, OUT_DIR, { ...ctx, jsRuntime: { path: '/usr/bin/node', kind: 'node', name: 'Node.js' } })
     expect(args).not.toContain('--js-runtimes')
   })
 

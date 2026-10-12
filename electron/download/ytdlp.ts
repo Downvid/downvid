@@ -79,6 +79,7 @@ function cleanupLeftovers(filePath: string) {
  */
 export interface JsRuntime {
   path: string
+  kind: 'node' | 'deno'
   name: string
 }
 
@@ -132,8 +133,9 @@ export function buildYtdlpArgs(options: DownloadOptions, outputDir: string, ctx:
   if (options.proxy) args.push('--proxy', options.proxy)
 
   if (isYoutube && ctx.jsRuntime) {
-    const isNode = ctx.jsRuntime.path.includes('node')
-    args.push('--js-runtimes', `${isNode ? 'node' : 'deno'}:${ctx.jsRuntime.path}`)
+    // 用显式的 kind 而不是从路径猜：Electron 的路径里没有 "node"，
+    // 靠 includes('node') 会把它误标成 deno（实测会拉起一整个应用）
+    args.push('--js-runtimes', `${ctx.jsRuntime.kind}:${ctx.jsRuntime.path}`)
   }
 
   args.push(...getExtractorArgs(options.url))
@@ -207,7 +209,7 @@ export async function runYtdlpDownload(options: DownloadOptions, outputDir: stri
       await promptNodeDownload()
       throw new Error('需要安装 Node.js')
     }
-    if (runtime.path) jsRuntime = { path: runtime.path, name: runtime.name }
+    if (runtime.path && runtime.kind) jsRuntime = { path: runtime.path, kind: runtime.kind, name: runtime.name }
   }
 
   const args = buildYtdlpArgs(options, outputDir, {

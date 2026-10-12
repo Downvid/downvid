@@ -14,6 +14,31 @@ import { RELEASES_URL } from '../../shared/app'
  */
 
 export type UpdateStatus = 'idle' | 'checking' | 'latest' | 'available' | 'downloading' | 'downloaded' | 'error'
+
+/**
+ * 从 Release 正文里裁出「只给用户看的更新内容」。
+ *
+ * Release 正文由 scripts/gen-release-notes.mjs 生成，顶部是"点徽章即下载"的引导区
+ * （下载徽章、平台对照表、各平台注意事项）。那段内容在**发布页**有用——用户是去下载的；
+ * 但在**应用内**的更新弹窗里，用户已经装好了应用，只想看这个版本改了什么，
+ * 徽章与对照表纯属噪音（徽章还会渲染成一堆图片链接）。
+ *
+ * 裁剪依据是生成脚本写下的分节标题「## 📝 更新内容」。找不到就原样返回——
+ * 兼容手工编写的 Release。
+ */
+export function extractUserNotes(notes: string): string {
+  if (!notes) return ''
+  // 容忍生成脚本改模板：允许 emoji、空格与大小写差异
+  const marker = /^#{2,3}\s*(?:📝\s*)?更新内容\s*$/m
+  const hit = marker.exec(notes)
+  if (!hit) return notes.trim()
+
+  let body = notes.slice(hit.index + hit[0].length)
+  // 去掉尾部的页脚小字（"完整历史见 CHANGELOG"之类），它是发布页的导航，应用内不需要
+  body = body.replace(/\n---\s*\n<sub>[\s\S]*$/m, '')
+  body = body.replace(/\n*<sub>[\s\S]*$/m, '')
+  return body.trim()
+}
 export type UpdateErrorPhase = 'check' | 'download' | 'install'
 
 export interface UseUpdaterOptions {
@@ -53,7 +78,7 @@ export function useUpdater(options: UseUpdaterOptions) {
   function applyAvailable(data: { version?: string; releaseNotes?: string; manual?: boolean; manualReason?: string }) {
     status.value = 'available'
     newVersion.value = data.version || ''
-    releaseNotes.value = data.releaseNotes || ''
+    releaseNotes.value = extractUserNotes(data.releaseNotes || '')
     manual.value = !!data.manual
     manualReason.value = data.manualReason || ''
   }

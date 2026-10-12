@@ -2,7 +2,7 @@ import { app, BrowserWindow, session } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs'
-import { setMainWindow } from './store'
+import { getMainWindow, setMainWindow } from './store'
 import { createMenu } from './menu'
 import { registerAppIpc } from './ipc/app'
 import { registerDepsIpc } from './ipc/deps'
@@ -154,6 +154,36 @@ function createWindow() {
   loadRenderer(win)
 }
 
+/**
+ * 单实例锁。
+ *
+ * 两个作用：
+ *  - 用户重复双击图标（或系统的"打开方式"）不会开出多个窗口
+ *  - 兜住被外部程序误启动的情况：yt-dlp 曾把 Electron 二进制当作 deno 运行时执行，
+ *    于是又拉起了一整个 DownVid（表现为"点解析后多开一个应用"）。根因已修
+ *    （见 utils/binary.ts 的 checkJsRuntime），这把锁保证同类问题不会真的开出窗口。
+ *
+ * 拿不到锁说明已有实例在跑，把已有窗口带到前台后立即退出。
+ */
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+
+if (!gotSingleInstanceLock) {
+  log('[LIFECYCLE] 已有实例在运行，本次启动退出')
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    log('[LIFECYCLE] 检测到重复启动，聚焦已有窗口')
+    const win = getMainWindow()
+    if (win && !win.isDestroyed()) {
+      if (win.isMinimized()) win.restore()
+      win.show()
+      win.focus()
+    } else if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow()
+    }
+  })
+}
+
 // 注册 IPC
 registerAppIpc()
 registerDepsIpc()
@@ -172,8 +202,16 @@ app.on('window-all-closed', () => {
 
 app.on('activate', () => {
   log('[LIFECYCLE] App activate')
+  // 没有窗口才新建；有窗口时还原到前台（可能是被最小化/隐藏了）
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow()
+  } else {
+    const win = getMainWindow()
+    if (win && !win.isDestroyed()) {
+      if (win.isMinimized()) win.restore()
+      win.show()
+      win.focus()
+    }
   }
 })
 
