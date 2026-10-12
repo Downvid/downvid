@@ -1,8 +1,5 @@
 <template>
   <div class="relative flex w-full flex-col h-screen bg-surface">
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
-    
     <!-- Header -->
     <Header :current-tab="currentTab" @change-tab="changeTab" />
     
@@ -12,9 +9,6 @@
       <HistoryView v-show="currentTab === 'history'" />
       <AboutView v-show="currentTab === 'about'" />
     </main>
-
-    <!-- Settings Panel (floating) -->
-    <SettingsView :visible="showSettings" @update:visible="showSettings = $event" />
 
     <!-- Global Error Modal -->
     <ErrorModal
@@ -41,7 +35,6 @@ import Header from './components/Header.vue'
 import DownloadView from './components/DownloadView.vue'
 import HistoryView from './components/HistoryView.vue'
 import AboutView from './components/AboutView.vue'
-import SettingsView from './components/SettingsView.vue'
 import ErrorModal from './components/ErrorModal.vue'
 import UpdateModal from './components/UpdateModal.vue'
 import DepsPrompt from './components/DepsPrompt.vue'
@@ -55,11 +48,12 @@ const deps = useDepsStore()
 
 const currentTab = ref<TabType>('download')
 const showUpdate = ref(false)
-const showSettings = ref(false)
 
 function changeTab(tab: TabType) {
   if (tab === 'settings') {
-    showSettings.value = true
+    // 打开独立的设置窗口（与 macOS 的「设置…」⌘, 同一入口），
+    // 这样窗口可以被移动、也能和主窗口并排看
+    window.electronAPI?.app?.openSettings?.()
     return
   }
   currentTab.value = tab
@@ -68,7 +62,7 @@ function changeTab(tab: TabType) {
 
 // 监听跳转设置页事件
 window.addEventListener('navigate-to-settings', () => {
-  showSettings.value = true
+  window.electronAPI?.app?.openSettings?.()
 })
 
 // 监听菜单点击关于事件

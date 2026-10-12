@@ -40,13 +40,12 @@
               <MaterialIcon name="sync" :size="16" class="animate-spin" />
               <span class="tracking-wide">正在提取视频元数据...</span>
             </div>
-            <span class="font-mono text-primary font-bold">{{ Math.min(Math.round(store.parseProgress), 100) }}%</span>
+            <!-- 解析没有可用的进度来源，因此不显示百分比，避免给出不真实的数字 -->
+            <span class="text-on-surface-variant font-normal">{{ parseElapsedText }}</span>
           </div>
+          <!-- 不确定进度条：只表示"正在进行"，不假装知道进度 -->
           <div class="h-1.5 w-full bg-surface-container-highest rounded-full overflow-hidden">
-            <div
-              class="h-full bg-[#FFB347] rounded-full transition-all duration-500 shadow-[0_0_8px_rgba(255,179,71,0.4)]"
-              :style="{ width: Math.min(store.parseProgress, 100) + '%' }"
-            />
+            <div class="h-full w-1/3 bg-[#FFB347] rounded-full animate-parse-bar shadow-[0_0_8px_rgba(255,179,71,0.4)]" />
           </div>
         </div>
       </div>
@@ -58,7 +57,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import MaterialIcon from './icons/MaterialIcon.vue'
 import UrlInput from './UrlInput.vue'
 import FormatSelector from './FormatSelector.vue'
@@ -69,6 +68,13 @@ import { useErrorModal } from '../composables/useErrorModal'
 
 const store = useDownloadStore()
 const { showError } = useErrorModal()
+
+// 解析阶段拿不到真实进度（yt-dlp 只在下载阶段输出进度行），
+// 因此不显示百分比，改为不确定进度条 + 已用时间。
+const parseElapsed = ref(0)
+const parseElapsedText = computed(() =>
+  parseElapsed.value > 0 ? `已用 ${parseElapsed.value} 秒` : '通常需要几秒',
+)
 
 function extractUrl(text: string): string {
   const cleanText = text.replace(/锟斤拷|锟|斤|拷/g, '').trim()
@@ -125,6 +131,7 @@ async function parseVideo() {
 
   store.isParsing = true
   store.parseProgress = 0
+  parseElapsed.value = 0
   store.videoInfo = null
   store.selectedFormat = null
 
@@ -133,14 +140,13 @@ async function parseVideo() {
   const cookiesFile = cookieMode === 'manual' ? (settings.cookiesFile || '') : ''
   const proxy = settings.proxy || ''
 
-  // 模拟进度
-  let target = 0
-  const progressInterval = setInterval(() => {
-    if (target < 90) {
-      target += (90 - target) * 0.08 + 0.5
-      store.parseProgress = Math.min(target, 90)
-    }
-  }, 200)
+  // 解析阶段无法获知真实进度（yt-dlp 只在下载阶段输出进度行），
+  // 因此这里只做两件事：显示一个不确定进度条 + 记录已用时间。
+  const startedAt = Date.now()
+  const elapsedTimer = setInterval(() => {
+    parseElapsed.value = Math.round((Date.now() - startedAt) / 1000)
+  }, 1000)
+  const clearElapsed = () => clearInterval(elapsedTimer)
 
   try {
     const info = await window.electronAPI.ytdlp.parse(store.url, cookiesFile, proxy)
@@ -165,10 +171,10 @@ async function parseVideo() {
       store.selectedAudioTrack = null
     }
 
-    clearInterval(progressInterval)
+    clearElapsed()
     store.parseProgress = 100
   } catch (e: any) {
-    clearInterval(progressInterval)
+    clearElapsed()
     // 主进程可能在错误后附带 Cookie 读取失败的解决建议，分类时只看错误本身
     const [rawError, hint = ''] = (e.message || '未知错误').split('\n\n提示：')
     // 缺少运行依赖时直接弹「一键下载」引导，比只弹错误框更有用

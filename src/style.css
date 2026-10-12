@@ -214,6 +214,30 @@ body {
   animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
+/* 不确定进度条：解析阶段拿不到真实进度，只表示"正在进行"。
+   与 pulse 的区别是它在横向滑动而非明暗变化，更像系统原生的 indeterminate 进度。 */
+@keyframes parse-bar {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+.animate-parse-bar {
+  animation: parse-bar 1.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* 尊重用户的"减少动态效果"设置 */
+@media (prefers-reduced-motion: reduce) {
+  .animate-parse-bar {
+    animation: none;
+    width: 100%;
+    opacity: 0.6;
+  }
+}
+
 /* Line clamp */
 .line-clamp-2 {
   display: -webkit-box;

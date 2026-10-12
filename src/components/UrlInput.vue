@@ -98,16 +98,16 @@
       </div>
     </div>
   </div>
+  <CookieGuide :visible="showCookieGuide" @close="showCookieGuide = false" />
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import MaterialIcon from './icons/MaterialIcon.vue'
+import CookieGuide from './CookieGuide.vue'
 import { useDownloadStore } from '../stores/download'
-import { REPO_URL } from '../../shared/app'
-
-/** YouTube Cookie 配置指引（wiki 页面） */
-const YOUTUBE_COOKIE_GUIDE_URL = `${REPO_URL}/wiki/YouTube-Cookie-Setup`
+/** Cookie 使用引导浮窗（不再跳转到仓库 wiki） */
+const showCookieGuide = ref(false)
 
 const store = useDownloadStore()
 
@@ -200,7 +200,7 @@ function goToSettings() {
 }
 
 function openCookieHelp() {
-  window.electronAPI?.shell?.openExternal?.(YOUTUBE_COOKIE_GUIDE_URL)
+  showCookieGuide.value = true
 }
 
 onMounted(() => document.addEventListener('click', hideContextMenu))

@@ -175,6 +175,15 @@ const COOKIE_ERROR_PATTERNS = [
   /unsupported (?:browser|keyring)/i,
   /database is locked|unable to open database/i,
   /netscape format|invalid (?:length|expires)/i,
+  // 权限类失败：macOS 上读 Safari 的 cookie 需要「完全磁盘访问」权限，
+  // 报错形如 `ERROR: [Errno 1] Operation not permitted: '.../Cookies.binarycookies'`。
+  // 以前没有这条，于是整个解析会以"读取失败"告终，而不是退到下一个浏览器来源。
+  /operation not permitted/i,
+  // yt-dlp 读浏览器 cookie 目录时的其他文件系统错误；命中后同样换来源即可
+  /(?:permission denied|access is denied)\b/i,
+  // Safari 的 binarycookies 容器在沙箱外不可读，同样属于换来源能解决的问题
+  /binarycookies/i,
+  /could not (?:find|open|read) (?:the )?\S* ?(?:cookie|profile|browser data)/i,
 ]
 
 export function isCookieError(stderr: string): boolean {
@@ -217,8 +226,16 @@ export async function runWithCookies<R extends { code: number | null; stderr: st
   run: (cookieArgs: string[], attempt: CookieAttempt) => Promise<R>,
 ): Promise<R & { failedBrowsers: string[] }> {
   const failedBrowsers: string[] = []
-  // 近期读取失败而被本次跳过的浏览器同样没有携带 Cookie，一并计入提示
-  const finish = (r: R) => {
+  /**
+   * 收尾并附带"哪些浏览器的 Cookie 没读到"。
+   *
+   * 只在**失败**时附带：Cookie 提示的用途是解释失败原因。此前成功时也附带，
+   * 于是明明用其它来源（或 Cookie 快照）读到了登录态、解析也成功了，
+   * 界面上仍会显示"未能读取 XX 的 Cookie"——给用户的感觉是自动读取坏了。
+   */
+  const finish = (r: R, succeeded: boolean) => {
+    if (succeeded) return Object.assign(r, { failedBrowsers: [] as string[] })
+    // 近期读取失败而被本次跳过的浏览器同样没有携带 Cookie，一并计入提示
     const now = Date.now()
     for (const [browser, time] of browserFailures) {
       if (now - time <= BROWSER_FAILURE_TTL_MS && !failedBrowsers.includes(browser)) failedBrowsers.push(browser)
@@ -237,13 +254,13 @@ export async function runWithCookies<R extends { code: number | null; stderr: st
     }
     try {
       result = await run(cookieArgs, attempt)
-      if (result.code === 0) { attempt.onSuccess(); return finish(result) }
-      if (!isCookieError(result.stderr)) return finish(result)
+      if (result.code === 0) { attempt.onSuccess(); return finish(result, true) }
+      if (!isCookieError(result.stderr)) return finish(result, false)
       attempt.onCookieFailure()
       if (BROWSER_NAMES[attempt.label]) failedBrowsers.push(attempt.label)
     } finally {
       attempt.cleanup()
     }
   }
-  return finish(result ?? await run([], attempts[attempts.length - 1]))
+  return finish(result ?? await run([], attempts[attempts.length - 1]), false)
 }

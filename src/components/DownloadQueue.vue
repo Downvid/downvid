@@ -124,7 +124,7 @@
         <span>存储空间: {{ diskSpaceDisplay }}</span>
       </div>
       <div class="flex items-center gap-2">
-        <span class="font-mono">{{ store.downloadDir }}</span>
+        <span class="font-mono" :title="store.downloadDir">{{ abbreviatePath(store.downloadDir) }}</span>
         <button class="p-1 hover:bg-surface-container-highest rounded transition-colors" @click="selectDownloadDir">
           <MaterialIcon name="folder_open" :size="14" />
         </button>
@@ -137,9 +137,15 @@
 import { computed, ref, watch } from 'vue'
 import MaterialIcon from './icons/MaterialIcon.vue'
 import { useDownloadStore } from '../stores/download'
+import { useErrorModal } from '../composables/useErrorModal'
+import { abbreviatePath, ensureHomeDir } from '../composables/usePathDisplay'
 import type { DownloadTask } from '../types'
 
 const store = useDownloadStore()
+const { showError } = useErrorModal()
+
+// 预取主目录，让路径显示成 ~/Downloads/DownVid 而不是暴露用户名
+void ensureHomeDir()
 
 const activeTaskCount = computed(() => store.activeTaskCount)
 const diskSpaceDisplay = ref('加载中...')
@@ -172,8 +178,16 @@ function formatDuration(seconds?: number): string {
 }
 
 async function openFileLocation(task: DownloadTask) {
-  if (task.filePath) {
-    await window.electronAPI.shell.openPath(task.filePath)
+  if (!task.filePath) {
+    showError('这个任务还没有生成文件，无法定位')
+    return
+  }
+  // 用 showItemInFolder 而不是 openPath：后者会用系统默认程序"打开文件"
+  // （视频直接开始播放），而用户点文件夹图标想要的是定位到所在目录。
+  const result = await window.electronAPI.shell.showItemInFolder(task.filePath)
+  if (!result?.success) {
+    // 文件可能已被移动或删除——这是最容易被误判成"点了没反应"的情况
+    showError(result?.error || '无法打开所在文件夹，文件可能已被移动或删除')
   }
 }
 

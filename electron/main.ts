@@ -3,7 +3,8 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs'
 import { setMainWindow } from './store'
-import { createMenu } from './menu'
+import { createMenu, setSettingsOpener } from './menu'
+import { configureSettingsWindow, openSettingsWindow } from './settings-window'
 import { registerAppIpc } from './ipc/app'
 import { registerDepsIpc } from './ipc/deps'
 import { registerDownloadIpc } from './ipc/download'
@@ -76,9 +77,37 @@ export function setProxyForSession(proxy: string) {
   }
 }
 
+function preloadPath() {
+  return path.join(__dirname, 'preload.mjs')
+}
+
+/** 主窗口与设置窗口共用的 webPreferences */
+function webPreferences() {
+  return {
+    preload: preloadPath(),
+    contextIsolation: true,
+    nodeIntegration: false,
+    spellcheck: false,
+  }
+}
+
+/**
+ * 按开发/生产环境加载渲染进程页面。
+ *
+ * query 用哈希传递（`#view=settings`），因为 file:// 下 hash 比 search 可靠，
+ * 开发服务器与打包产物行为一致。
+ */
+function loadRenderer(win: BrowserWindow, query = '') {
+  const hash = query.replace(/^\/?\??/, '')
+  if (VITE_DEV_SERVER_URL) {
+    win.loadURL(hash ? `${VITE_DEV_SERVER_URL}#${hash}` : VITE_DEV_SERVER_URL)
+  } else {
+    win.loadFile(path.join(RENDERER_DIST, 'index.html'), hash ? { hash } : undefined)
+  }
+}
+
 function createWindow() {
-  const preloadPath = path.join(__dirname, 'preload.mjs')
-  log(`[WINDOW] Creating window, preload=${preloadPath}`)
+  log(`[WINDOW] Creating window, preload=${preloadPath()}`)
 
   const win = new BrowserWindow({
     width: 1200,
@@ -90,21 +119,13 @@ function createWindow() {
     icon: process.platform !== 'darwin'
       ? path.join(process.env.APP_ROOT || '', 'ldstore.ico')
       : undefined,
-    webPreferences: {
-      preload: preloadPath,
-      contextIsolation: true,
-      nodeIntegration: false,
-      spellcheck: false,
-    },
+    webPreferences: webPreferences(),
   })
 
   setMainWindow(win)
 
   // 应用代理设置
   applyProxy()
-
-  // 设置自动更新
-  setupAutoUpdater()
 
   win.on('closed', () => {
     log('[WINDOW] Window closed')
@@ -131,14 +152,7 @@ function createWindow() {
     log('[WINDOW] did-finish-load')
   })
 
-  if (VITE_DEV_SERVER_URL) {
-    log(`[WINDOW] Loading URL: ${VITE_DEV_SERVER_URL}`)
-    win.loadURL(VITE_DEV_SERVER_URL)
-  } else {
-    const indexPath = path.join(RENDERER_DIST, 'index.html')
-    log(`[WINDOW] Loading file: ${indexPath}`)
-    win.loadFile(indexPath)
-  }
+  loadRenderer(win)
 }
 
 // 注册 IPC
@@ -181,6 +195,8 @@ app.whenReady().then(() => {
   log('[LIFECYCLE] app ready')
   setupAutoUpdater()
   stripOwnQuarantine()
+  configureSettingsWindow({ load: loadRenderer, webPreferences })
+  setSettingsOpener(openSettingsWindow)
   createWindow()
   createMenu()
   log('[LIFECYCLE] Window and menu created')

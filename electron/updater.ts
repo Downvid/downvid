@@ -37,6 +37,22 @@ export interface CheckResult {
 let latestInfo: UpdateInfo | null = null
 let macDownloadedApp: string | null = null
 let downloading: Promise<{ success: boolean; error?: string }> | null = null
+let updaterReady = false
+
+/**
+ * 检查结果的缓存有效期。
+ *
+ * 用户可能反复点「检查更新」（或反复开关弹窗）。每次都发请求既浪费，
+ * 也会撞上 GitHub 的限流；但缓存太久又可能错过刚发布的版本。
+ * 用「新版本发布后强制刷新」+「窗口期复用结果」两个机制平衡：
+ *   - 距上次检查 < 60 秒 → 直接复用，不发请求
+ *   - 发现过更新但用户尚未升级 → 复用，避免同一个版本反复弹
+ *   - 已是最新版本 → 60 秒后允许再查，这样新版本发布后最多等 1 分钟
+ */
+const CHECK_CACHE_MS = 60 * 1000
+let lastCheckAt = 0
+let lastCheckResult: CheckResult | null = null
+let inflightCheck: Promise<CheckResult> | null = null
 
 function sendStatus(data: Record<string, unknown>) {
   broadcast('update:status', data)
@@ -230,6 +246,16 @@ export async function checkForUpdates(): Promise<CheckResult> {
   const base = { currentVersion, downloadUrl: RELEASES_URL }
   const reason = unsupportedReason()
 
+  // 短时间内重复点击「检查更新」时复用结果，不再发包：
+  // 既避免 GitHub 限流，也避免同一个新版本反复弹窗。
+  if (lastCheckResult && Date.now() - lastCheckAt < CHECK_CACHE_MS) {
+    return { ...lastCheckResult, currentVersion }
+  }
+
+  // 并发调用（弹窗打开 + 关于页按钮同时触发）合并为一次请求
+  if (inflightCheck) return inflightCheck
+
+  inflightCheck = (async (): Promise<CheckResult> => {
   try {
     if (reason) {
       if (!app.isPackaged) return { ...base, hasUpdate: false }
@@ -253,6 +279,16 @@ export async function checkForUpdates(): Promise<CheckResult> {
   } catch (error) {
     return { ...base, hasUpdate: false, error: friendlyUpdateError(error) }
   }
+  })()
+
+  try {
+    const result = await inflightCheck
+    lastCheckAt = Date.now()
+    lastCheckResult = result
+    return result
+  } finally {
+    inflightCheck = null
+  }
 }
 
 export function downloadUpdate(): Promise<{ success: boolean; error?: string }> {
@@ -267,6 +303,10 @@ export function downloadUpdate(): Promise<{ success: boolean; error?: string }> 
       } else {
         await autoUpdater.downloadUpdate()
       }
+      // 下载成功后清掉检查缓存：否则短时间内再点「检查更新」会按旧结果
+      // 继续提示有新版本，而这版其实已经下载好了
+      lastCheckResult = null
+      lastCheckAt = 0
       return { success: true }
     } catch (error) {
       const message = friendlyUpdateError(error)
@@ -291,6 +331,10 @@ export function installUpdate(): { success: boolean; error?: string } {
 }
 
 export function setupAutoUpdater() {
+  // 幂等：main.ts 在多个时机可能调用它，重复注册会累积监听器
+  if (updaterReady) return
+  updaterReady = true
+
   // 由用户确认后再下载；Windows/Linux 已下载的更新在退出时自动安装
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true

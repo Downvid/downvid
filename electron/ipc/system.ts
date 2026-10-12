@@ -1,7 +1,9 @@
 import { ipcMain, dialog, shell, clipboard, app, session, BrowserWindow } from 'electron'
 import { getDefaultDownloadDir } from '../utils/platform'
+import { openSettingsWindow } from '../settings-window'
 import { setUpdaterProxy } from '../updater'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { exec } from 'node:child_process'
 
@@ -72,7 +74,28 @@ export function registerSystemIpc() {
   })
 
   ipcMain.handle('app:getDefaultDownloadDir', () => getDefaultDownloadDir())
-  ipcMain.handle('shell:openPath', async (_, filePath: string) => shell.openPath(filePath))
+  // 主目录路径：渲染进程用它把 /Users/xxx/... 缩写成 ~/...，
+  // 界面展示没必要暴露用户名
+  ipcMain.handle('app:getHomeDir', () => os.homedir())
+  // 打开独立的设置窗口（macOS 上 ⌘, 与界面里的齿轮图标都走这里）
+  ipcMain.handle('app:openSettings', () => {
+    openSettingsWindow()
+    return true
+  })
+  // openPath 会用系统默认程序打开文件（视频就是播放），返回的字符串是错误信息（成功为空）
+  ipcMain.handle('shell:openPath', async (_, filePath: string) => {
+    const error = await shell.openPath(filePath)
+    return { success: !error, error: error || undefined }
+  })
+  // 在文件管理器里定位文件（macOS 访达、Windows 资源管理器、Linux 文件管理器）
+  ipcMain.handle('shell:showItemInFolder', (_, filePath: string) => {
+    try {
+      shell.showItemInFolder(filePath)
+      return { success: true }
+    } catch (e: any) {
+      return { success: false, error: e?.message || '无法打开所在文件夹' }
+    }
+  })
   ipcMain.handle('shell:openExternal', async (_, url: string) => shell.openExternal(url))
 
   // 日志相关

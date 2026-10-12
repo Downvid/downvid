@@ -1,12 +1,28 @@
 <template>
-  <Teleport to="body">
-    <Transition name="panel">
-      <div v-if="visible" class="fixed inset-0 z-40 flex justify-end" @click.self="close">
-        <!-- Overlay -->
-        <div class="absolute inset-0 bg-black/30 backdrop-blur-xs" @click="close" />
-        
+  <Teleport to="body" :disabled="windowMode">
+    <Transition :name="windowMode ? 'none' : 'panel'">
+      <!--
+        两种形态：
+        - 浮层（默认）：主窗口内的侧滑面板，点击遮罩关闭
+        - 独立窗口（windowMode，macOS 的「设置…」⌘,）：铺满整个窗口，无遮罩
+      -->
+      <div
+        v-if="visible"
+        :class="windowMode
+          ? 'h-full w-full flex'
+          : 'fixed inset-0 z-40 flex justify-end'"
+        @click.self="close"
+      >
+        <!-- Overlay（仅浮层形态） -->
+        <div v-if="!windowMode" class="absolute inset-0 bg-black/30 backdrop-blur-xs" @click="close" />
+
         <!-- Panel -->
-        <div class="relative w-full max-w-xl bg-surface-container-lowest shadow-2xl flex flex-col border-l border-outline-variant/20">
+        <div
+          class="relative bg-surface-container-lowest flex flex-col"
+          :class="windowMode
+            ? 'flex-1 w-full'
+            : 'w-full max-w-xl shadow-2xl border-l border-outline-variant/20'"
+        >
           <!-- Header -->
           <div class="flex items-center justify-between px-6 py-4 border-b border-outline-variant/15">
             <h2 class="font-headline text-lg font-bold text-on-surface">设置</h2>
@@ -39,7 +55,8 @@
                   <label class="text-sm font-medium text-on-surface">默认下载目录</label>
                   <div class="flex gap-2">
                     <input 
-                      v-model="settings.downloadDir"
+                      :value="abbreviatePath(settings.downloadDir)"
+                      :title="settings.downloadDir"
                       type="text"
                       readonly
                       class="flex-1 px-3 py-2 bg-surface-container-highest border border-outline-variant/20 rounded-md text-sm text-on-surface focus:outline-hidden focus:border-primary/40"
@@ -191,10 +208,13 @@ import { ref, onMounted } from 'vue'
 import MaterialIcon from './icons/MaterialIcon.vue'
 import DepPanel from './DepPanel.vue'
 import { useErrorModal } from '../composables/useErrorModal'
+import { abbreviatePath, ensureHomeDir } from '../composables/usePathDisplay'
 
 const { showError, showInfo } = useErrorModal()
 
-defineProps<{ visible: boolean }>()
+void ensureHomeDir()
+
+defineProps<{ visible: boolean; windowMode?: boolean }>()
 const emit = defineEmits<{ (e: 'update:visible', v: boolean): void }>()
 
 function close() { emit('update:visible', false) }
@@ -284,6 +304,7 @@ onMounted(() => { loadSettings() })
 </script>
 
 <style scoped>
+.none-enter-active, .none-leave-active { transition: none; }
 .panel-enter-active, .panel-leave-active { transition: opacity 0.2s ease; }
 .panel-enter-from, .panel-leave-to { opacity: 0; }
 .panel-enter-active .relative, .panel-leave-active .relative { transition: transform 0.25s ease; }

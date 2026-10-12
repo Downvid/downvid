@@ -33,6 +33,10 @@ interface Window {
         warning?: string
       }>
       getDefaultDownloadDir: () => Promise<string>
+      /** 用户主目录，界面用它把绝对路径缩写成 ~/... */
+      getHomeDir: () => Promise<string>
+      /** 打开独立的设置窗口 */
+      openSettings: () => Promise<boolean>
       fetchImage: (url: string, referer?: string) => Promise<string>
       getLog: () => Promise<{
         success: boolean
@@ -48,7 +52,9 @@ interface Window {
       getDiskSpace: (dir?: string) => Promise<{ free: number; total: number; unit: string }>
     }
     shell: {
-      openPath: (filePath: string) => Promise<void>
+      openPath: (filePath: string) => Promise<{ success: boolean; error?: string }>
+      /** 在文件管理器中定位该文件（打开所在文件夹并选中） */
+      showItemInFolder: (filePath: string) => Promise<{ success: boolean; error?: string }>
       openExternal: (url: string) => Promise<void>
     }
     ytdlp: {
