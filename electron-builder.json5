@@ -8,9 +8,14 @@
   "directories": {
     "output": "release/${version}"
   },
+  // 只打包构建产物：主进程与渲染进程的依赖都已被 vite 内联进 dist / dist-electron
+  // （验证方式：dist-electron 里没有任何指向 node_modules 的裸 import），
+  // 因此 node_modules 整包（约 40MB）属于纯冗余。
+  // 依赖需要随包分发时再加回 "node_modules/**"，但要先确认它真的被引用了。
   "files": [
     "dist",
-    "dist-electron"
+    "dist-electron",
+    "!node_modules",
   ],
   // 安装包不再内置 yt-dlp / ffmpeg：只带 Go 边车，运行时识别并复用系统已安装的版本，
   // 缺失时由边车下载到 userData（见 electron/utils/runtime.ts）。
