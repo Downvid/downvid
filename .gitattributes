@@ -1,0 +1,30 @@
+# 统一换行符为 LF。
+#
+# 不加这条时，Windows 上 git 默认 core.autocrlf=true，会把源码检出为 CRLF：
+# - gofmt -l 会把每个 Go 文件都判为未格式化（CRLF 不是 gofmt 的输出）
+# - 任何按行处理的脚本在不同平台会得到不同结果
+# GitHub 的 windows runner 即为默认开启 autocrlf 的环境，CI 首跑因此全量报错。
+* text=auto eol=lf
+
+# 二进制资源明确标记，避免被当作文本做换行符转换而损坏
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.icns      binary
+*.ttf       binary
+*.woff      binary
+*.woff2     binary
+
+# 发布产物（本地构建产生，不入库，仅防御性声明）
+*.dmg       binary
+*.zip       binary
+*.exe       binary
+*.AppImage  binary
+*.deb       binary
+*.rpm       binary
+*.blockmap  binary
+
+# pnpm 自带的 pnpm-lock.yaml 由工具生成，不参与换行符转换
+pnpm-lock.yaml  -text
