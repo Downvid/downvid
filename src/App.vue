@@ -29,6 +29,9 @@
 
     <!-- Auto Update Modal -->
     <UpdateModal :visible="showUpdate" @close="showUpdate = false" />
+
+    <!-- 缺少运行依赖时的下载引导 -->
+    <DepsPrompt />
   </div>
 </template>
 
@@ -41,11 +44,14 @@ import AboutView from './components/AboutView.vue'
 import SettingsView from './components/SettingsView.vue'
 import ErrorModal from './components/ErrorModal.vue'
 import UpdateModal from './components/UpdateModal.vue'
+import DepsPrompt from './components/DepsPrompt.vue'
 import { useErrorModal } from './composables/useErrorModal'
+import { useDepsStore } from './stores/deps'
 import type { TabType } from './types'
 
 const modal = useErrorModal()
 const modalState = modal.state
+const deps = useDepsStore()
 
 const currentTab = ref<TabType>('download')
 const showUpdate = ref(false)
@@ -72,6 +78,14 @@ let unsubscribeUpdate: (() => void) | null = null
 onMounted(() => {
   // 通知 preload 移除启动加载动画
   window.postMessage({ payload: 'removeLoading' }, '*')
+
+  // 首次启动探测运行依赖：缺 yt-dlp / ffmpeg 时直接弹下载引导，
+  // 用户粘贴链接前就能装好，而不是等到解析失败才发现。
+  void deps.refresh().then(() => {
+    if (deps.missingRequired.length) {
+      deps.promptForMissing(deps.missingRequired.map(d => d.kind))
+    }
+  })
 
   if (window.electronAPI?.onMenuShowAbout) {
     unsubscribeMenu = window.electronAPI.onMenuShowAbout(() => {

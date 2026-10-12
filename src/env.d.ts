@@ -1,5 +1,8 @@
 /// <reference types="vite/client" />
 
+// 注意：本文件不能出现顶层 import/export，否则会从「全局声明脚本」变成模块，
+// 下面的 interface Window 就不再全局生效（electron-env.d.ts 的旧类型会重新胜出）。
+// 因此依赖类型一律用内联 import(...) 引用。
 interface Window {
   electronAPI: {
     // 剪贴板
@@ -67,6 +70,24 @@ interface Window {
         downloadMode?: 'video' | 'audio' | 'subtitle'
       }) => Promise<any>
       pauseDownload: (taskId: string) => Promise<boolean>
+    }
+    /**
+     * 运行依赖管理。DownVid 不再自带 yt-dlp / ffmpeg：
+     * 优先复用机器上已安装的版本，缺失时由主进程调用 Go 边车下载到 userData。
+     */
+    deps: {
+      status: (settings?: import('./types/deps').DepsSettings, force?: boolean) => Promise<import('./types/deps').DepsResponse>
+      check: (settings?: import('./types/deps').DepsSettings) => Promise<import('./types/deps').DepsResponse>
+      download: (options?: import('./types/deps').DepsSettings & { only?: import('./types/deps').DepKind[]; force?: boolean }) => Promise<import('./types/deps').DepsResponse>
+      cancel: () => Promise<boolean>
+      openDir: () => Promise<{ success: boolean; path?: string; error?: string }>
+      diagnostics: () => Promise<{
+        success: boolean
+        platform: string
+        sidecar: string | null
+        managedDir: string
+      }>
+      onProgress: (callback: (data: import('./types/deps').DepsProgress) => void) => () => void
     }
     onDownloadProgress: (callback: (data: any) => void) => () => void
     history: {

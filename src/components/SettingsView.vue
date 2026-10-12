@@ -162,6 +162,11 @@
                   <p class="text-[11px] text-on-surface-variant">支持 http/https/socks5。保存后立即生效，无需重启。</p>
                 </div>
               </div>
+
+              <!-- 运行依赖 -->
+              <div v-show="activeSection === 'deps'" class="flex flex-col gap-5">
+                <DepPanel />
+              </div>
             </div>
           </div>
 
@@ -184,6 +189,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import MaterialIcon from './icons/MaterialIcon.vue'
+import DepPanel from './DepPanel.vue'
 import { useErrorModal } from '../composables/useErrorModal'
 
 const { showError, showInfo } = useErrorModal()
@@ -198,6 +204,7 @@ const sections = [
   { key: 'download', icon: 'download', label: '下载' },
   { key: 'cookies', icon: 'cookie', label: 'Cookies' },
   { key: 'proxy', icon: 'language', label: '代理' },
+  { key: 'deps', icon: 'extension', label: '运行依赖' },
 ]
 
 interface Settings {

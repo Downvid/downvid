@@ -62,6 +62,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
     pauseDownload: (taskId: string) => ipcRenderer.invoke('ytdlp:pauseDownload', taskId),
   },
   
+  // 运行依赖（yt-dlp / ffmpeg / ffprobe）：探测复用系统安装，缺失时下载
+  deps: {
+    status: (settings?: any, force?: boolean) => ipcRenderer.invoke('deps:status', settings, force),
+    check: (settings?: any) => ipcRenderer.invoke('deps:check', settings),
+    download: (options?: any) => ipcRenderer.invoke('deps:download', options),
+    cancel: () => ipcRenderer.invoke('deps:cancel'),
+    openDir: () => ipcRenderer.invoke('deps:openDir'),
+    diagnostics: () => ipcRenderer.invoke('deps:diagnostics'),
+    onProgress: (callback: (data: any) => void) => {
+      const handler = (_: any, data: any) => callback(data)
+      ipcRenderer.on('deps:progress', handler)
+      return () => {
+        ipcRenderer.off('deps:progress', handler)
+      }
+    },
+  },
+
   // 下载进度监听
   onDownloadProgress: (callback: (data: any) => void) => {
     const handler = (_: any, data: any) => callback(data)

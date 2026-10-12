@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { VideoInfo, VideoFormat, DownloadTask, AudioFormat, AudioTrack } from '../types'
+import { useDepsStore, readMissingKinds, stripDepMarkers } from './deps'
 
 export const useDownloadStore = defineStore('download', () => {
   // URL Input
@@ -205,7 +206,11 @@ export const useDownloadStore = defineStore('download', () => {
     } catch (e: any) {
       // 主进程可能附带 Cookie 读取失败的解决建议：分类只看错误本身，建议保留展示
       const [rawError, hint] = (e.message || '下载失败').split('\n\n提示：')
-      let errorMsg = rawError
+      // 解析/下载因缺少 yt-dlp、ffmpeg 失败时，弹出「一键下载」引导
+      if (rawError.includes('[deps-missing:') || /未找到可用的 (yt-dlp|ffmpeg|ffprobe)/.test(rawError)) {
+        useDepsStore().promptForMissing(readMissingKinds(rawError))
+      }
+      let errorMsg = stripDepMarkers(rawError)
       if (errorMsg.includes('disk') || errorMsg.includes('space')) errorMsg = '磁盘空间不足'
       else if (errorMsg.includes('permission') || errorMsg.includes('access')) errorMsg = '没有写入权限'
       else if (errorMsg.includes('network') || errorMsg.includes('timeout') || errorMsg.includes('ECONNRESET')) errorMsg = '网络连接中断'
@@ -229,6 +234,19 @@ export const useDownloadStore = defineStore('download', () => {
     if (downloadMode.value === 'video' && !selectedFormat.value) return
     if (downloadMode.value === 'audio' && !selectedAudioFormat.value) return
     if (downloadMode.value === 'subtitle' && selectedSubtitles.value.length === 0) return
+
+    // 依赖缺失时先引导下载，而不是把任务丢进队列再报错
+    // （ffmpeg 仅音视频合并/转码需要，字幕模式不依赖它）
+    const deps = useDepsStore()
+    await deps.refresh()
+    const missing = deps.deps
+      .filter(d => !d.found && !d.optional)
+      .filter(d => !(downloadMode.value === 'subtitle' && d.kind === 'ffmpeg'))
+      .map(d => d.kind)
+    if (missing.length) {
+      deps.promptForMissing(missing)
+      return
+    }
 
     isDownloading.value = true
     const taskId = Date.now().toString()

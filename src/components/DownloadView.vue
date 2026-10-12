@@ -64,6 +64,7 @@ import UrlInput from './UrlInput.vue'
 import FormatSelector from './FormatSelector.vue'
 import DownloadQueue from './DownloadQueue.vue'
 import { useDownloadStore } from '../stores/download'
+import { useDepsStore, readMissingKinds, stripDepMarkers } from '../stores/deps'
 import { useErrorModal } from '../composables/useErrorModal'
 
 const store = useDownloadStore()
@@ -170,7 +171,13 @@ async function parseVideo() {
     clearInterval(progressInterval)
     // 主进程可能在错误后附带 Cookie 读取失败的解决建议，分类时只看错误本身
     const [rawError, hint = ''] = (e.message || '未知错误').split('\n\n提示：')
-    let errorMsg = rawError
+    // 缺少运行依赖时直接弹「一键下载」引导，比只弹错误框更有用
+    if (rawError.includes('[deps-missing:') || /未找到可用的 (yt-dlp|ffmpeg|ffprobe)/.test(rawError)) {
+      useDepsStore().promptForMissing(readMissingKinds(rawError))
+      store.isParsing = false
+      return
+    }
+    let errorMsg = stripDepMarkers(rawError)
     if (errorMsg.includes('not a valid URL') || errorMsg.includes('Unsupported URL')) errorMsg = '请输入有效的链接'
     else if (errorMsg.includes('not found') || errorMsg.includes('404')) errorMsg = '视频不存在或已被删除'
     else if (errorMsg.includes('private') || errorMsg.includes('登录')) errorMsg = '该视频需要登录才能访问'
