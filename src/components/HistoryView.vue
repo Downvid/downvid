@@ -54,7 +54,8 @@
               </div>
               <div class="flex items-center gap-4 text-[11px] text-on-surface-variant">
                 <span class="flex items-center gap-1">
-                  <MaterialIcon name="high_definition" :size="14" />
+                  <!-- 注意：`high_definition` 不是有效的 Symbols 名（会渲染成文字），正确名是 `hd` -->
+                  <MaterialIcon name="hd" :size="14" />
                   {{ item.quality }}
                 </span>
                 <span class="flex items-center gap-1">

@@ -29,9 +29,11 @@
     "deps:build": "bash scripts/build-backend.sh",
     "deps:manifest": "node scripts/gen-deps-manifest.mjs",
     "deps:manifest:check": "node scripts/gen-deps-manifest.mjs --check",
-    "lint:ipc": "node scripts/lint-ipc.mjs"
+    "lint:ipc": "node scripts/lint-ipc.mjs",
+    "lint:icons": "node scripts/lint-icons.mjs"
   },
   "dependencies": {
+    "@material-symbols/font-400": "^0.48.0",
     "bufferutil": "^4.1.0",
     "electron-updater": "^6.8.3",
     "pinia": "^4.0.3",

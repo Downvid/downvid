@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@material-symbols/font-400':
+        specifier: ^0.48.0
+        version: 0.48.0
       bufferutil:
         specifier: ^4.1.0
         version: 4.1.0
@@ -161,6 +164,9 @@ packages:
   '@malept/flatpak-bundler@0.4.0':
     resolution: {integrity: sha512-9QOtNffcOF/c1seMCDnjckb3R9WHcG34tky+FHpNKKCW0wc/scYLwMtO+ptyGUfMW0/b/n4qRiALlaFHc9Oj7Q==}
     engines: {node: '>= 10.0.0'}
+
+  '@material-symbols/font-400@0.48.0':
+    resolution: {integrity: sha512-Xqml6girWye+6FgS7deffD5K+vhBK8HvDWcbw5ytqqB8keaYdCwVMcYCKtpWgdAryi2Sg78uMZ9yDSvUEWUusw==}
 
   '@noble/hashes@1.4.0':
     resolution: {integrity: sha512-V1JJ1WTRUqHHrOSh597hURcMqVKVGL/ea3kv0gSnEdsEZ0/+VyPghM1lMNGc00z7CIQorSvbKpuJkxvuHbvdbg==}
@@ -2122,6 +2128,8 @@ snapshots:
       tmp-promise: 3.0.3
     transitivePeerDependencies:
       - supports-color
+
+  '@material-symbols/font-400@0.48.0': {}
 
   '@noble/hashes@1.4.0': {}
 
