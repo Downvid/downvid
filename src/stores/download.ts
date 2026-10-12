@@ -3,6 +3,40 @@ import { ref, computed } from 'vue'
 import type { VideoInfo, VideoFormat, DownloadTask, AudioFormat, AudioTrack } from '../types'
 import { useDepsStore, readMissingKinds, stripDepMarkers } from './deps'
 
+/**
+ * 把 yt-dlp / 网络层的原始错误翻译成用户能看懂、且能据此行动的一句话。
+ *
+ * 此前只处理了磁盘/权限/网络/ffmpeg 四类，**403 完全没有归类**，
+ * 于是队列里直接显示 `ERROR: unable to download video data: HTTP Error 403: Forbidden`
+ * ——用户看到的就是这一整串（这也是反馈里那个"数字乱码行"的来源）。
+ *
+ * 顺序有讲究：403 必须在"网络"之前判断，否则会被误归成"网络连接中断"。
+ */
+export function friendlyDownloadError(raw: string): string {
+  const text = raw || ''
+  const has = (...keys: string[]) => keys.some(k => text.toLowerCase().includes(k.toLowerCase()))
+
+  // 站点拒绝下载媒体分片：通常是登录态/限流/需要 Cookie
+  if (has('403', 'Forbidden')) {
+    // yt-dlp 明确提示需要登录时，把方向指到 Cookie 上
+    if (has('sign in', 'login', 'cookies')) {
+      return '站点拒绝下载（403）：该视频需要登录，请在「设置 → Cookies」配置后重试'
+    }
+    return '站点拒绝下载（403）：可能是访问过于频繁或需要登录。稍后重试，或在「设置 → Cookies」配置 Cookie'
+  }
+  if (has('429', 'Too Many Requests')) return '请求过于频繁（429）：请等待几分钟后重试'
+  if (has('disk', 'space')) return '磁盘空间不足'
+  if (has('permission', 'access denied', 'EACCES', 'EPERM')) return '没有写入权限，请检查下载目录'
+  if (has('ECONNRESET', 'ETIMEDOUT', 'socket hang up', 'timed out')) return '网络连接中断，请重试'
+  if (has('Unable to download webpage', 'Name or service not known', 'getaddrinfo')) {
+    return '无法访问该站点：请检查网络连接，或在「设置 → 代理」中配置代理'
+  }
+  if (has('ffmpeg', 'FFmpeg')) return 'FFmpeg 合并失败：请检查「设置 → 运行依赖」中的 ffmpeg'
+  if (has('private video', 'members-only', '需要登录')) return '该视频需要登录才能访问'
+  if (has('video unavailable', 'not available in your country')) return '视频不可用（可能已删除或限制地区）'
+  return text
+}
+
 export const useDownloadStore = defineStore('download', () => {
   // URL Input
   const url = ref('')
@@ -235,11 +269,7 @@ export const useDownloadStore = defineStore('download', () => {
       if (rawError.includes('[deps-missing:') || /未找到可用的 (yt-dlp|ffmpeg|ffprobe)/.test(rawError)) {
         useDepsStore().promptForMissing(readMissingKinds(rawError))
       }
-      let errorMsg = stripDepMarkers(rawError)
-      if (errorMsg.includes('disk') || errorMsg.includes('space')) errorMsg = '磁盘空间不足'
-      else if (errorMsg.includes('permission') || errorMsg.includes('access')) errorMsg = '没有写入权限'
-      else if (errorMsg.includes('network') || errorMsg.includes('timeout') || errorMsg.includes('ECONNRESET')) errorMsg = '网络连接中断'
-      else if (errorMsg.includes('ffmpeg') || errorMsg.includes('FFmpeg')) errorMsg = 'FFmpeg 合并失败'
+      const errorMsg = friendlyDownloadError(stripDepMarkers(rawError))
 
       const errorIdx = downloadTasks.value.findIndex(t => t.id === task.id)
       if (errorIdx !== -1) {

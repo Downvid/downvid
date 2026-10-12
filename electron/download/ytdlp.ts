@@ -308,7 +308,13 @@ export async function runYtdlpDownload(options: DownloadOptions, outputDir: stri
     if (lastError.includes('429') || lastError.includes('Too Many Requests')) {
       throw new Error('请求过于频繁，请等待几分钟后重试 (HTTP 429)')
     }
-    throw new Error((lastError || '下载失败') + cookieFailureHint(failedBrowsers))
+    // 去掉 yt-dlp 自己的前缀，只保留原因——完整的那串对用户没有信息量
+    // （形如 `ERROR: unable to download video data: HTTP Error 403: Forbidden`）
+    const reason = lastError
+      .replace(/^ERROR:\s*/i, '')
+      .replace(/^unable to download video data:\s*/i, '')
+      .trim()
+    throw new Error((reason || '下载失败') + cookieFailureHint(failedBrowsers))
   }
 
   if (state.downloadedFile) cleanupLeftovers(state.downloadedFile)

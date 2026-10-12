@@ -165,7 +165,12 @@ function createWindow() {
  *
  * 拿不到锁说明已有实例在跑，把已有窗口带到前台后立即退出。
  */
-const gotSingleInstanceLock = app.requestSingleInstanceLock()
+// 开发模式下跳过：dev 与打包版的 userData 同名（都是 downvid），因此装了打包版
+// 且它正开着时，`pnpm dev` 会被自己的锁挡在门外（实测发生）。反过来两者共用
+// userData 也会互相污染（历史记录、Cookie 快照、日志）。开发要的是"另起一份"，
+// 不是"聚焦已装的正式版"。
+const isDev = !app.isPackaged
+const gotSingleInstanceLock = isDev || app.requestSingleInstanceLock()
 
 if (!gotSingleInstanceLock) {
   log('[LIFECYCLE] 已有实例在运行，本次启动退出')
