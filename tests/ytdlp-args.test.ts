@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest'
+import path from 'node:path'
 import { buildYtdlpArgs, buildFormatSelector, type DownloadOptions } from '../electron/download/ytdlp'
 
 /**
@@ -11,10 +12,19 @@ import { buildYtdlpArgs, buildFormatSelector, type DownloadOptions } from '../el
  *  - 字幕模式仍传 --ffmpeg-location，且未加 --skip-download
  */
 
+/**
+ * 输出路径要用 path.join 拼预期值，不能写死 POSIX 路径。
+ *
+ * 生产代码用 path.join 组装输出模板，Windows 上得到的是反斜杠；
+ * 写死 '/tmp/out/...' 会让用例只在类 Unix 上通过（CI 的 windows job
+ * 就是这么抓到的）。
+ */
+const OUT_DIR = path.join('tmp', 'out')
+
 const base: DownloadOptions = {
   url: 'https://example.com/v/1',
   formatId: '137',
-  outputDir: '/tmp/out',
+  outputDir: OUT_DIR,
   taskId: 't1',
 }
 
@@ -58,7 +68,7 @@ describe('buildFormatSelector', () => {
 
 describe('buildYtdlpArgs', () => {
   it('包含结构化进度模板，供解析进度与最终路径', () => {
-    const args = buildYtdlpArgs(base, '/tmp/out', ctx)
+    const args = buildYtdlpArgs(base, OUT_DIR, ctx)
     const templates = args.filter((_, i) => args[i - 1] === '--progress-template')
     expect(templates.some(t => t.includes('[dvp]'))).toBe(true)
     expect(templates.some(t => t.includes('[dvpp]'))).toBe(true)
@@ -67,17 +77,17 @@ describe('buildYtdlpArgs', () => {
   })
 
   it('传 ffmpeg 的目录而非文件路径（yt-dlp 会在该目录里同时找 ffmpeg 与 ffprobe）', () => {
-    const args = buildYtdlpArgs(base, '/tmp/out', ctx)
+    const args = buildYtdlpArgs(base, OUT_DIR, ctx)
     expect(valueAfter(args, '--ffmpeg-location')).toBe('/opt/homebrew/bin')
   })
 
   it('输出模板包含用户设置的文件名模板', () => {
-    const args = buildYtdlpArgs({ ...base, filenameTemplate: '%(title)s-%(id)s' }, '/tmp/out', ctx)
-    expect(valueAfter(args, '-o')).toBe('/tmp/out/%(title)s-%(id)s.%(ext)s')
+    const args = buildYtdlpArgs({ ...base, filenameTemplate: '%(title)s-%(id)s' }, OUT_DIR, ctx)
+    expect(valueAfter(args, '-o')).toBe(path.join(OUT_DIR, '%(title)s-%(id)s.%(ext)s'))
   })
 
   it('字幕模式：跳过下载、写字幕、转 srt，且不需要 ffmpeg', () => {
-    const args = buildYtdlpArgs({ ...base, downloadMode: 'subtitle', subtitles: ['zh-Hans', 'en'] }, '/tmp/out', { ...ctx, ffmpegLocation: '' })
+    const args = buildYtdlpArgs({ ...base, downloadMode: 'subtitle', subtitles: ['zh-Hans', 'en'] }, OUT_DIR, { ...ctx, ffmpegLocation: '' })
     expect(args).toContain('--skip-download')
     expect(args).toContain('--write-subs')
     expect(args).toContain('--convert-subs')
@@ -87,7 +97,7 @@ describe('buildYtdlpArgs', () => {
   })
 
   it('音频模式：转 mp3 且写入 id3v1 标签（兼容旧播放器）', () => {
-    const args = buildYtdlpArgs({ ...base, downloadMode: 'audio' }, '/tmp/out', ctx)
+    const args = buildYtdlpArgs({ ...base, downloadMode: 'audio' }, OUT_DIR, ctx)
     expect(args).toContain('-x')
     expect(args).toContain('--audio-format')
     expect(valueAfter(args, '--audio-format')).toBe('mp3')
@@ -97,39 +107,39 @@ describe('buildYtdlpArgs', () => {
   })
 
   it('视频模式合并为 mp4', () => {
-    const args = buildYtdlpArgs(base, '/tmp/out', ctx)
+    const args = buildYtdlpArgs(base, OUT_DIR, ctx)
     expect(valueAfter(args, '--merge-output-format')).toBe('mp4')
   })
 
   it('非字幕模式且选了字幕时，附带写字幕参数', () => {
-    const args = buildYtdlpArgs({ ...base, subtitles: ['en'] }, '/tmp/out', ctx)
+    const args = buildYtdlpArgs({ ...base, subtitles: ['en'] }, OUT_DIR, ctx)
     expect(args).toContain('--write-subs')
     expect(valueAfter(args, '--sub-langs')).toBe('en')
     expect(args).not.toContain('--skip-download')
   })
 
   it('代理只在设置后传入', () => {
-    expect(buildYtdlpArgs(base, '/tmp/out', ctx)).not.toContain('--proxy')
-    expect(valueAfter(buildYtdlpArgs({ ...base, proxy: 'http://127.0.0.1:7890' }, '/tmp/out', ctx), '--proxy'))
+    expect(buildYtdlpArgs(base, OUT_DIR, ctx)).not.toContain('--proxy')
+    expect(valueAfter(buildYtdlpArgs({ ...base, proxy: 'http://127.0.0.1:7890' }, OUT_DIR, ctx), '--proxy'))
       .toBe('http://127.0.0.1:7890')
   })
 
   it('YouTube 带 JS 运行时参数；node 与 deno 用不同前缀', () => {
     const yt: DownloadOptions = { ...base, url: 'https://www.youtube.com/watch?v=x' }
-    const withNode = buildYtdlpArgs(yt, '/tmp/out', { ...ctx, jsRuntime: { path: '/usr/bin/node', name: 'Node.js' } })
+    const withNode = buildYtdlpArgs(yt, OUT_DIR, { ...ctx, jsRuntime: { path: '/usr/bin/node', name: 'Node.js' } })
     expect(valueAfter(withNode, '--js-runtimes')).toBe('node:/usr/bin/node')
 
-    const withDeno = buildYtdlpArgs(yt, '/tmp/out', { ...ctx, jsRuntime: { path: '/usr/bin/deno', name: 'Deno' } })
+    const withDeno = buildYtdlpArgs(yt, OUT_DIR, { ...ctx, jsRuntime: { path: '/usr/bin/deno', name: 'Deno' } })
     expect(valueAfter(withDeno, '--js-runtimes')).toBe('deno:/usr/bin/deno')
   })
 
   it('非 YouTube 不带 JS 运行时参数', () => {
-    const args = buildYtdlpArgs(base, '/tmp/out', { ...ctx, jsRuntime: { path: '/usr/bin/node', name: 'Node.js' } })
+    const args = buildYtdlpArgs(base, OUT_DIR, { ...ctx, jsRuntime: { path: '/usr/bin/node', name: 'Node.js' } })
     expect(args).not.toContain('--js-runtimes')
   })
 
   it('单集下载：不跟播放列表', () => {
-    const args = buildYtdlpArgs(base, '/tmp/out', ctx)
+    const args = buildYtdlpArgs(base, OUT_DIR, ctx)
     expect(args).toContain('--no-playlist')
     expect(valueAfter(args, '--playlist-items')).toBe('1')
   })
