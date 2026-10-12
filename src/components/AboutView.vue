@@ -68,11 +68,33 @@
       <div class="mb-6">
         <h3 class="text-xs font-medium text-on-surface-variant uppercase tracking-wider mb-3">技术栈</h3>
         <div class="flex flex-wrap gap-2">
-          <span class="text-xs px-3 py-1.5 bg-surface-container-low rounded-lg text-on-surface border border-outline-variant/10">Electron</span>
-          <span class="text-xs px-3 py-1.5 bg-surface-container-low rounded-lg text-on-surface border border-outline-variant/10">Vue 3</span>
-          <span class="text-xs px-3 py-1.5 bg-surface-container-low rounded-lg text-on-surface border border-outline-variant/10">TypeScript</span>
-          <span class="text-xs px-3 py-1.5 bg-surface-container-low rounded-lg text-on-surface border border-outline-variant/10">YT-DLP</span>
-          <span class="text-xs px-3 py-1.5 bg-surface-container-low rounded-lg text-on-surface border border-outline-variant/10">FFmpeg</span>
+          <span
+            v-for="tech in techStack"
+            :key="tech.name"
+            class="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-surface-container-low rounded-lg text-on-surface border border-outline-variant/10"
+            :title="tech.note || tech.name"
+          >
+            <MaterialIcon v-if="tech.icon" :name="tech.icon" :size="14" class="text-on-surface-variant" />
+            {{ tech.name }}
+          </span>
+        </div>
+      </div>
+
+      <!-- 开源组件致谢：Material Symbols 是 Apache-2.0，随应用分发需保留声明 -->
+      <div class="mb-6">
+        <h3 class="text-xs font-medium text-on-surface-variant uppercase tracking-wider mb-3">开源组件</h3>
+        <div class="bg-surface-container-low rounded-xl p-4 border border-outline-variant/10 flex flex-col gap-2">
+          <div v-for="item in ossCredits" :key="item.name" class="flex items-baseline justify-between gap-3 text-xs">
+            <span class="text-on-surface">{{ item.name }}</span>
+            <span class="text-on-surface-variant text-right">
+              {{ item.license }}
+              <a
+                v-if="item.url"
+                class="text-tertiary hover:underline underline-offset-2 ml-1"
+                @click="openExternal(item.url)"
+              >主页</a>
+            </span>
+          </div>
         </div>
       </div>
 
@@ -221,6 +243,31 @@ interface Contributor {
 const repoLabel = `github.com/${REPO_SLUG}`
 
 const showDonate = ref(false)
+
+/** 技术栈：与 README、package.json 保持一致，改其一时同步另一处 */
+const techStack = [
+  { name: 'Electron', icon: 'desktop_windows' },
+  { name: 'Vue 3', icon: 'code' },
+  { name: 'TypeScript', icon: 'data_object' },
+  { name: 'Tailwind CSS', icon: 'palette' },
+  { name: 'Vite', icon: 'bolt' },
+  { name: 'Pinia', icon: 'database' },
+  { name: 'Go', icon: 'memory', note: '依赖边车：探测并复用系统已安装的 yt-dlp / ffmpeg' },
+  { name: 'yt-dlp', icon: 'download', note: '不随安装包分发，运行时解析' },
+  { name: 'FFmpeg', icon: 'movie', note: '不随安装包分发，运行时解析' },
+]
+
+/**
+ * 随应用分发的开源组件与许可。
+ * Material Symbols 是 Apache-2.0，分发时须保留声明，因此必须列出。
+ */
+const ossCredits = [
+  { name: 'Material Symbols', license: 'Apache-2.0', url: 'https://fonts.google.com/icons' },
+  { name: 'yt-dlp', license: 'Unlicense', url: 'https://github.com/yt-dlp/yt-dlp' },
+  { name: 'FFmpeg (ffmpeg-static)', license: 'GPL-3.0', url: 'https://github.com/eugeneware/ffmpeg-static' },
+  { name: 'Electron', license: 'MIT', url: 'https://www.electronjs.org' },
+  { name: 'Vue', license: 'MIT', url: 'https://vuejs.org' },
+]
 
 const appVersion = ref('1.0.0')
 const showUpdateDrawer = ref(false)

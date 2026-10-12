@@ -254,8 +254,15 @@ async function testProxy() {
   proxyTestResult.value = ''
   try {
     const result = await window.electronAPI.app.testProxy(settings.value.proxy)
-    if (result.success) { proxyTestResult.value = 'success'; proxyTestLatency.value = result.latency || 0 }
-    else { proxyTestResult.value = 'fail'; showError(`连接失败: ${result.error}`) }
+    if (result.success) {
+      proxyTestResult.value = 'success'
+      proxyTestLatency.value = result.latency || 0
+      // 代理与直连都通时提示"代理可能未生效"——不能断言失败，但值得让用户知道
+      if (result.warning) showInfo(result.warning)
+    } else {
+      proxyTestResult.value = 'fail'
+      showError('代理不可用', undefined, result.error)
+    }
   } catch (e) {
     proxyTestResult.value = 'fail'
     showError(`测试失败: ${e instanceof Error ? e.message : '未知错误'}`)

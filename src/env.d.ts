@@ -54,7 +54,7 @@ interface Window {
       clearLog: () => Promise<{ success: boolean; error?: string }>
       openLogDir: () => Promise<{ success: boolean; error?: string }>
       setProxy: (proxy: string) => Promise<boolean>
-      testProxy: (proxy: string) => Promise<{ success: boolean; latency?: number; error?: string }>
+      testProxy: (proxy: string) => Promise<{ success: boolean; latency?: number; error?: string; warning?: string }>
       getDiskSpace: (dir?: string) => Promise<{ free: number; total: number; unit: string }>
     }
     shell: {

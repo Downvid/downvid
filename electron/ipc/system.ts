@@ -46,6 +46,21 @@ async function getDiskSpace(dir: string): Promise<{ free: number; total: number;
   return { free: parseInt(parts[3]) * 1024 || 0, total: parseInt(parts[1]) * 1024 || 0, unit: 'bytes' }
 }
 
+/** 用于连通性测试的极小资源：返回 204，无正文 */
+const PROBE_URL = 'https://www.gstatic.com/generate_204'
+
+/** 把 Chromium 的网络错误码翻译成可执行的建议 */
+function friendlyProxyError(error: unknown): string {
+  const msg = String((error as any)?.message || error || '')
+  if (/ERR_PROXY_CONNECTION_FAILED/i.test(msg)) return '无法连接代理服务器，请确认地址与端口正确且代理正在运行'
+  if (/ERR_PROXY_AUTH_REQUESTED|407/i.test(msg)) return '代理需要身份验证（当前尚不支持填写账号密码）'
+  if (/ERR_TUNNEL_CONNECTION_FAILED/i.test(msg)) return '无法通过代理建立隧道，代理可能不支持 HTTPS 或已被阻断'
+  if (/ERR_NAME_NOT_RESOLVED/i.test(msg)) return '代理无法解析目标域名，请检查代理自身的 DNS 设置'
+  if (/ERR_TIMED_OUT|Timeout|aborted/i.test(msg)) return '连接超时，请检查网络或稍后重试'
+  if (/ERR_INTERNET_DISCONNECTED/i.test(msg)) return '本机网络未连接'
+  return msg.split('\n')[0] || '连接失败'
+}
+
 function getLogPath(): string {
   return path.join(app.getPath('userData'), 'downvid.log')
 }
@@ -160,23 +175,68 @@ export function registerSystemIpc() {
   })
 
   // 测试代理连接
+  /**
+   * 测试代理是否可用。
+   *
+   * 要点（都实测过）：
+   * - 必须用**独立 session 的 `session.fetch`**：全局 fetch 既不读传入参数、也不读
+   *   环境变量代理；`net.fetch(url, { session })` 同样会绕过该 session 的代理。
+   *   之前的实现用全局 fetch + `dispatcher: undefined`（空操作），实际只在测
+   *   "本机能否直连 google.com"——代理挂掉也会报成功，代理正常但直连被墙则报失败。
+   * - 用一次性 session，不要动 defaultSession / electron-updater 的 session，
+   *   否则会把正在进行的下载临时切到错误代理。
+   * - 目标选 generate_204：返回极小，且能明确区分连通与失败。
+   * - 顺带测一次直连作对照：两者都成功说明代理可能没在起作用，如实告知用户。
+   */
   ipcMain.handle('app:testProxy', async (_, proxy: string) => {
-    const start = Date.now()
+    const testSession = session.fromPartition('proxy-probe', { cache: false })
+    const START = Date.now()
     try {
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 8000)
-      const response = await fetch('https://www.google.com', {
-        signal: controller.signal,
-        ...(proxy ? { dispatcher: undefined } : {}),
-      } as any)
-      clearTimeout(timeout)
-      const elapsed = Date.now() - start
-      if (response.ok) {
-        return { success: true, latency: elapsed }
+      await testSession.setProxy(proxy ? { proxyRules: proxy } : { mode: 'direct' })
+
+      const fetch204 = async () => {
+        const controller = new AbortController()
+        const timer = setTimeout(() => controller.abort(), 8000)
+        try {
+          const response = await testSession.fetch(PROBE_URL, { signal: controller.signal })
+          return response.status === 204
+        } finally {
+          clearTimeout(timer)
+        }
       }
-      return { success: false, error: `HTTP ${response.status}` }
+
+      let proxiedOk = false
+      let proxiedError = ''
+      const proxiedAt = Date.now()
+      try {
+        proxiedOk = await fetch204()
+        if (!proxiedOk) proxiedError = '返回状态异常'
+      } catch (e: any) {
+        proxiedError = friendlyProxyError(e)
+      }
+      const latency = Date.now() - proxiedAt
+
+      if (!proxiedOk) return { success: false, error: proxiedError || '连接失败' }
+
+      // 直连对照：用来判断"代理是否真的在起作用"
+      let directOk = false
+      try {
+        await testSession.setProxy({ mode: 'direct' })
+        directOk = await fetch204()
+      } catch {}
+
+      return {
+        success: true,
+        latency,
+        // 代理与直连都通 → 代理可能未生效，提示而不是断言失败
+        warning: directOk ? '直连同样可达，代理可能未生效' : undefined,
+      }
     } catch (e: any) {
-      return { success: false, error: e.message || '连接失败' }
+      return { success: false, error: friendlyProxyError(e) }
+    } finally {
+      // Electron 的 Session 没有 close()；这个分区只用于探测，清掉它的缓存即可
+      void testSession.clearStorageData().catch(() => {})
+      void START
     }
   })
 
