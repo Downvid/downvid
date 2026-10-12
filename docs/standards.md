@@ -215,6 +215,24 @@ Windows runner 与 macOS/Linux 的默认环境差异很大，以下三点都已�
 - 前端：TypeScript 严格模式（`strict` + `noUnusedLocals` + `noUnusedParameters`，未使用的 import / 参数会让构建失败）
 - Go：`gofmt`（CI 会检查）+ `go vet`
 - 没有 ESLint / Prettier。**不要引入**——格式化差异会污染历史 diff
+
+### 测试范围
+
+| 层次 | 手段 |
+| --- | --- |
+| Go 侧车纯逻辑 | `backend/internal/*/**_test.go`，`go test ./...` |
+| 前端/主进程纯逻辑 | `tests/*.test.ts`（Vitest），`pnpm test` |
+| IPC 三处同步 | `pnpm lint:ipc` 静态校验 |
+| 跨模块类型一致 | `pnpm vue-tsc --noEmit` |
+| 真实行为 | 手工验证（下载、更新、依赖安装） |
+
+`pnpm test` 刻意只覆盖**纯函数**：格式选择、依赖错误识别、yt-dlp 参数组装、
+解析器共用工具。依赖 DOM 或需要真的起子进程的部分不在这一层——那类问题靠
+类型检查、契约校验与真机验证来拦。
+
+新增测试请照 `tests/ytdlp-args.test.ts` 的做法：**针对曾经出过问题的分支各留一个
+用例**，而不是追求覆盖率数字。写完请做一次变异验证（把被测逻辑改坏，确认用例
+会失败）——不会失败的测试等于没有测试。
 - UI 文案、注释、commit body **一律中文**，与现有风格一致
 - Vue 组件用 `<script setup>`
 - 注释解释**为什么**，不复述代码在做什么

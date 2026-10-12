@@ -57,6 +57,9 @@ jobs:
         run: pnpm lint:ipc
       - name: Type check
         run: pnpm vue-tsc --noEmit
+      # 纯逻辑单测：格式选择、依赖错误识别、yt-dlp 参数组装、解析器共用工具
+      - name: Unit tests
+        run: pnpm test
       # 依赖清单必须与上游一致：版本落后或哈希对不上会在用户端变成"下载即校验失败"
       - name: Check dependency manifest
         if: runner.os == 'Linux'

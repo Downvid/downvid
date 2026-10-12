@@ -20,6 +20,8 @@
     "build:linux:x64:tar.gz": "vue-tsc && vite build && electron-builder --linux tar.gz --x64 --publish never --config electron-builder.json5",
     "build:linux:arm64": "vue-tsc && vite build && electron-builder --linux AppImage tar.gz --arm64 --publish never --config electron-builder.json5",
     "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "deps:build": "bash scripts/build-backend.sh",
     "deps:manifest": "node scripts/gen-deps-manifest.mjs",
     "deps:manifest:check": "node scripts/gen-deps-manifest.mjs --check",
@@ -45,6 +47,7 @@
     "vite": "^8.3.2",
     "vite-plugin-electron": "^1.1.2",
     "vite-plugin-electron-renderer": "^1.0.0",
+    "vitest": "^5.0.3",
     "vue-tsc": "^3.3.12"
   },
   "main": "dist-electron/main.js",

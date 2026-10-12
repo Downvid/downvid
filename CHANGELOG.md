@@ -13,6 +13,12 @@
 - 补齐 CI 安全能力：新增 CodeQL 扫描（TypeScript/Vue + Go）与 Dependency Review（高危拦截 + 许可证白名单）；全部 job 补 `timeout-minutes`，GitHub Actions 版本统一并升到最新主版本
 - Dependabot 增加 Go 模块与分组提交信息，忽略 Electron 大版本（原生 ABI 变更需人工验证）
 
+### 内部改进（工程规范）
+- 仓库坐标与外部链接集中到 `shared/app.ts`（此前散落在 9 处，改仓库需全局搜索且极易漏改），新增 `pnpm lint:ipc` 静态校验 IPC 三处同步、`src/env.d.ts` 的全局脚本约束、以及产物命名契约
+- 拆分超长文件：`electron/ipc/download.ts` 445 → 95 行（直链/yt-dlp/进度上报拆到 `electron/download/`）；`douyin.ts` 与 `kuaishou.ts` 抽出共用的 `parsers/shared.ts`；`UpdateModal.vue` 467 → 344 行（更新状态机抽为 `composables/useUpdater.ts`）
+- `buildYtdlpArgs` 改为纯函数；顺带修正非 Electron 环境下缺 JS 运行时被静默跳过的问题
+- 引入 Vitest 与 47 个纯逻辑单测（格式选择、依赖错误识别、yt-dlp 参数组装、解析器共用工具、更新状态机），已接入 CI
+
 ### 变更（破坏性）
 - **安装包不再内置 yt-dlp 与 ffmpeg**：启动时由新增的 Go 依赖边车（`backend/cmd/downvid-deps`）按「系统优先」的顺序识别机器上已安装的版本并直接复用——手动指定的路径 → `userData/runtime/bin/` 托管目录 → 登录 shell 的 `PATH` 与各平台常见安装目录（Homebrew / MacPorts / scoop / winget / apt 等）。macOS / Linux 从桌面启动时 `PATH` 很精简，边车会额外执行一次登录 shell 来补全 `~/.local/bin`、`/opt/homebrew/bin` 等目录
 - 安装包体积因此大幅下降（此前每个架构约 80 MB，现仅携带约 10 MB 边车）；仓库移除 `bin/` 目录与 Git LFS 追踪，不再把二进制提交进版本库
