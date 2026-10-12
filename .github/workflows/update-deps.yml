@@ -59,9 +59,14 @@ jobs:
           node scripts/gen-deps-manifest.mjs "${args[@]}"
       - name: Verify backend still builds and tests
         working-directory: backend
+        shell: bash
         run: |
-          gofmt -l . | tee /tmp/gofmt.out
-          test ! -s /tmp/gofmt.out
+          UNFORMATTED=$(gofmt -l .)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "::error::以下文件未经过 gofmt 格式化："
+            echo "$UNFORMATTED"
+            exit 1
+          fi
           go vet ./...
           go test ./...
       - name: Show versions

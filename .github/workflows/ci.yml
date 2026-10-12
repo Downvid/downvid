@@ -30,9 +30,16 @@ jobs:
           cache: false
       - name: Check Go backend
         working-directory: backend
+        shell: bash
         run: |
-          gofmt -l . | tee /tmp/gofmt.out
-          test ! -s /tmp/gofmt.out
+          # 显式指定 bash：默认 shell 在 Windows 上是 PowerShell，
+          # 上面用到的 test ! -s 与 /tmp 路径都不成立
+          UNFORMATTED=$(gofmt -l .)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "::error::以下文件未经过 gofmt 格式化："
+            echo "$UNFORMATTED"
+            exit 1
+          fi
           go vet ./...
           go test ./...
       - name: Setup Node.js
