@@ -209,9 +209,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { onMounted } from 'vue'
 import MaterialIcon from './icons/MaterialIcon.vue'
-import { RELEASES_URL } from '../../shared/app'
+import { useUpdater } from '../composables/useUpdater'
 
 const props = defineProps<{
   visible: boolean
@@ -221,143 +221,20 @@ const emit = defineEmits<{
   close: []
 }>()
 
-type UpdateStatus = 'idle' | 'checking' | 'latest' | 'available' | 'downloading' | 'downloaded' | 'error'
-
-const status = ref<UpdateStatus>('idle')
-const currentVersion = ref('1.0.0')
-const newVersion = ref('')
-const releaseNotes = ref('')
-const errorMsg = ref('')
-const downloadPercent = ref(0)
-const downloadSpeed = ref('')
-const downloadUrl = ref(RELEASES_URL)
-// 当前安装方式不支持自动安装（便携版、tar.gz、DMG 内运行等），只能手动下载
-const manual = ref(false)
-const manualReason = ref('')
-const errorPhase = ref<'check' | 'download' | 'install'>('check')
-const errorTitle = computed(() => ({ check: '检查失败', download: '下载失败', install: '安装失败' })[errorPhase.value])
-
-function fail(phase: 'check' | 'download' | 'install', message: string) {
-  status.value = 'error'
-  errorPhase.value = phase
-  errorMsg.value = message
-}
-
-function openReleasePage() {
-  window.electronAPI?.shell?.openExternal?.(downloadUrl.value)
-}
-
-function retry() {
-  if (errorPhase.value === 'check') checkUpdate()
-  else if (errorPhase.value === 'download') downloadUpdate()
-  else installUpdate()
-}
-
-let unsubscribe: (() => void) | null = null
+// 更新流程的状态机见 composables/useUpdater.ts
+const {
+  status, currentVersion, newVersion, releaseNotes, errorMsg,
+  downloadPercent, downloadSpeed, manual, manualReason,
+  errorTitle,
+  downloadUpdate, installUpdate, openReleasePage, retry, init,
+} = useUpdater({ visible: () => props.visible })
 
 function close() {
   emit('close')
 }
 
-async function checkUpdate() {
-  status.value = 'checking'
-  try {
-    const result = await window.electronAPI?.checkForUpdates?.()
-    if (result?.downloadUrl) downloadUrl.value = result.downloadUrl
-    if (result?.error) {
-      fail('check', result.error)
-    } else if (result?.hasUpdate) {
-      status.value = 'available'
-      newVersion.value = result.version || ''
-      releaseNotes.value = result.releaseNotes || ''
-      manual.value = !!result.manual
-      manualReason.value = result.manualReason || ''
-    } else {
-      status.value = 'latest'
-      currentVersion.value = result?.currentVersion || currentVersion.value
-    }
-  } catch {
-    fail('check', '检查更新失败，请检查网络连接')
-  }
-}
-
-async function downloadUpdate() {
-  status.value = 'downloading'
-  downloadPercent.value = 0
-  downloadSpeed.value = '准备下载...'
-  try {
-    const result = await window.electronAPI?.downloadUpdate?.()
-    if (result && !result.success) {
-      fail('download', result.error || '下载更新失败')
-    } else if (status.value === 'downloading') {
-      // 不依赖 update:status 事件，下载完成即进入可安装状态
-      status.value = 'downloaded'
-    }
-  } catch {
-    fail('download', '下载更新失败')
-  }
-}
-
-async function installUpdate() {
-  try {
-    const result = await window.electronAPI?.installUpdate?.()
-    if (result && !result.success) fail('install', result.error || '安装更新失败')
-  } catch {
-    fail('install', '安装更新失败')
-  }
-}
-
-// 弹窗打开时自动检查更新
-watch(() => props.visible, (val) => {
-  if (val && status.value === 'idle') {
-    checkUpdate()
-  }
-})
-
-onMounted(async () => {
-  try {
-    const version = await window.electronAPI?.app?.getVersion?.()
-    if (version) currentVersion.value = version
-  } catch {}
-
-  // 监听更新状态
-  if (window.electronAPI?.onUpdateStatus) {
-    unsubscribe = window.electronAPI.onUpdateStatus((data: any) => {
-      switch (data.status) {
-        case 'checking':
-          status.value = 'checking'
-          break
-        case 'available':
-          status.value = 'available'
-          newVersion.value = data.version || ''
-          releaseNotes.value = data.releaseNotes || ''
-          manual.value = !!data.manual
-          manualReason.value = data.manualReason || ''
-          break
-        case 'not-available':
-          status.value = 'latest'
-          break
-        case 'downloading':
-          status.value = 'downloading'
-          downloadPercent.value = data.percent || 0
-          if (data.speed) {
-            const mbps = (data.speed / 1024 / 1024).toFixed(1)
-            downloadSpeed.value = `${mbps} MB/s`
-          }
-          break
-        case 'downloaded':
-          status.value = 'downloaded'
-          break
-        case 'error':
-          fail(status.value === 'downloading' ? 'download' : errorPhase.value, data.message || '更新失败')
-          break
-      }
-    })
-  }
-})
-
-onUnmounted(() => {
-  unsubscribe?.()
+onMounted(() => {
+  void init()
 })
 </script>
 

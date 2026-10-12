@@ -1,0 +1,314 @@
+import { spawn, exec } from 'node:child_process'
+import fs from 'node:fs'
+import path from 'node:path'
+import { resolveDependency, getFfmpegLocation, checkJsRuntime } from '../utils/binary'
+import { getCookieAttempts, runWithCookies, cookieFailureHint } from '../utils/cookies'
+import { getExtractorArgs, promptNodeDownload } from '../parsers/ytdlp'
+import { activeDownloads } from '../store'
+import { sendDownloadProgress, throttledProgress, clearProgressThrottle, formatBytes, formatEta } from './progress'
+
+/**
+ * yt-dlp 下载路径。
+ *
+ * 与直链路径（./direct.ts）完全独立：这里把 UI 的选择翻译成 yt-dlp 参数，
+ * 再从 yt-dlp 的结构化进度输出里解析进度与最终文件路径。
+ */
+
+/** 结构化进度输出，替代对人类可读文本的正则抓取 */
+const PROGRESS_PREFIX = '[dvp]'
+const POSTPROCESS_PREFIX = '[dvpp]'
+const FILE_PREFIX = '[dvfile]'
+const SUBS_PREFIX = '[dvsubs]'
+
+const PROGRESS_TEMPLATE = `download:${PROGRESS_PREFIX}%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s|%(progress.fragment_index)s|%(progress.fragment_count)s`
+const POSTPROCESS_TEMPLATE = `postprocess:${POSTPROCESS_PREFIX}%(progress.postprocessor)s|%(progress.status)s`
+
+/** 解析结果缓存的 info JSON 有效期：超过后媒体直链可能已过期，改为重新提取 */
+const INFO_JSON_TTL = 20 * 60 * 1000
+
+const num = (v: string) => {
+  const n = parseFloat(v)
+  return Number.isFinite(n) ? n : 0
+}
+
+export interface DownloadOptions {
+  url: string; formatId: string; outputDir: string; filename?: string; taskId: string
+  directUrl?: string; cookiesFile?: string; downloadMode?: 'video' | 'audio' | 'subtitle'
+  audioTrack?: any; subtitles?: string[]; filenameTemplate?: string; proxy?: string
+  cacheFile?: string; hasAudio?: boolean
+}
+
+/**
+ * 组装 format selector。
+ *
+ * 已含音轨的格式直接下载；否则合并最佳音轨，找不到可合并的音轨时退回该格式本身
+ * （旧逻辑在无 m4a 音轨时会退化成 `bestaudio`，只下载到纯音频）。
+ */
+export function buildFormatSelector(options: DownloadOptions): string {
+  if (options.downloadMode === 'audio') return options.formatId
+  if (options.audioTrack?.isM3u8) return options.audioTrack.formatId
+  if (options.hasAudio) return `${options.formatId}/bv*+ba/b`
+  const audio = options.audioTrack?.language ? `bestaudio[language^=${options.audioTrack.language}]` : 'bestaudio[ext=m4a]'
+  return `${options.formatId}+${audio}/${options.formatId}+bestaudio/${options.formatId}/bv*+ba/b`
+}
+
+/** 缓存的 info JSON 是否还新鲜 */
+function useInfoJson(cacheFile?: string): boolean {
+  if (!cacheFile) return false
+  try { return Date.now() - fs.statSync(cacheFile).mtimeMs < INFO_JSON_TTL } catch { return false }
+}
+
+/** 清理 yt-dlp 中断留下的分片/临时文件 */
+function cleanupLeftovers(filePath: string) {
+  const dir = path.dirname(filePath)
+  const base = path.basename(filePath).replace(/\.[^.]+$/, '')
+  try {
+    for (const file of fs.readdirSync(dir)) {
+      if (file.startsWith(base) && /\.(part|ytdl)$|\.part-Frag\d+$/.test(file)) {
+        fs.rmSync(path.join(dir, file), { force: true })
+      }
+    }
+  } catch {}
+}
+
+/**
+ * 组装 yt-dlp 参数。
+ *
+ * 单独导出是为了可测试：格式选择、字幕模式、音频转换的差异都只体现在这里，
+ * 而不必真的起一个进程去验证。
+ */
+export interface JsRuntime {
+  path: string
+  name: string
+}
+
+/**
+ * 组装参数时用到的外部状态。
+ *
+ * 依赖工具的路径与 JS 运行时都由调用方解析好再传进来：
+ * buildYtdlpArgs 保持纯函数，便于直接断言参数列表，不必真的起进程。
+ */
+export interface BuildArgsContext {
+  /** yt-dlp 的 --ffmpeg-location，空字符串表示不需要（字幕模式或未解析到） */
+  ffmpegLocation: string
+  /** YouTube 需要的 JS 运行时；null 表示非 YouTube 或无需指定 */
+  jsRuntime: JsRuntime | null
+}
+
+export function buildYtdlpArgs(options: DownloadOptions, outputDir: string, ctx: BuildArgsContext): string[] {
+  const isSubtitleOnly = options.downloadMode === 'subtitle'
+  const isAudioOnly = options.downloadMode === 'audio'
+  const isYoutube = options.url.includes('youtube.com') || options.url.includes('youtu.be')
+  const userTemplate = options.filenameTemplate || '%(title)s'
+  const outputTemplate = path.join(outputDir, `${userTemplate}.%(ext)s`)
+
+  const args: string[] = [
+    '-o', outputTemplate, '--no-playlist', '--playlist-items', '1', '--encoding', 'utf-8',
+    // --print 隐含 --quiet，用 --progress 保留进度输出，最终路径由 after_move 精确给出
+    '--newline', '--progress', '--progress-template', PROGRESS_TEMPLATE, '--progress-template', POSTPROCESS_TEMPLATE,
+    // 字幕模式没有视频文件，改为输出字幕信息（语言代码可能含 '-'，不能直接写进字段路径）
+    '--print', isSubtitleOnly ? `after_move:${SUBS_PREFIX}%(requested_subtitles)j` : `after_move:${FILE_PREFIX}%(filepath)s`,
+    // HLS/DASH 分片并发下载
+    '--concurrent-fragments', '8',
+  ]
+
+  // 传目录而不是文件路径：yt-dlp 会在该目录里同时找 ffmpeg 与 ffprobe
+  if (ctx.ffmpegLocation) args.push('--ffmpeg-location', ctx.ffmpegLocation)
+
+  if (isSubtitleOnly) {
+    args.push('--skip-download', '--write-subs', '--sub-langs', options.subtitles?.join(',') || 'all', '--convert-subs', 'srt')
+  } else {
+    args.unshift('-f', buildFormatSelector(options))
+    if (isAudioOnly) {
+      args.push('-x', '--audio-format', 'mp3', '--audio-quality', '0', '--postprocessor-args', 'FFmpegMetadata:-write_id3v1 1')
+    } else {
+      args.push('--merge-output-format', 'mp4')
+    }
+    if (options.subtitles?.length) {
+      args.push('--write-subs', '--sub-langs', options.subtitles.join(','), '--convert-subs', 'srt')
+    }
+  }
+
+  if (options.proxy) args.push('--proxy', options.proxy)
+
+  if (isYoutube && ctx.jsRuntime) {
+    const isNode = ctx.jsRuntime.path.includes('node')
+    args.push('--js-runtimes', `${isNode ? 'node' : 'deno'}:${ctx.jsRuntime.path}`)
+  }
+
+  args.push(...getExtractorArgs(options.url))
+  return args
+}
+
+/** 从 yt-dlp 的一行输出里解析进度/事件，喂给 UI */
+function handleLine(line: string, options: DownloadOptions, state: { downloadedFile: string; hasStarted: boolean }) {
+  if (line.startsWith(PROGRESS_PREFIX)) {
+    const [downloadedStr, totalStr, estimateStr, speedStr, etaStr, fragIdxStr, fragCountStr] = line.slice(PROGRESS_PREFIX.length).split('|')
+    const done = num(downloadedStr)
+    const total = num(totalStr) || num(estimateStr)
+    const fragCount = num(fragCountStr)
+    const percent = total > 0 ? (done / total) * 100 : fragCount > 0 ? (num(fragIdxStr) / fragCount) * 100 : 0
+    const speed = num(speedStr)
+    state.hasStarted = true
+    throttledProgress({
+      taskId: options.taskId, url: options.url, status: 'downloading',
+      percent: Math.min(percent, 100),
+      totalSize: formatBytes(total),
+      speed: speed > 0 ? `${formatBytes(speed)}/s` : '',
+      eta: etaStr && etaStr !== 'NA' ? formatEta(num(etaStr)) : '',
+    })
+  } else if (line.startsWith(POSTPROCESS_PREFIX)) {
+    const [processor, status] = line.slice(POSTPROCESS_PREFIX.length).split('|')
+    if (status === 'started' && /Merger/i.test(processor)) {
+      sendDownloadProgress({ taskId: options.taskId, url: options.url, percent: 99, status: 'merging', message: '正在合并音视频...' })
+    } else if (status === 'started' && /ExtractAudio/i.test(processor)) {
+      sendDownloadProgress({ taskId: options.taskId, url: options.url, percent: 99, status: 'merging', message: '正在转换音频...' })
+    }
+  } else if (line.startsWith(FILE_PREFIX)) {
+    state.downloadedFile = path.resolve(line.slice(FILE_PREFIX.length).trim())
+  } else if (line.startsWith(SUBS_PREFIX)) {
+    try {
+      const subs = JSON.parse(line.slice(SUBS_PREFIX.length)) || {}
+      const wanted = options.subtitles?.find(lang => subs[lang]?.filepath)
+      const sub = wanted ? subs[wanted] : Object.values<any>(subs).find(s => s?.filepath)
+      if (sub?.filepath) state.downloadedFile = path.resolve(sub.filepath)
+    } catch {}
+  }
+}
+
+export interface YtdlpRunResult {
+  code: number | null
+  stderr: string
+  failedBrowsers: string[]
+  filePath: string
+  paused: boolean
+}
+
+/**
+ * 执行一次 yt-dlp 下载。
+ *
+ * 进度同时来自 stdout（download）与 stderr（quiet 模式下 postprocess），两路都按行解析。
+ * 优先用解析阶段缓存下来的 info JSON 跳过二次提取；若在尚未开始下载时失败
+ * （如直链过期），回退为按 URL 重新提取。
+ */
+export async function runYtdlpDownload(options: DownloadOptions, outputDir: string): Promise<YtdlpRunResult> {
+  const ytdlpPath = await resolveDependency('yt-dlp')
+  if (!ytdlpPath) throw new Error('未找到可用的 yt-dlp')
+
+  const isSubtitleOnly = options.downloadMode === 'subtitle'
+  const isYoutube = options.url.includes('youtube.com') || options.url.includes('youtu.be')
+
+  // YouTube 的提取需要 JS 运行时。打包应用用的是 Electron 自身，
+  // 因此这条分支主要覆盖非 Electron 场景；缺失时引导用户安装。
+  let jsRuntime: JsRuntime | null = null
+  if (isYoutube) {
+    const runtime = checkJsRuntime()
+    if (!runtime.available) {
+      await promptNodeDownload()
+      throw new Error('需要安装 Node.js')
+    }
+    if (runtime.path) jsRuntime = { path: runtime.path, name: runtime.name }
+  }
+
+  const args = buildYtdlpArgs(options, outputDir, {
+    ffmpegLocation: isSubtitleOnly ? '' : getFfmpegLocation(),
+    jsRuntime,
+  })
+  const state = { downloadedFile: '', hasStarted: false }
+  let isPaused = false
+
+  const runOnce = (source: string[], cookieArgs: string[]) => new Promise<{ code: number | null; stderr: string }>((resolve, reject) => {
+    const child = spawn(ytdlpPath, [...args, ...cookieArgs, ...source], { cwd: path.dirname(ytdlpPath) })
+    let stderr = ''
+
+    activeDownloads.set(options.taskId, { child, options, status: 'downloading', setPaused: (v: boolean) => { isPaused = v } })
+
+    const lineReader = () => {
+      let pending = ''
+      return {
+        push: (text: string) => {
+          const lines = (pending + text).split(/\r?\n/)
+          pending = lines.pop() || ''
+          lines.forEach(l => handleLine(l, options, state))
+        },
+        flush: () => { if (pending) handleLine(pending, options, state); pending = '' },
+      }
+    }
+    const out = lineReader()
+    const err = lineReader()
+
+    child.stdout.on('data', (data: Buffer) => out.push(data.toString()))
+    child.stderr.on('data', (data: Buffer) => {
+      const text = data.toString()
+      err.push(text)
+      stderr += text
+      // 只留尾部：失败时用于提取 ERROR 行，无需保留全部输出
+      if (stderr.length > 20000) stderr = stderr.slice(-20000)
+    })
+    child.on('close', (code) => {
+      out.flush()
+      err.flush()
+      resolve({ code, stderr })
+    })
+    child.on('error', reject)
+  })
+
+  sendDownloadProgress({ taskId: options.taskId, url: options.url, percent: 0, status: 'downloading', speed: '', eta: '' })
+
+  // 复用解析时的 cookie 快照，与解析保持一致且省去浏览器解密
+  const cookieAttempts = () => getCookieAttempts(options.cookiesFile, true)
+  let result: { code: number | null; stderr: string; failedBrowsers: string[] }
+
+  try {
+    if (!isSubtitleOnly && useInfoJson(options.cacheFile)) {
+      result = await runWithCookies(cookieAttempts(), (cookieArgs) => runOnce(['--load-info-json', options.cacheFile!], cookieArgs))
+      if (result.code !== 0 && !isPaused && !state.hasStarted) {
+        result = await runWithCookies(cookieAttempts(), (cookieArgs) => runOnce([options.url], cookieArgs))
+      }
+    } else {
+      result = await runWithCookies(cookieAttempts(), (cookieArgs) => runOnce([options.url], cookieArgs))
+    }
+  } finally {
+    activeDownloads.delete(options.taskId)
+    clearProgressThrottle(options.taskId)
+  }
+
+  const { code, stderr, failedBrowsers } = result
+
+  if (isPaused) {
+    return { code, stderr, failedBrowsers, filePath: state.downloadedFile, paused: true }
+  }
+
+  if (code !== 0) {
+    const errorLines = stderr.split('\n').filter((l: string) => l.trim())
+    const lastError = [...errorLines].reverse().find(l => l.startsWith('ERROR:'))?.trim()
+      || errorLines[errorLines.length - 1]?.trim() || ''
+    if (lastError.includes('429') || lastError.includes('Too Many Requests')) {
+      throw new Error('请求过于频繁，请等待几分钟后重试 (HTTP 429)')
+    }
+    throw new Error((lastError || '下载失败') + cookieFailureHint(failedBrowsers))
+  }
+
+  if (state.downloadedFile) cleanupLeftovers(state.downloadedFile)
+  sendDownloadProgress({ taskId: options.taskId, url: options.url, percent: 100, status: 'completed' })
+
+  return { code, stderr, failedBrowsers, filePath: state.downloadedFile, paused: false }
+}
+
+/** 暂停：杀掉子进程（Windows 需连带子进程树），任务从活动表移除 */
+export function pauseDownload(taskId: string): boolean {
+  const download = activeDownloads.get(taskId)
+  if (download?.abort) {
+    download.abort()
+    return true
+  }
+  if (download?.child) {
+    if (download.setPaused) download.setPaused(true)
+    download.child.kill()
+    if (process.platform === 'win32' && download.child.pid) {
+      exec(`taskkill /pid ${download.child.pid} /T /F`, () => {})
+    }
+    return true
+  }
+  return false
+}

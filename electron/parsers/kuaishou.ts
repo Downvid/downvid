@@ -1,16 +1,7 @@
 import { getSharedBrowser, scheduleBrowserClose } from '../utils/browser'
+import { estimateFileSize } from './shared'
 
 // 估算文件大小
-function estimateFileSize(height: number, durationMs: number): number {
-  const durationSec = durationMs / 1000
-  let bitrate = 2000000
-  if (height >= 1080) bitrate = 5000000
-  else if (height >= 720) bitrate = 2500000
-  else if (height >= 480) bitrate = 1500000
-  else if (height >= 360) bitrate = 800000
-  return Math.floor((bitrate * durationSec) / 8)
-}
-
 // 通过视频 ID 查询快手 GraphQL API
 export async function queryKuaishouVideoById(videoId: string): Promise<any> {
   const query = {

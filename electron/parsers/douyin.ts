@@ -1,60 +1,11 @@
-import { getSharedBrowser, scheduleBrowserClose } from '../utils/browser'
 import fs from 'node:fs'
-
-// 解析 Netscape 格式的 cookies.txt
-interface CookieItem {
-  domain: string
-  includeSubdomains: boolean
-  path: string
-  secure: boolean
-  expiry: number
-  name: string
-  value: string
-}
-
-function parseCookiesFile(filePath: string): CookieItem[] {
-  try {
-    const content = fs.readFileSync(filePath, 'utf-8')
-    const cookies: CookieItem[] = []
-    for (const line of content.split('\n')) {
-      const trimmed = line.trim()
-      if (!trimmed || trimmed.startsWith('#')) continue
-      const parts = trimmed.split('\t')
-      if (parts.length < 7) continue
-      cookies.push({
-        domain: parts[0],
-        includeSubdomains: parts[1] === 'TRUE',
-        path: parts[2],
-        secure: parts[3] === 'TRUE',
-        expiry: parseInt(parts[4]) || 0,
-        name: parts[5],
-        value: parts[6],
-      })
-    }
-    return cookies
-  } catch {
-    return []
-  }
-}
-
-// 从 cookies 构建 Cookie 请求头字符串（过滤抖音相关域名）
-function buildCookieHeader(cookies: CookieItem[]): string {
-  return cookies
-    .filter(c => c.domain.includes('douyin.com') || c.domain.includes('iesdouyin.com') || c.domain.includes('snssdk.com'))
-    .map(c => `${c.name}=${c.value}`)
-    .join('; ')
-}
-
-// 估算文件大小
-function estimateFileSize(height: number, durationMs: number): number {
-  const durationSec = durationMs / 1000
-  let bitrate = 2000000
-  if (height >= 1080) bitrate = 5000000
-  else if (height >= 720) bitrate = 2500000
-  else if (height >= 480) bitrate = 1500000
-  else if (height >= 360) bitrate = 800000
-  return Math.floor((bitrate * durationSec) / 8)
-}
+import { getSharedBrowser, scheduleBrowserClose } from '../utils/browser'
+import {
+  buildCookieHeader,
+  DOUYIN_COOKIE_DOMAINS,
+  estimateFileSize,
+  parseCookiesFile,
+} from './shared'
 
 // 从 bit_rate 构建格式列表
 function buildFormatsFromBitRate(bitRate: any[], duration: number): any[] {
@@ -126,7 +77,7 @@ export async function parseDouyinWithAPI(url: string, cookiesFile?: string): Pro
 
   // 解析 cookies
   const cookies = cookiesFile && fs.existsSync(cookiesFile) ? parseCookiesFile(cookiesFile) : []
-  const cookieHeader = buildCookieHeader(cookies)
+  const cookieHeader = buildCookieHeader(cookies, DOUYIN_COOKIE_DOMAINS)
 
   const videoMatch = url.match(/\/video\/(\d+)/)
   if (videoMatch) {
