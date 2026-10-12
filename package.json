@@ -20,10 +20,7 @@
     "build:linux:x64:tar.gz": "vue-tsc && vite build && electron-builder --linux tar.gz --x64 --publish never --config electron-builder.json5",
     "build:linux:arm64": "vue-tsc && vite build && electron-builder --linux AppImage tar.gz --arm64 --publish never --config electron-builder.json5",
     "preview": "vite preview",
-    "download-deps": "bash bin/download-deps.sh",
-    "download-deps:mac": "bash bin/download-deps.sh darwin",
-    "download-deps:win": "bash bin/download-deps.sh win32",
-    "download-deps:linux": "bash bin/download-deps.sh linux"
+    "deps:build": "bash scripts/build-backend.sh"
   },
   "dependencies": {
     "bufferutil": "^4.1.0",
@@ -49,6 +46,11 @@
   },
   "main": "dist-electron/main.js",
   "pnpm": {
-    "onlyBuiltDependencies": ["bufferutil", "electron", "esbuild", "utf-8-validate"]
+    "onlyBuiltDependencies": [
+      "bufferutil",
+      "electron",
+      "esbuild",
+      "utf-8-validate"
+    ]
   }
 }

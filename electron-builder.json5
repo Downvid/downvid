@@ -12,10 +12,12 @@
     "dist",
     "dist-electron"
   ],
+  // 安装包不再内置 yt-dlp / ffmpeg：只带 Go 边车，运行时识别并复用系统已安装的版本，
+  // 缺失时由边车下载到 userData（见 electron/utils/runtime.ts）。
   "extraResources": [
     {
-      "from": "bin",
-      "to": "bin",
+      "from": "backend/build/${platform}-${arch}",
+      "to": "downvid-deps",
       "filter": ["**/*"]
     }
   ],

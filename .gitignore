@@ -46,13 +46,12 @@ coverage/
 .env.local
 .env.*.local
 
-# Binary files (yt-dlp and ffmpeg should be downloaded by users or CI)
+# 依赖边车的本地构建产物（由 vite 构建步骤生成）
+backend/build/
+
+# 可执行文件（运行时依赖不再入库，改由边车按需下载）
 *.exe
 dll/
-!bin/download-deps.sh
-!bin/win32/
-!bin/darwin/
-!bin/linux/
 
 # Temporary files
 *.tmp

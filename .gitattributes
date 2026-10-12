@@ -1,3 +1,0 @@
-bin/win32/** filter=lfs diff=lfs merge=lfs -text
-bin/darwin/** filter=lfs diff=lfs merge=lfs -text
-bin/linux/** filter=lfs diff=lfs merge=lfs -text
