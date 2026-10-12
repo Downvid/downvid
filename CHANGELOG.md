@@ -13,6 +13,11 @@
 - 补齐 CI 安全能力：新增 CodeQL 扫描（TypeScript/Vue + Go）与 Dependency Review（高危拦截 + 许可证白名单）；全部 job 补 `timeout-minutes`，GitHub Actions 版本统一并升到最新主版本
 - Dependabot 增加 Go 模块与分组提交信息，忽略 Electron 大版本（原生 ABI 变更需人工验证）
 
+### 文档与统计口径
+- Release 正文顶部新增「点徽章即下载」引导区（`scripts/gen-release-notes.mjs`）：Release 里 CHANGELOG 较长，此前用户常找不到下载入口。链接按实际产物生成，不会出现死链
+- 新增「如何统计真实的下载量 / 装机量」说明：release 资源下载量总和会被 `latest*.yml`（每次检查更新都请求）与 `*.blockmap`（仅自动更新的差分）放大，需按资源类型区分口径
+- 明确**不引入客户端匿名统计**：GitHub 公开数据的口径已覆盖最常问的问题，而客户端统计的独有价值（留存/崩溃率）在当前装机量级下样本不足，代价却是端点、知情同意与隐私说明
+
 ### 内部改进（工程规范）
 - 仓库坐标与外部链接集中到 `shared/app.ts`（此前散落在 9 处，改仓库需全局搜索且极易漏改），新增 `pnpm lint:ipc` 静态校验 IPC 三处同步、`src/env.d.ts` 的全局脚本约束、以及产物命名契约
 - 拆分超长文件：`electron/ipc/download.ts` 445 → 95 行（直链/yt-dlp/进度上报拆到 `electron/download/`）；`douyin.ts` 与 `kuaishou.ts` 抽出共用的 `parsers/shared.ts`；`UpdateModal.vue` 467 → 344 行（更新状态机抽为 `composables/useUpdater.ts`）
