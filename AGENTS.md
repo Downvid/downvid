@@ -24,7 +24,9 @@ pnpm deps:manifest                            # 把依赖清单升到上游最�
 
 TypeScript 固定在 5.x：vue-tsc 无法在 TypeScript 7（Go 重写版，去掉了 `typescript/lib/tsc`）上运行，Dependabot 已忽略其大版本升级。
 
-没有 ESLint、Prettier。前端没有测试套件；**Go 侧车有测试**（`backend/internal/*/**_test.go`），改动解析版本号、候选路径、下载校验等纯逻辑时请一并补测。
+没有 ESLint、Prettier。测试分两层：**Go 侧车测试**（`backend/internal/*/**_test.go`）与 **前端纯逻辑单测**（`tests/*.test.ts`，Vitest）；`pnpm lint:ipc` 静态校验 IPC 三处同步。新增测试针对"曾经出过问题的分支"各留一个用例，不追覆盖率；写完请做变异验证（把逻辑改坏，确认用例会失败）。
+
+跨平台构建的三个坑（都已真实踩过）：`process.platform` 的 `win32` ≠ Go 的 `GOOS=windows`；Windows 默认 shell 是 PowerShell（`/tmp`、`test ! -s` 不成立）；`core.autocrlf=true` 会让 `gofmt -l` 全量报错（已由 `.gitattributes` 统一为 LF）。
 
 `tsconfig.json` 开启了 `strict` + `noUnusedLocals` + `noUnusedParameters`，未使用的 import 会导致构建失败。
 

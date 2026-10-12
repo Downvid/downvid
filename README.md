@@ -1,50 +1,44 @@
+<img src="https://socialify.git.ci/yxxbc/downvid/image?font=JetBrains+Mono&forks=1&issues=1&language=1&logo=https%3A%2F%2Fraw.githubusercontent.com%2Fyxxbc%2Fdownvid%2Fmain%2Fsrc%2Fassets%2Flogo.png&name=1&owner=1&pattern=Brick+Wall&pulls=1&stargazers=1&theme=Auto" alt="DownVid" width="100%" />
+
 <div align="center">
 
-<table>
-  <tr>
-    <td width="110" align="center">
-      <img src="src/assets/logo.png" alt="DownVid Logo" width="96" />
-    </td>
-    <td>
-      <h1>DownVid</h1>
-      <p><strong>现代化的开源视频下载工具 — 一键下载全网无水印高清视频</strong></p>
-      <p>
-        <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg?style=flat-square&logo=opensourceinitiative&logoColor=white" alt="License" /></a>
-        <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Electron-30-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron" /></a>
-        <a href="https://vuejs.org/"><img src="https://img.shields.io/badge/Vue-3-4FC08D?style=flat-square&logo=vuedotjs&logoColor=white" alt="Vue" /></a>
-        <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /></a>
-        <a href="https://github.com/yt-dlp/yt-dlp"><img src="https://img.shields.io/badge/yt--dlp-powered-FF0000?style=flat-square&logo=youtube&logoColor=white" alt="yt-dlp" /></a>
-        <a href="https://linux.do"><img src="https://img.shields.io/badge/LinuxDo-社区-4FC08D?style=flat-square&logo=linux&logoColor=white" alt="LinuxDo" /></a>
-        <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-2c3e50?style=flat-square&logo=operating-system&logoColor=white" alt="Platform" />
-      </p>
-    </td>
-  </tr>
-</table>
+# DownVid
 
-<br />
+**现代化的开源视频下载工具 — 一键下载全网无水印高清视频**
 
-<a href="https://github.com/yxxbc/downvid/releases"><img src="https://img.shields.io/github/downloads/yxxbc/downvid/total?color=369eff&labelColor=black&logo=github&label=Downloads&style=for-the-badge" alt="Downloads" /></a>
-<a href="https://github.com/yxxbc/downvid/releases/latest"><img src="https://img.shields.io/github/v/release/yxxbc/downvid?color=369eff&labelColor=black&logo=github&label=Latest%20Release&style=for-the-badge" alt="Latest Release" /></a>
-<a href="https://github.com/yxxbc/downvid/stargazers"><img src="https://img.shields.io/github/stars/yxxbc/downvid?color=ffcb2f&labelColor=black&logo=github&label=Stars&style=for-the-badge" alt="Stars" /></a>
+<p>
+  <a href="https://github.com/yxxbc/downvid/releases"><img src="https://img.shields.io/github/downloads/yxxbc/downvid/total?color=369eff&labelColor=black&logo=github&label=Downloads&style=for-the-badge" alt="Downloads" /></a>
+  <a href="https://github.com/yxxbc/downvid/releases/latest"><img src="https://img.shields.io/github/v/release/yxxbc/downvid?color=369eff&labelColor=black&logo=github&label=Release&style=for-the-badge" alt="Latest Release" /></a>
+  <a href="https://github.com/yxxbc/downvid/stargazers"><img src="https://img.shields.io/github/stars/yxxbc/downvid?color=ffcb2f&labelColor=black&logo=github&label=Stars&style=for-the-badge" alt="Stars" /></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?labelColor=black&style=for-the-badge" alt="License" /></a>
+</p>
 
-<br />
+<p>
+  <img src="https://img.shields.io/badge/Platform-macOS%20%7C%20Windows%20%7C%20Linux-2c3e50?style=flat-square&logo=electron&logoColor=white" alt="Platform" />
+  <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Electron-44-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron" /></a>
+  <a href="https://vuejs.org/"><img src="https://img.shields.io/badge/Vue-3-4FC08D?style=flat-square&logo=vuedotjs&logoColor=white" alt="Vue" /></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" /></a>
+  <a href="https://go.dev/"><img src="https://img.shields.io/badge/Go-1.24+-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go" /></a>
+  <a href="https://github.com/yt-dlp/yt-dlp"><img src="https://img.shields.io/badge/yt--dlp-powered-FF0000?style=flat-square&logo=youtube&logoColor=white" alt="yt-dlp" /></a>
+</p>
+
 <br />
 
 <img src="src/assets/screen.png" alt="DownVid Screenshot" width="98%" />
 
 <br />
 
+</div>
+
 > 基于 [Videdown](https://github.com/cshuangyy/videdown) by cshuangyy (MIT License) 二次开发
 
 ---
 
-**⚠️ 免责声明**
-
-本项目是 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 的 GUI 套壳封装，仅提供图形界面，不包含任何破解或绕过技术保护措施的代码。
-
-本工具仅供学习研究，请勿用于商业用途。下载内容需遵守当地法律法规，用户需自行承担使用责任。
-
-</div>
+> **⚠️ 免责声明**
+>
+> 本项目是 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 的 GUI 套壳封装，仅提供图形界面，不包含任何破解或绕过技术保护措施的代码。
+>
+> 本工具仅供学习研究，请勿用于商业用途。下载内容需遵守当地法律法规，用户需自行承担使用责任。
 
 ---
 
@@ -81,26 +75,26 @@
 
 ## ✨ 功能特性
 
-### 🌍 全球视频下载支持
-通过强大的 yt-dlp 引擎，可以从全球几乎所有网站下载视频。支持 **1000+ 个网站**，包括 YouTube、抖音、B站、小红书、Instagram 等。
+### 🌍 覆盖 1000+ 网站
+以 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 为下载引擎，支持 YouTube、B站、TikTok、Instagram 等几乎所有主流平台；抖音与快手另有专属解析器（平台 API 优先，headless 浏览器兜底），可拿到无水印直链。
 
-### 🎨 一流的界面体验
-现代化、简洁的界面，操作直观。一键暂停 / 恢复 / 重试，实时进度追踪，全面的下载队列管理。支持深色 / 浅色主题切换。
+### 🔧 运行依赖自动适配
+安装包不内置 yt-dlp / ffmpeg。启动时自动识别机器上已安装的版本并直接复用（含 Homebrew、winget、scoop 等常见安装位置），缺失时可在界面上一键下载 —— 安装包体积因此大幅下降，也不会重复占用磁盘。
 
 ### ⚡ 实时下载进度
-显示下载进度、下载速度、预计剩余时间，让你随时掌握下载状态。
+显示进度、速度、剩余时间与文件大小。抖音/快手直链走多连接分段下载（CDN 限速场景下显著提速），HLS/DASH 分片并发下载，支持暂停与断点续传。
+
+### 🎛️ 多格式与多模式
+可选 360P ~ 4K 各档清晰度；支持仅音频（转 MP3）、仅字幕（转 SRT）；支持 YouTube 多音轨选择。
 
 ### 🍪 Cookie 支持
-支持导入浏览器 Cookie，可以下载需要登录的视频内容（如 YouTube 会员视频、B站登录态内容）。
+自动读取已安装浏览器的登录态（Chrome / Edge / Firefox / Brave / Safari），也可手动导入 `cookies.txt`，用于需要登录的内容。
 
-### 🎛️ 多格式选择
-支持选择不同的视频质量和格式（360p / 480p / 720p / 1080p），包括仅下载音频模式。支持 YouTube 多音轨选择和字幕下载。
-
-### 📥 下载历史记录
-自动保存下载历史，方便随时回顾和重新下载。
+### 📥 下载队列与历史
+队列化管理（暂停 / 恢复 / 重试），历史记录自动保存最近 100 条。
 
 ### 🔄 自动更新
-内置 electron-updater 自动更新系统，第一时间获取最新版本。
+基于 electron-updater 与 GitHub Releases。Windows / Linux 自动下载安装；macOS 因未做代码签名，改用自实现的下载校验与替换 `.app`（失败自动回滚）。
 
 ---
 
@@ -136,65 +130,44 @@ DownVid 通过 yt-dlp 支持 **1000+ 个**视频和音频平台。主要支持�
 
 #### 环境要求
 
-- [Node.js](https://nodejs.org/) >= 18
-- [pnpm](https://pnpm.io/) >= 8
-- [Git](https://git-scm.com/)
+| 依赖 | 版本 | 用途 |
+|------|------|------|
+| [Node.js](https://nodejs.org/) | >= 22 | 构建前端与主进程 |
+| [pnpm](https://pnpm.io/) | >= 8 | 包管理（勿用 npm / yarn，会破坏 workspace） |
+| [Go](https://go.dev/) | >= 1.24 | 编译依赖边车 `backend/cmd/downvid-deps` |
+| Git | — | — |
 
-#### 1. 克隆仓库
+> yt-dlp / ffmpeg **无需**预先安装：运行时由边车自动识别，缺失时可在应用内一键下载。
+> 想自己装一份也行（`brew install yt-dlp ffmpeg` / `winget install yt-dlp.yt-dlp Gyan.FFmpeg`），会被优先复用。
+
+#### 1. 克隆并安装
 
 ```bash
 git clone https://github.com/yxxbc/downvid.git
 cd downvid
-```
-
-#### 2. 下载依赖工具
-
-本项目需要 **yt-dlp** 和 **ffmpeg** 才能正常运行。
-但是releases下载的已经封装依赖了，下载即用
-
-**macOS（Homebrew）：**
-```bash
-brew install yt-dlp ffmpeg
-```
-
-**Ubuntu / Debian：**
-```bash
-sudo apt update
-sudo apt install yt-dlp ffmpeg
-```
-
-**Windows：**
-```bash
-# 使用 winget
-winget install yt-dlp.yt-dlp Gyan.FFmpeg
-```
-
-> **这些依赖是可选的。** DownVid 会优先复用你机器上已安装的版本，找不到时可以在「设置 → 运行依赖」里一键下载，**无需**为了用 DownVid 而单独安装。上面的命令只是"自己装一份更省事"的替代方案。
-
-#### 3. 安装项目依赖
-
-```bash
 pnpm install
 ```
 
-#### 4. 运行和构建
+#### 2. 运行与构建
 
 ```bash
-# 开发模式运行
-pnpm dev
+pnpm dev              # 开发模式（Vite + Electron 热重载，会自动编译 Go 边车）
 
-# 构建生产版本（当前平台）
-pnpm build
-
-# 构建指定平台
-pnpm build:mac      # macOS 通用
-pnpm build:mac:arm64  # macOS Apple Silicon
-pnpm build:mac:x64    # macOS Intel
-pnpm build:win      # Windows
-pnpm build:linux    # Linux
+pnpm build            # 构建当前平台安装包
+pnpm build:mac:arm64  # 指定平台与架构，另有 :mac:x64 / :win / :linux:x64 / :linux:arm64
 ```
 
-> 📖 详细的构建说明请查看 [从源码构建指南](./docs/build-from-source.md)
+#### 3. 代码检查
+
+```bash
+pnpm vue-tsc --noEmit      # 前端类型检查
+pnpm test                  # 纯逻辑单测（Vitest）
+pnpm lint:ipc              # IPC 契约校验（三处同步）
+cd backend && go vet ./... && go test ./...   # Go 边车
+pnpm deps:manifest:check   # 依赖清单是否落后上游
+```
+
+> 📖 详细的构建说明请查看 [从源码构建指南](./docs/build-from-source.md)，改动流程见 [仓库规范](./docs/standards.md)。
 
 ---
 
@@ -217,17 +190,23 @@ pnpm build:linux    # Linux
 
 ## 🛠️ 技术栈
 
-| 技术 | 用途 |
-|------|------|
-| [![Electron](https://img.shields.io/badge/Electron-30-47848F?style=flat-square&logo=electron&logoColor=white)](https://www.electronjs.org/) | 跨平台桌面应用框架 |
-| [![Vue 3](https://img.shields.io/badge/Vue-3.4-4FC08D?style=flat-square&logo=vuedotjs&logoColor=white)](https://vuejs.org/) | 渐进式 JavaScript 框架 |
-| [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/) | 类型安全的 JavaScript 超集 |
-| [![Tailwind CSS](https://img.shields.io/badge/Tailwind-4-38B2AC?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com/) | 实用优先的 CSS 框架 |
-| [![Vite](https://img.shields.io/badge/Vite-5-646CFF?style=flat-square&logo=vite&logoColor=white)](https://vitejs.dev/) | 下一代前端构建工具 |
-| [![Pinia](https://img.shields.io/badge/Pinia-4-FFD859?style=flat-square&logo=pinia&logoColor=white)](https://pinia.vuejs.org/) | Vue 状态管理 |
-| [![yt-dlp](https://img.shields.io/badge/yt--dlp-latest-FF0000?style=flat-square&logo=youtube&logoColor=white)](https://github.com/yt-dlp/yt-dlp) | 强大的视频下载引擎 |
-| [![FFmpeg](https://img.shields.io/badge/FFmpeg-latest-007808?style=flat-square&logo=ffmpeg&logoColor=white)](https://ffmpeg.org/) | 音视频处理工具 |
-| [![electron-builder](https://img.shields.io/badge/electron--builder-24-000000?style=flat-square&logo=electron&logoColor=white)](https://www.electron.build/) | 应用打包与发布 |
+| 技术 | 版本 | 用途 |
+|------|------|------|
+| [Electron](https://www.electronjs.org/) | 44 | 跨平台桌面应用框架 |
+| [Vue 3](https://vuejs.org/) | 3.5 | 渐进式 JavaScript 框架（`<script setup>`） |
+| [TypeScript](https://www.typescriptlang.org/) | 5.9 | 类型安全（`strict` + `noUnusedLocals`） |
+| [Tailwind CSS](https://tailwindcss.com/) | 4 | 实用优先的 CSS（CSS-first，无 config 文件） |
+| [Vite](https://vitejs.dev/) | 8 | 前端构建与 Electron 双进程打包 |
+| [Pinia](https://pinia.vuejs.org/) | 4 | Vue 状态管理 |
+| [Go](https://go.dev/) | 1.24+ | 依赖边车：探测并复用系统已安装的 yt-dlp / ffmpeg |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | 运行时解析 | 视频下载引擎（不随安装包分发） |
+| [FFmpeg](https://ffmpeg.org/) | 运行时解析 | 音视频合并与转码（不随安装包分发） |
+| [electron-builder](https://www.electron.build/) | 26 | 应用打包与发布 |
+| [Vitest](https://vitest.dev/) | 5 | 纯逻辑单元测试 |
+
+> **关于 yt-dlp / ffmpeg**：安装包不再内置这两个工具。启动时由 Go 边车按
+> 「系统优先」的顺序识别机器上已安装的版本并直接复用；缺失时可在
+> 「设置 → 运行依赖」里一键下载，安装包体积因此大幅下降。
 
 ---
 
@@ -246,30 +225,35 @@ pnpm build:linux    # Linux
 ## 📁 项目结构
 
 ```
-videdown/
-├── bin/                    # 依赖下载脚本
-├── electron/               # Electron 主进程代码
-│   ├── main.ts            # 主进程入口
-│   └── ...                # 模块化拆分
-├── src/                    # 渲染进程（Vue 3）
-│   ├── assets/            # 静态资源
-│   ├── components/        # 组件
-│   ├── stores/            # Pinia 状态管理
-│   └── ...
-├── public/                 # 公共资源
-├── dist/                   # Vite 构建输出
-├── dist-electron/          # Electron 主进程构建输出
-├── release/                # electron-builder 打包输出
-├── .github/                # GitHub Actions CI/CD
-├── electron-builder.json5  # electron-builder 配置
-├── vite.config.ts         # Vite 配置
-├── postcss.config.js      # PostCSS 配置（Tailwind 主题在 src/style.css 的 @theme 中）
-├── tsconfig.json          # TypeScript 配置
-├── package.json           # 项目依赖与脚本
-├── CHANGELOG.md           # 更新日志
-├── LICENSE                # 开源协议
-└── README.md              # 项目说明
+downvid/
+├── backend/                # Go 依赖边车（探测 + 下载 yt-dlp / ffmpeg）
+│   ├── cmd/downvid-deps/   # 入口：detect / fetch 两个子命令
+│   └── internal/
+│       ├── probe/          # 执行二进制并解析版本号
+│       ├── runtime/        # 候选路径解析（系统优先，登录 shell 补 PATH）
+│       ├── fetch/          # 下载、SHA-256 校验、原子安装
+│       ├── manifest/       # 版本与哈希清单（由脚本生成）
+│       └── cli/            # NDJSON 输出
+├── electron/               # Electron 主进程
+│   ├── main.ts             # 入口：窗口、生命周期、日志
+│   ├── ipc/                # IPC 按域拆分：app / deps / download / history / system
+│   ├── download/           # 下载实现：direct（CDN 直链）/ ytdlp / progress
+│   ├── parsers/            # 平台解析：douyin / kuaishou / ytdlp / formats
+│   ├── utils/              # runtime（边车）、binary（依赖解析）、cookies、browser
+│   └── updater.ts          # 应用内更新（含 macOS 自实现替换 .app）
+├── src/                    # 渲染进程（Vue 3 + Tailwind + Pinia）
+│   ├── components/         # 视图与组件（含 DepPanel / DepsPrompt）
+│   ├── composables/        # useErrorModal / useUpdater
+│   ├── stores/             # Pinia：download（队列）、deps（运行依赖）
+│   └── types/              # 共享类型
+├── shared/app.ts           # 仓库坐标与外部链接的唯一来源
+├── tests/                  # Vitest 纯逻辑单测
+├── scripts/                # 清单生成、构建边车、IPC 契约校验
+├── docs/                   # 安装、构建、故障排除、规范、发布、架构
+└── .github/workflows/      # CI / CodeQL / 依赖审查 / 发布 / 依赖清单更新
 ```
+
+构建产物（`dist/`、`dist-electron/`、`backend/build/`、`release/`）不入库。
 
 ---
 
@@ -313,14 +297,11 @@ A: 首次安装时右键点击应用，选择"打开"，或在"系统设置 → 
 
 ## 📝 更新日志
 
-详细的版本更新记录请查看 [CHANGELOG.md](./CHANGELOG.md)。
-
+完整的版本记录见 [CHANGELOG.md](./CHANGELOG.md)。
 
 ### Unreleased
-- 🚧 跨平台支持：macOS (ARM64/x64)、Windows (x64)、Linux (x64/ARM64)
-- 🚧 自动更新系统 (electron-updater + GitHub Releases)
-- 🚧 一键下载依赖脚本 & GitHub Actions CI/CD 自动构建
-- 🚧 项目模块化重构
+- ♻️ **不再内置 yt-dlp / ffmpeg**：新增 Go 依赖边车，启动时复用系统已安装的版本，缺失可在应用内一键下载（安装包体积大幅下降，仓库移除 Git LFS）
+- 🛠️ 工程规范：补充安全政策、贡献者准则、仓库规范与发布流程；CI 增加 CodeQL 与依赖审查；引入纯逻辑单测与 IPC 契约校验
 
 ---
 

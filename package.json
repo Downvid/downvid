@@ -3,6 +3,10 @@
   "private": true,
   "version": "1.2.1",
   "type": "module",
+  "engines": {
+    "node": ">=22",
+    "pnpm": ">=8"
+  },
   "description": "现代化的视频下载工具",
   "author": "DownVid <downvid@example.com>",
   "scripts": {

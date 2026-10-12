@@ -11,6 +11,9 @@
 - Go 1.24+（编译依赖边车 `backend/cmd/downvid-deps`）
 - Git
 
+> yt-dlp / ffmpeg 无需预先安装：运行时由边车自动识别系统里已有的版本，
+> 缺失时可在应用内「设置 → 运行依赖」一键下载。
+
 ### 安装与运行
 
 ```bash
@@ -41,7 +44,9 @@ pnpm build:linux
 ### 代码检查
 
 ```bash
-pnpm vue-tsc --noEmit              # 前端类型检查（CI 必跑）
+pnpm vue-tsc --noEmit              # 前端类型检查
+pnpm test                          # 纯逻辑单测（Vitest）
+pnpm lint:ipc                      # IPC 契约校验（三处同步）
 cd backend && go vet ./... && go test ./...   # Go 侧车
 pnpm deps:manifest:check           # 依赖清单是否与上游一致
 ```
