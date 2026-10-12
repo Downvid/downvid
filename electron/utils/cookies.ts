@@ -47,6 +47,36 @@ function migrateLegacyDir(target: string) {
   } catch {}
 }
 
+/**
+ * 当前 Cookie 的可用状态，供渲染进程判断"要不要提示用户去配置 Cookie"。
+ *
+ * 此前界面只按 URL 域名就弹出"需要 Cookie"——即使用户已经配好、
+ * 甚至上次解析就成功读到了登录态，仍然提示。这里给出真实依据。
+ */
+export interface CookieStatus {
+  /** 用户是否已手动指定 cookies.txt */
+  manual: boolean
+  /** 已有快照（自动读取成功过），以及它有多旧 */
+  hasSnapshot: boolean
+  snapshotAgeMs: number | null
+  /** 最近一次成功读取到 Cookie 的浏览器 */
+  lastGoodBrowser: string
+  /** 目前已安装、可供尝试的浏览器 */
+  availableBrowsers: string[]
+}
+
+export function getCookieStatus(manualFile?: string): CookieStatus {
+  const manual = !!manualFile && fs.existsSync(manualFile)
+  const age = snapshotAge()
+  return {
+    manual,
+    hasSnapshot: age !== null,
+    snapshotAgeMs: age,
+    lastGoodBrowser,
+    availableBrowsers: getInstalledBrowsers(),
+  }
+}
+
 /** cookie 工作目录；userData 下不可用时退回系统临时目录，都不可用返回 null（不导出快照） */
 function cookieDir(): string | null {
   const candidates = [

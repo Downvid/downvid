@@ -221,11 +221,13 @@ function sourceClass(source?: DepSource): string {
   return 'text-on-surface-variant'
 }
 
-onMounted(async () => {
+onMounted(() => {
   try {
     const raw = JSON.parse(localStorage.getItem('settings') || '{}')
     paths.value = raw.depPaths || {}
   } catch {}
-  await store.refresh()
+  // 不阻塞首帧：refresh() 会 spawn Go 边车（冷启动 1~3 秒），
+  // 直接 await 会让整个设置界面白屏那么久。先渲染，再在后台补数据。
+  void store.refresh()
 })
 </script>

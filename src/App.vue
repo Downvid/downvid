@@ -21,6 +21,9 @@
       @update:visible="modal.close()"
     />
 
+    <!-- 设置浮窗（居中模态，与错误/更新提示同一形态） -->
+    <SettingsView :visible="showSettings" @update:visible="showSettings = $event" />
+
     <!-- Auto Update Modal -->
     <UpdateModal :visible="showUpdate" @close="showUpdate = false" />
 
@@ -37,6 +40,7 @@ import HistoryView from './components/HistoryView.vue'
 import AboutView from './components/AboutView.vue'
 import ErrorModal from './components/ErrorModal.vue'
 import UpdateModal from './components/UpdateModal.vue'
+import SettingsView from './components/SettingsView.vue'
 import DepsPrompt from './components/DepsPrompt.vue'
 import { useErrorModal } from './composables/useErrorModal'
 import { useDepsStore } from './stores/deps'
@@ -48,12 +52,11 @@ const deps = useDepsStore()
 
 const currentTab = ref<TabType>('download')
 const showUpdate = ref(false)
+const showSettings = ref(false)
 
 function changeTab(tab: TabType) {
   if (tab === 'settings') {
-    // 打开独立的设置窗口（与 macOS 的「设置…」⌘, 同一入口），
-    // 这样窗口可以被移动、也能和主窗口并排看
-    window.electronAPI?.app?.openSettings?.()
+    showSettings.value = true
     return
   }
   currentTab.value = tab
@@ -62,12 +65,13 @@ function changeTab(tab: TabType) {
 
 // 监听跳转设置页事件
 window.addEventListener('navigate-to-settings', () => {
-  window.electronAPI?.app?.openSettings?.()
+  showSettings.value = true
 })
 
 // 监听菜单点击关于事件
 let unsubscribeMenu: (() => void) | null = null
 let unsubscribeUpdate: (() => void) | null = null
+let unsubscribeSettings: (() => void) | null = null
 
 onMounted(() => {
   // 通知 preload 移除启动加载动画
@@ -84,6 +88,13 @@ onMounted(() => {
   if (window.electronAPI?.onMenuShowAbout) {
     unsubscribeMenu = window.electronAPI.onMenuShowAbout(() => {
       currentTab.value = 'about'
+    })
+  }
+
+  // macOS 菜单里的「设置…」⌘,：主进程广播到渲染进程，打开设置浮窗
+  if (window.electronAPI?.onMenuOpenSettings) {
+    unsubscribeSettings = window.electronAPI.onMenuOpenSettings(() => {
+      showSettings.value = true
     })
   }
 
@@ -108,6 +119,7 @@ onMounted(() => {
 onUnmounted(() => {
   if (unsubscribeMenu) unsubscribeMenu()
   if (unsubscribeUpdate) unsubscribeUpdate()
+  if (unsubscribeSettings) unsubscribeSettings()
 })
 </script>
 

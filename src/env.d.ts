@@ -35,8 +35,14 @@ interface Window {
       getDefaultDownloadDir: () => Promise<string>
       /** 用户主目录，界面用它把绝对路径缩写成 ~/... */
       getHomeDir: () => Promise<string>
-      /** 打开独立的设置窗口 */
-      openSettings: () => Promise<boolean>
+      /** Cookie 的真实可用状态（是否已有可用来源） */
+      cookieStatus: (manualFile?: string) => Promise<{
+        manual: boolean
+        hasSnapshot: boolean
+        snapshotAgeMs: number | null
+        lastGoodBrowser: string
+        availableBrowsers: string[]
+      }>
       fetchImage: (url: string, referer?: string) => Promise<string>
       getLog: () => Promise<{
         success: boolean
@@ -127,6 +133,8 @@ interface Window {
     }) => void) => () => void
     // 菜单事件监听
     onMenuShowAbout: (callback: () => void) => () => void
+    /** macOS 菜单里的「设置…」⌘, */
+    onMenuOpenSettings: (callback: () => void) => () => void
     // 窗口控制
     window: {
       minimize: () => Promise<void>

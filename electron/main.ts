@@ -3,8 +3,7 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs'
 import { setMainWindow } from './store'
-import { createMenu, setSettingsOpener } from './menu'
-import { configureSettingsWindow, openSettingsWindow } from './settings-window'
+import { createMenu } from './menu'
 import { registerAppIpc } from './ipc/app'
 import { registerDepsIpc } from './ipc/deps'
 import { registerDownloadIpc } from './ipc/download'
@@ -195,8 +194,6 @@ app.whenReady().then(() => {
   log('[LIFECYCLE] app ready')
   setupAutoUpdater()
   stripOwnQuarantine()
-  configureSettingsWindow({ load: loadRenderer, webPreferences })
-  setSettingsOpener(openSettingsWindow)
   createWindow()
   createMenu()
   log('[LIFECYCLE] Window and menu created')

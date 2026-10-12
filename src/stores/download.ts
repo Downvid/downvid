@@ -31,9 +31,34 @@ export const useDownloadStore = defineStore('download', () => {
     return s.includes('youtube.com') || s.includes('youtu.be')
   })
 
+  /**
+   * Cookie 是否已经可用（有手动文件 / 有快照 / 有可尝试的浏览器）。
+   *
+   * 界面用它决定要不要提示"需要 Cookie"——此前只看 URL 域名，
+   * 即使用户早已配好、上次解析也成功读到了登录态，仍会一直提示。
+   */
+  const cookieReady = ref(false)
+  const cookieLastGoodBrowser = ref('')
+
+  async function refreshCookieStatus() {
+    try {
+      const settings = JSON.parse(localStorage.getItem('settings') || '{}')
+      const manualFile = settings.cookieMode === 'manual' ? (settings.cookiesFile || '') : ''
+      const status = await window.electronAPI?.app?.cookieStatus?.(manualFile || undefined)
+      if (!status) return
+      cookieReady.value = status.manual || status.hasSnapshot || status.availableBrowsers.length > 0
+      cookieLastGoodBrowser.value = status.lastGoodBrowser || ''
+    } catch {
+      // 拿不到状态时保守处理：不隐藏提示
+      cookieReady.value = false
+    }
+  }
+
   const showBilibiliCookieHint = computed(() => {
     const s = url.value.trim().toLowerCase()
-    return s.includes('bilibili.com') || s.includes('b23.tv')
+    const isBilibili = s.includes('bilibili.com') || s.includes('b23.tv')
+    // 已确认有可用 Cookie 来源时不再提示
+    return isBilibili && !cookieReady.value
   })
 
   const activeTaskCount = computed(() =>
@@ -295,7 +320,7 @@ export const useDownloadStore = defineStore('download', () => {
     videoInfo, selectedFormat, selectedAudioFormat, selectedAudioTrack,
     selectedSubtitles, downloadMode, isDownloading,
     downloadTasks, downloadDir,
-    isYouTubeUrl, showBilibiliCookieHint, activeTaskCount,
+    isYouTubeUrl, showBilibiliCookieHint, cookieReady, cookieLastGoodBrowser, refreshCookieStatus, activeTaskCount,
     selectVideoFormat, selectAudioFormat, selectAudioTrack, selectSubtitle,
     removeTask, clearCompletedTasks, pauseTask, resumeTask, startDownload,
     sanitizeFilename,

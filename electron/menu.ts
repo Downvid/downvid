@@ -2,18 +2,6 @@ import { app, Menu } from 'electron'
 import { getMainWindow } from './store'
 
 /**
- * 设置窗口的打开方式由 main.ts 注入。
- *
- * 不直接 import main.ts：那会形成 main → menu → main 的循环导入。
- * 注入一个回调既避开循环，也让 menu 只关心"点了要发生什么"。
- */
-let openSettings: (() => void) | null = null
-
-export function setSettingsOpener(fn: () => void) {
-  openSettings = fn
-}
-
-/**
  * 创建应用菜单。
  *
  * 只在 macOS 上创建：Windows / Linux 的 Electron 会把它渲染成窗口内的一条
@@ -37,7 +25,12 @@ export function createMenu() {
       submenu: [
         { label: '关于 DownVid', click: () => getMainWindow()?.webContents.send('menu:showAbout') },
         { type: 'separator' },
-        { label: '设置…', accelerator: 'Cmd+,', click: () => openSettings?.() },
+        {
+          label: '设置…',
+          accelerator: 'Cmd+,',
+          // 通知主窗口打开设置浮窗（设置是主窗口内的模态，不是独立窗口）
+          click: () => getMainWindow()?.webContents.send('menu:openSettings'),
+        },
         { type: 'separator' },
         { label: '隐藏 DownVid', role: 'hide' },
         { label: '隐藏其他', role: 'hideOthers' },

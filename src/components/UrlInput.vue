@@ -47,7 +47,7 @@
     </div>
 
     <!-- YouTube Cookie Hint -->
-    <div v-if="store.isYouTubeUrl && !store.hasParsed" class="flex flex-col gap-2 p-4 bg-tertiary-container/30 rounded-lg border border-tertiary/20">
+    <div v-if="store.isYouTubeUrl && !store.hasParsed && !store.cookieReady" class="flex flex-col gap-2 p-4 bg-tertiary-container/30 rounded-lg border border-tertiary/20">
       <div class="flex items-start gap-3">
         <MaterialIcon name="info" :size="20" class="text-tertiary shrink-0 mt-0.5" />
         <div class="flex-1">
@@ -87,22 +87,12 @@
       </div>
     </div>
 
-    <!-- Supported Platforms -->
-    <div class="flex flex-col gap-2 mt-2">
-      <span class="text-[10px] font-bold text-outline uppercase tracking-widest ml-1">支持解析平台</span>
-      <div class="flex items-center gap-4 px-4 py-2.5 bg-surface-container-low rounded-lg border border-outline-variant/10">
-        <div v-for="platform in platforms" :key="platform.name" class="flex items-center gap-2 transition-all cursor-default">
-          <MaterialIcon :name="platform.icon" :size="18" class="text-primary" :weight="200"/>
-          <span class="text-[11px] font-medium text-on-surface-variant">{{ platform.name }}</span>
-        </div>
-      </div>
-    </div>
   </div>
   <CookieGuide :visible="showCookieGuide" @close="showCookieGuide = false" />
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import MaterialIcon from './icons/MaterialIcon.vue'
 import CookieGuide from './CookieGuide.vue'
 import { useDownloadStore } from '../stores/download'
@@ -117,13 +107,6 @@ defineEmits<{
 
 const urlInput = ref<HTMLTextAreaElement | null>(null)
 
-const platforms = [
-  { name: '抖音', icon: 'music_note' },
-  { name: '小红书', icon: 'menu_book' },
-  { name: 'B站', icon: 'live_tv' },
-  { name: 'YouTube', icon: 'smart_display' },
-  { name: 'Instagram', icon: 'photo_camera' },
-]
 
 const contextMenuItems = [
   { action: 'cut', label: '剪切', icon: 'content_cut' },
@@ -202,6 +185,9 @@ function goToSettings() {
 function openCookieHelp() {
   showCookieGuide.value = true
 }
+
+// URL 变化时刷新 Cookie 状态，避免"已配好却仍提示"
+watch(() => store.url, () => { void store.refreshCookieStatus() }, { immediate: true })
 
 onMounted(() => document.addEventListener('click', hideContextMenu))
 onUnmounted(() => document.removeEventListener('click', hideContextMenu))

@@ -1,28 +1,20 @@
 <template>
-  <Teleport to="body" :disabled="windowMode">
-    <Transition :name="windowMode ? 'none' : 'panel'">
+  <Teleport to="body">
+    <Transition name="modal">
       <!--
-        两种形态：
-        - 浮层（默认）：主窗口内的侧滑面板，点击遮罩关闭
-        - 独立窗口（windowMode，macOS 的「设置…」⌘,）：铺满整个窗口，无遮罩
+        设置是一个居中的模态浮窗，与错误提示 / 更新提示同一形态。
+        不要做成右侧边栏：侧边栏在大窗口里离视线中心很远，且内容一长就要
+        内部滚动显得局促；也不要拆成独立窗口 —— 那会多一次整页加载，
+        打开明显变慢（用户反馈 1~3 秒）。
       -->
       <div
         v-if="visible"
-        :class="windowMode
-          ? 'h-full w-full flex'
-          : 'fixed inset-0 z-40 flex justify-end'"
+        class="fixed inset-0 z-40 flex items-center justify-center p-4"
         @click.self="close"
       >
-        <!-- Overlay（仅浮层形态） -->
-        <div v-if="!windowMode" class="absolute inset-0 bg-black/30 backdrop-blur-xs" @click="close" />
+        <div class="absolute inset-0 bg-black/40 backdrop-blur-xs" @click="close" />
 
-        <!-- Panel -->
-        <div
-          class="relative bg-surface-container-lowest flex flex-col"
-          :class="windowMode
-            ? 'flex-1 w-full'
-            : 'w-full max-w-xl shadow-2xl border-l border-outline-variant/20'"
-        >
+        <div class="relative bg-surface-container rounded-xl shadow-2xl border border-outline-variant/20 w-full max-w-3xl h-[80vh] max-h-[720px] flex flex-col overflow-hidden">
           <!-- Header -->
           <div class="flex items-center justify-between px-6 py-4 border-b border-outline-variant/15">
             <h2 class="font-headline text-lg font-bold text-on-surface">设置</h2>
@@ -214,7 +206,7 @@ const { showError, showInfo } = useErrorModal()
 
 void ensureHomeDir()
 
-defineProps<{ visible: boolean; windowMode?: boolean }>()
+defineProps<{ visible: boolean }>()
 const emit = defineEmits<{ (e: 'update:visible', v: boolean): void }>()
 
 function close() { emit('update:visible', false) }
@@ -304,10 +296,8 @@ onMounted(() => { loadSettings() })
 </script>
 
 <style scoped>
-.none-enter-active, .none-leave-active { transition: none; }
-.panel-enter-active, .panel-leave-active { transition: opacity 0.2s ease; }
-.panel-enter-from, .panel-leave-to { opacity: 0; }
-.panel-enter-active .relative, .panel-leave-active .relative { transition: transform 0.25s ease; }
-.panel-enter-from .relative { transform: translateX(100%); }
-.panel-leave-to .relative { transform: translateX(100%); }
+.modal-enter-active, .modal-leave-active { transition: opacity 0.18s ease; }
+.modal-enter-from, .modal-leave-to { opacity: 0; }
+.modal-enter-active .relative, .modal-leave-active .relative { transition: transform 0.18s ease; }
+.modal-enter-from .relative, .modal-leave-to .relative { transform: scale(0.97); }
 </style>

@@ -1,6 +1,6 @@
 import { ipcMain, dialog, shell, clipboard, app, session, BrowserWindow } from 'electron'
 import { getDefaultDownloadDir } from '../utils/platform'
-import { openSettingsWindow } from '../settings-window'
+import { getCookieStatus } from '../utils/cookies'
 import { setUpdaterProxy } from '../updater'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -77,11 +77,9 @@ export function registerSystemIpc() {
   // 主目录路径：渲染进程用它把 /Users/xxx/... 缩写成 ~/...，
   // 界面展示没必要暴露用户名
   ipcMain.handle('app:getHomeDir', () => os.homedir())
-  // 打开独立的设置窗口（macOS 上 ⌘, 与界面里的齿轮图标都走这里）
-  ipcMain.handle('app:openSettings', () => {
-    openSettingsWindow()
-    return true
-  })
+  // Cookie 的真实可用状态：界面据此决定是否提示"需要配置 Cookie"，
+  // 而不是仅凭 URL 域名就弹提示
+  ipcMain.handle('app:cookieStatus', (_, manualFile?: string) => getCookieStatus(manualFile))
   // openPath 会用系统默认程序打开文件（视频就是播放），返回的字符串是错误信息（成功为空）
   ipcMain.handle('shell:openPath', async (_, filePath: string) => {
     const error = await shell.openPath(filePath)

@@ -40,7 +40,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getContributors: () => ipcRenderer.invoke('app:getContributors'),
     getDefaultDownloadDir: () => ipcRenderer.invoke('app:getDefaultDownloadDir'),
     getHomeDir: () => ipcRenderer.invoke('app:getHomeDir'),
-    openSettings: () => ipcRenderer.invoke('app:openSettings'),
+    cookieStatus: (manualFile?: string) => ipcRenderer.invoke('app:cookieStatus', manualFile),
     fetchImage: (url: string, referer?: string) => ipcRenderer.invoke('app:fetchImage', url, referer),
     getLog: () => ipcRenderer.invoke('app:getLog'),
     clearLog: () => ipcRenderer.invoke('app:clearLog'),
@@ -120,6 +120,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   
   // 菜单事件监听
+  onMenuOpenSettings: (callback: () => void) => {
+    const handler = () => callback()
+    ipcRenderer.on('menu:openSettings', handler)
+    return () => {
+      ipcRenderer.off('menu:openSettings', handler)
+    }
+  },
+
   onMenuShowAbout: (callback: () => void) => {
     const handler = () => callback()
     ipcRenderer.on('menu:showAbout', handler)
