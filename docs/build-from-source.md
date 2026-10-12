@@ -64,85 +64,47 @@ pnpm install
 
 > ⚠️ **必须先运行 `pnpm install`，再运行后续命令。**
 
-### 3. 下载二进制依赖
+另外需要 **Go 1.24+**：依赖边车（`backend/cmd/downvid-deps`）在 `pnpm dev` / `pnpm vite build` 时会一起编译。
+`goBackend()` 插件会一次性交叉编译当前系统的全部架构，这样在同一台机器上产出多架构安装包时都不会缺文件。
 
-本项目需要 **yt-dlp**（视频下载引擎）和 **ffmpeg**（音视频处理工具）才能正常运行。
+### 3. 运行依赖（yt-dlp / ffmpeg）
 
-#### 方式一：使用内置脚本下载（推荐）
+**安装包不再内置这两个工具**，所以构建前无需下载任何二进制。运行时会由 Go 边车按「系统优先」的顺序自动查找：
 
-```bash
-# 自动检测你的操作系统和架构，下载对应的二进制文件
-pnpm download-deps
-```
+1. 设置里手动指定的路径
+2. DownVid 数据目录下的托管版本（`userData/runtime/bin/`，由界面上的下载按钮安装）
+3. 登录 shell 的 `PATH` 与各平台常见安装目录（Homebrew、MacPorts、`/usr/local/bin`、scoop、winget、apt 等）
+4. 裸命令名交给 `PATH` 兜底
 
-下载后的文件会放在 `bin/<平台>/<架构>/` 目录下：
+> ⚠️ macOS / Linux 上从桌面或 Finder 启动的应用只能拿到很精简的 `PATH`，
+> 因此边车会额外执行一次登录 shell（`$SHELL -l -c 'printf %s "$PATH"'`）来补全
+> `~/.local/bin`、`/opt/homebrew/bin` 这类目录——这是"能识别到系统安装"的关键。
 
-```
-bin/
-├── darwin/         # macOS
-│   ├── arm64/      # Apple Silicon (M1/M2/M3/M4)
-│   │   ├── yt-dlp
-│   │   └── ffmpeg
-│   └── x64/        # Intel Mac
-│       ├── yt-dlp
-│       └── ffmpeg
-├── win32/          # Windows
-│   └── x64/
-│       ├── yt-dlp.exe
-│       └── ffmpeg.exe
-└── linux/          # Linux
-    ├── x64/
-    │   ├── yt-dlp
-    │   └── ffmpeg
-    └── arm64/
-        ├── yt-dlp
-        └── ffmpeg
-```
-
-也可以指定平台下载：
+#### 如果你更希望自己装一份
 
 ```bash
-pnpm download-deps:mac     # 只下载 macOS 的二进制
-pnpm download-deps:win     # 只下载 Windows 的二进制
-pnpm download-deps:linux   # 只下载 Linux 的二进制
+brew install yt-dlp ffmpeg                    # macOS
+sudo apt install yt-dlp ffmpeg                # Ubuntu / Debian
+winget install yt-dlp.yt-dlp Gyan.FFmpeg      # Windows
 ```
 
-#### 方式二：手动安装（不推荐）
+装了就会被自动识别并复用；没装也能在应用内一键下载，不影响开发。
 
-如果你不想使用内置脚本，也可以手动安装：
-
-**macOS：**
-```bash
-brew install yt-dlp ffmpeg
-```
-
-**Ubuntu / Debian：**
-```bash
-sudo apt update
-sudo apt install yt-dlp ffmpeg
-```
-
-**Windows：**
-```bash
-winget install yt-dlp.yt-dlp Gyan.FFmpeg
-```
-
-> ⚠️ **手动安装的问题：** 手动安装的 yt-dlp 和 ffmpeg 会被安装到系统路径，而不是项目目录。这意味着：
-> - 构建出的应用包不会包含这些工具
-> - 其他用户的电脑上没有安装这些工具就无法运行
-> - 因此**强烈推荐**使用内置脚本下载
-
-### 4. 验证安装
+#### 验证边车能识别到
 
 ```bash
-# 检查 yt-dlp 是否可用
-./bin/darwin/arm64/yt-dlp --version    # macOS ARM64
-./bin/win32/x64/yt-dlp.exe --version   # Windows
-./bin/linux/x64/yt-dlp --version       # Linux x64
-
-# 检查 ffmpeg 是否可用
-./bin/darwin/arm64/ffmpeg -version      # macOS ARM64
+# 编译并直接跑一次探测（会打印每个依赖的路径、版本与来源）
+cd backend && go build -o /tmp/downvid-deps ./cmd/downvid-deps
+/tmp/downvid-deps detect --managed-dir /tmp/downvid-runtime --json
 ```
+
+#### 关于仓库里的清单文件
+
+`backend/internal/manifest/assets.gen.go` 记录应用内下载时使用的版本与 SHA-256，
+由 `pnpm deps:manifest` 生成。要升级依赖跑一次该命令（或手动运行
+`Update dependencies manifest` 工作流）即可，不需要把二进制提交进仓库。
+
+---
 
 ---
 
@@ -281,18 +243,18 @@ pnpm build
 ### 问题：构建出的应用无法运行
 
 **可能原因：**
-1. 没有运行 `pnpm download-deps` 下载二进制依赖
-2. 下载了错误平台的二进制（比如在 Intel Mac 上下载了 ARM64 版本）
-3. `bin/` 目录下的文件没有可执行权限
+1. 依赖没有被识别到（在「设置 → 运行依赖」里点「重新检测」查看具体原因）
+2. 边车没有打进包里（`backend/build/<platform>-<arch>/downvid-deps` 缺失）
+3. 应用内下载的依赖损坏（校验失败）
 
 **解决方案：**
 
 ```bash
-# 重新下载依赖
-pnpm download-deps
+# 确认边车构建产物存在；缺失时重新构建
+pnpm deps:build
+ls backend/build/*/downvid-deps
 
-# 添加可执行权限（Linux/macOS）
-chmod +x bin/*/bin/yt-dlp bin/*/bin/ffmpeg
+# 依赖损坏时，在应用内「设置 → 运行依赖」点该依赖的「更新」重新下载
 ```
 
 ### 问题：Windows 上构建很慢

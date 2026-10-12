@@ -6,8 +6,9 @@
 
 ### 前置要求
 
-- Node.js >= 18
+- Node.js 22+
 - pnpm >= 8
+- Go 1.24+（编译依赖边车 `backend/cmd/downvid-deps`）
 - Git
 
 ### 安装与运行
@@ -20,10 +21,8 @@ cd downvid
 # 安装依赖
 pnpm install
 
-# 下载 yt-dlp 和 ffmpeg 二进制文件（开发必需）
-pnpm download-deps
-
-# 启动开发模式
+# 启动开发模式（yt-dlp / ffmpeg 无需预先安装：
+# 运行时会自动识别系统里已有的版本，缺了可在应用内一键下载）
 pnpm dev
 ```
 
@@ -37,6 +36,14 @@ pnpm build
 pnpm build:mac
 pnpm build:win
 pnpm build:linux
+```
+
+### 代码检查
+
+```bash
+pnpm vue-tsc --noEmit              # 前端类型检查（CI 必跑）
+cd backend && go vet ./... && go test ./...   # Go 侧车
+pnpm deps:manifest:check           # 依赖清单是否与上游一致
 ```
 
 ## Git 提交规范
@@ -126,9 +133,10 @@ chore: 升级 electron 到 30.0.1
 
 ## 代码规范
 
-- TypeScript 严格模式
-- 使用 ESLint / Prettier 格式化代码
+- TypeScript 严格模式（`strict` + `noUnusedLocals` + `noUnusedParameters`，未使用的 import 会导致构建失败）
+- Go 代码用 `gofmt` 格式化并通过 `go vet`
 - 组件使用 `<script setup>` 语法
+- UI 文案、注释与 commit body 使用中文
 - 遵循现有代码风格和目录结构
 
 ## 问题反馈

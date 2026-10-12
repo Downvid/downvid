@@ -10,7 +10,7 @@ DownVid — Electron 44 + Vue 3 desktop video downloader wrapping `yt-dlp` + `ff
 
 ```bash
 pnpm install
-pnpm download-deps          # REQUIRED before first dev run: fetches yt-dlp+ffmpeg into bin/<platform>/<arch>/
+# Note: pnpm dev / pnpm build also compile the Go sidecar (requires Go 1.24+)
 pnpm dev                    # vite dev server + electron (hot reload for both processes)
 pnpm vue-tsc --noEmit       # type check — this is the only "lint" in CI
 pnpm build                  # vue-tsc && vite build && electron-builder (current platform)
@@ -19,11 +19,11 @@ pnpm build:mac:arm64        # also :mac:x64 :win :linux:x64 :linux:arm64
 
 TypeScript is pinned to 5.x: vue-tsc can't run on TypeScript 7 (the Go port drops `typescript/lib/tsc`); Dependabot ignores its major bumps.
 
-No test suite and no ESLint/Prettier installed (CONTRIBUTING.md claims otherwise). CI (`.github/workflows/ci.yml`) runs only `vue-tsc --noEmit` + `vite build` (+ a smoke test of `scripts/gen-update-manifests.mjs`) on the 3 OSes, without LFS. `tsconfig.json` has `strict` + `noUnusedLocals` + `noUnusedParameters`, so an unused import fails the build.
+No frontend test suite and no ESLint/Prettier installed (CONTRIBUTING.md claims otherwise); the Go backend under `backend/` does have tests (`go test ./...`). CI (`.github/workflows/ci.yml`) runs `gofmt -l` + `go vet` + `go test` on the backend, `pnpm deps:manifest:check`, `vue-tsc --noEmit`, `vite build`, and a packaging smoke test (+ `scripts/gen-update-manifests.mjs`) on the 3 OSes. `tsconfig.json` has `strict` + `noUnusedLocals` + `noUnusedParameters`, so an unused import fails the build.
 
-Release: bump `package.json` version → add a `## [x.y.z]` section to `CHANGELOG.md` → push tag `v*` (or run `release.yml` manually with a `version` input equal to `package.json`'s; the workflow then creates the tag). `release.yml` builds 5 arch targets (each job pulls only its own `bin/<platform>/<arch>` from LFS), regenerates every `latest*.yml` from the final artifacts via `scripts/gen-update-manifests.mjs` (per-job manifests used to overwrite each other), and greps release notes out of CHANGELOG by that exact header. Artifact names are what old clients' updater manifests point at — don't rename `DownVid-Setup-*`, `DownVid-<arch>-Mac-*`, `DownVid-x86_64-Linux-*` etc.
+Release: bump `package.json` version → add a `## [x.y.z]` section to `CHANGELOG.md` → push tag `v*` (or run `release.yml` manually with a `version` input equal to `package.json`'s; the workflow then creates the tag). `release.yml` builds 5 arch targets (each job just installs Go + Node — no binaries are checked in), regenerates every `latest*.yml` from the final artifacts via `scripts/gen-update-manifests.mjs` (per-job manifests used to overwrite each other), and greps release notes out of CHANGELOG by that exact header. Artifact names are what old clients' updater manifests point at — don't rename `DownVid-Setup-*`, `DownVid-<arch>-Mac-*`, `DownVid-x86_64-Linux-*` etc.
 
-Updating bundled binaries: run the `Update binaries` workflow (`update-bin.yml`, manual) — it runs `bin/download-deps.sh --force` (yt-dlp nightly, ffmpeg BtbN n8.1 / native arm64 mac) and commits via LFS. Locally: `bash bin/download-deps.sh <platform> --force`.
+Updating the runtime dependency manifest: run the `Update dependencies manifest` workflow (`update-deps.yml`, manual) — it runs `scripts/gen-deps-manifest.mjs`, which scrapes upstream tags and SHA-256s and commits `backend/internal/manifest/assets.gen.go`. Locally: `pnpm deps:manifest`. Nothing binary is checked in any more.
 
 ## Architecture
 
@@ -42,6 +42,23 @@ Adding anything the renderer calls in main means editing all three or it silentl
 
 Progress/events flow the other way as broadcasts (`download:progress`, `history:updated`, `update:status`, `menu:showAbout`); renderer subscribers return an unsubscribe closure.
 
+### Runtime dependencies (yt-dlp / ffmpeg)
+
+**The installer no longer ships yt-dlp or ffmpeg.** On startup a Go sidecar resolves them in this order ("prefer the machine's own, download only if missing"):
+
+1. Paths set manually in settings (`localStorage['settings'].depPaths`)
+2. `userData/runtime/bin/` (installed by DownVid, safe to overwrite)
+3. The login shell's `PATH` (GUI apps only get a stripped `PATH`, so this step matters) plus per-platform common install dirs
+4. Bare command names, left to `PATH`
+
+- The sidecar (`backend/cmd/downvid-deps`) has two subcommands: `detect` and `fetch`. **stdout carries NDJSON only; every log line goes to stderr**, and Electron parses stdout line by line.
+- `electron/utils/runtime.ts` locates the sidecar (packaged: `resources/downvid-deps/`), runs it, caches detection for 60s, and broadcasts `deps:progress`; `electron/ipc/deps.ts` exposes `deps:status/check/download/cancel/openDir/diagnostics`.
+- `resolveDependency()` in `electron/utils/binary.ts` is the single entry point. On failure it throws `MissingDependencyError` whose message contains a `[[deps-missing:<kind>]]` marker, which the renderer turns into a one-click download prompt (same idea as the cookie hint's `\n\n提示：` marker).
+- **Manual paths only affect detection**; `fetch` ignores them and always writes to the managed dir, so a user's own install is never overwritten.
+- Versions are pinned rather than "latest": `backend/internal/manifest/assets.gen.go` is generated by `scripts/gen-deps-manifest.mjs` and records each tag + SHA-256. ffmpeg comes from ffmpeg-static (smaller, has libmp3lame/aac/x264); gzip artifacts are verified **as downloaded** and only extracted after the checksum passes.
+- On macOS, install must `xattr -c` + `codesign --force --sign -`: network-downloaded executables carry quarantine and Apple Silicon kills them outright (`killed: 9`).
+- Renderer side: `src/stores/deps.ts`, `src/components/DepPanel.vue` (the settings section) and `src/components/DepsPrompt.vue` (the download prompt mounted in `App.vue`).
+
 ### Parse dispatch (`electron/ipc/download.ts` → `ytdlp:parse`)
 
 Douyin and Kuaishou have bespoke parsers (`electron/parsers/`): platform API first, headless `puppeteer-core` driving a *system-installed* Chrome/Edge (`utils/browser.ts`) as fallback. Every failure is swallowed by an empty `catch` and falls through to `parseWithYtdlp`. When debugging a parse bug, check which branch actually ran — the errors are invisible.
@@ -57,7 +74,7 @@ Pause = `child.kill()` (plus `taskkill /T /F` on Windows) and the task is droppe
 
 ### yt-dlp environment quirks
 
-- `utils/binary.ts` resolves `yt-dlp`/`ffmpeg` by trying an ordered list of paths; packaged apps hit `process.resourcesPath/bin`. Binaries live in `bin/<platform>/<arch>/` and are **tracked in Git LFS** (`.gitattributes`). `release.yml` flattens the right arch into `bin/` and deletes the other platform dirs before electron-builder packs `bin` as `extraResources`.
+- `utils/binary.ts`'s `resolveDependency()` gets `yt-dlp`/`ffmpeg` paths from the Go sidecar's detection result (see the "Runtime dependencies" section); **no binaries ship in the installer**.
 - YouTube needs a JS runtime for yt-dlp; `checkJsRuntime()` returns `process.execPath` (the Electron binary) as `--js-runtimes node:<path>`, so no separate Node install is needed in a packaged app.
 - Cookies go through `utils/cookies.ts` `runWithCookies`: manual file → none, or (auto) each installed browser → exported snapshot `userData/ytdlp-cookies/browser-cookies.txt` → none. It only moves to the next source on a cookie *load* error (`isCookieError`), never on auth errors, and an exception while preparing a source only skips that source. Downloads prefer a fresh (<30 min) snapshot so they match the parse. When a browser's cookies couldn't be read, errors get a `cookieFailureHint` appended after the `\n\n提示：` marker, which the renderer splits off into the error modal's `hint`.
 - Never create anything in `userData` whose name case-insensitively matches a Chromium file (`Cookies`, `Network`, `Preferences`, `Local Storage`…): macOS/Windows filesystems are case-insensitive (issue #31 — `userData/cookies` hit `EEXIST`).

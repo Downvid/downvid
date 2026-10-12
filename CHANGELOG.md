@@ -4,6 +4,31 @@
 
 ## [Unreleased]
 
+### 文档与工程规范
+- 新增 [安全政策](./SECURITY.md)（漏洞报告渠道、响应时限、安全边界与已知取舍）、[贡献者行为准则](./CODE_OF_CONDUCT.md)
+- 新增 [仓库规范](./docs/standards.md)：分支/提交规范、Issue 与 PR 流程、**改动落点清单**（IPC 三处同步、设置形状、运行依赖、发布产物的同步要求）、废弃流程与依赖引入原则
+- 新增 [发布流程](./docs/release.md)：版本语义（哪些改动属于 MAJOR）、发布步骤、**产物命名契约**（改名会让存量用户无法自动更新）、更新清单生成方式、回滚预案
+- 新增 `.github/CODEOWNERS`，发布与供应链相关路径（workflows、updater、依赖清单）纳入必需评审
+- 修正架构文档：删除了已不存在的 `bin/<platform>/<arch>` 内置二进制描述，改为 Go 依赖边车（探测 + 下载）与 `deps:*` IPC
+- 补齐 CI 安全能力：新增 CodeQL 扫描（TypeScript/Vue + Go）与 Dependency Review（高危拦截 + 许可证白名单）；全部 job 补 `timeout-minutes`，GitHub Actions 版本统一并升到最新主版本
+- Dependabot 增加 Go 模块与分组提交信息，忽略 Electron 大版本（原生 ABI 变更需人工验证）
+
+### 变更（破坏性）
+- **安装包不再内置 yt-dlp 与 ffmpeg**：启动时由新增的 Go 依赖边车（`backend/cmd/downvid-deps`）按「系统优先」的顺序识别机器上已安装的版本并直接复用——手动指定的路径 → `userData/runtime/bin/` 托管目录 → 登录 shell 的 `PATH` 与各平台常见安装目录（Homebrew / MacPorts / scoop / winget / apt 等）。macOS / Linux 从桌面启动时 `PATH` 很精简，边车会额外执行一次登录 shell 来补全 `~/.local/bin`、`/opt/homebrew/bin` 等目录
+- 安装包体积因此大幅下降（此前每个架构约 80 MB，现仅携带约 10 MB 边车）；仓库移除 `bin/` 目录与 Git LFS 追踪，不再把二进制提交进版本库
+
+### 新增
+- 依赖检测不到时可一键下载：「设置 → 运行依赖」常驻依赖管理板块（显示来源、版本、路径、缺失原因，支持逐个下载/更新/取消、打开安装目录）；解析或下载因缺依赖失败时也会弹出「下载并继续」引导
+- 依赖下载带 SHA-256 校验，先校验后解压安装，写入 `userData/runtime/bin/`，不污染系统；支持 API 代理设置。macOS 上自动去除隔离属性并做 ad-hoc 签名（否则 Apple Silicon 会直接 `killed: 9`）
+- 进阶设置可手动指定 yt-dlp / ffmpeg / ffprobe 的绝对路径，自动检测不到或要固定版本时使用
+- Go 侧车带有单元测试（版本解析、候选路径优先级、下载校验与重试、进度上报、清单完整性），CI 会运行 `gofmt` / `go vet` / `go test`
+- 新增 `pnpm deps:manifest` 与 `Update dependencies manifest` 工作流：从上游抓取版本号与 SHA-256 生成清单，`pnpm deps:manifest:check` 在 CI 中校验清单未落后
+
+### 移除
+- `bin/` 目录、`bin/download-deps.sh` 与 `pnpm download-deps*` 系列脚本
+- `Update binaries` 工作流（由 `Update dependencies manifest` 取代）
+- `.gitattributes` 中的 LFS 追踪规则
+
 ---
 
 ## [1.2.1] - 2026-09-27

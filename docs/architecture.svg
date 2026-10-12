@@ -49,10 +49,17 @@
 <!-- BINARIES -->
 <rect x="430" y="322" width="140" height="40" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
 <text x="500" y="340" fill="white" font-size="10" font-weight="600" text-anchor="middle">yt-dlp</text>
-<text x="500" y="353" fill="#94a3b8" font-size="7" text-anchor="middle">bin/platform/arch</text>
+<text x="500" y="353" fill="#94a3b8" font-size="7" text-anchor="middle">system PATH / managed</text>
 <rect x="530" y="322" width="140" height="40" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
 <text x="600" y="340" fill="white" font-size="10" font-weight="600" text-anchor="middle">ffmpeg</text>
-<text x="600" y="353" fill="#94a3b8" font-size="7" text-anchor="middle">audio/video merge</text>
+<text x="600" y="353" fill="#94a3b8" font-size="7" text-anchor="middle">merge / transcode</text>
+<!-- RUNTIME DEPS SIDECAR -->
+<rect x="680" y="322" width="150" height="40" rx="6" fill="rgba(52,211,153,0.25)" stroke="#34d399" stroke-width="1.5"/>
+<text x="755" y="338" fill="white" font-size="9" font-weight="600" text-anchor="middle">downvid-deps (Go)</text>
+<text x="755" y="351" fill="#94a3b8" font-size="7" text-anchor="middle">detect / fetch deps</text>
+<line x1="750" y1="460" x2="755" y2="366" stroke="#34d399" stroke-width="1.5" marker-end="url(#ae)"/>
+<text x="762" y="420" fill="#34d399" font-size="7">spawn</text>
+<line x1="680" y1="342" x2="640" y2="342" stroke="#fbbf24" stroke-width="1" stroke-dasharray="3,3" marker-end="url(#af)"/>
 <!-- PARSERS BOUNDARY -->
 <rect x="30" y="290" width="310" height="110" rx="12" fill="rgba(6,78,59,0.05)" stroke="#34d399" stroke-width="1" stroke-dasharray="8,4"/>
 <text x="42" y="305" fill="#34d399" font-size="9" font-weight="600">Parsers (electron/parsers/)</text>
@@ -73,7 +80,7 @@
 <rect x="160" y="445" width="130" height="40" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
 <text x="225" y="469" fill="white" font-size="9" font-weight="600" text-anchor="middle">ipc/download.ts</text>
 <rect x="300" y="445" width="120" height="40" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
-<text x="360" y="469" fill="white" font-size="9" font-weight="600" text-anchor="middle">ipc/history.ts</text>
+<text x="360" y="469" fill="white" font-size="9" font-weight="600" text-anchor="middle">ipc/deps.ts</text>
 <rect x="430" y="445" width="90" height="40" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
 <text x="475" y="469" fill="white" font-size="9" font-weight="600" text-anchor="middle">store.ts</text>
 <rect x="530" y="445" width="100" height="40" rx="6" fill="rgba(251,146,60,0.3)" stroke="#fb923c" stroke-width="1.5"/>
@@ -88,6 +95,7 @@
 <!-- RENDERER PROCESS BOUNDARY -->
 <rect x="30" y="575" width="940" height="140" rx="12" fill="rgba(34,211,238,0.05)" stroke="#22d3ee" stroke-width="1" stroke-dasharray="8,4"/>
 <text x="42" y="590" fill="#22d3ee" font-size="9" font-weight="600">Vue 3 Renderer Process (Browser)</text>
+<text x="700" y="590" fill="#22d3ee" font-size="8">+ DepPanel / DepsPrompt (deps:* IPC)</text>
 <rect x="50" y="600" width="160" height="45" rx="6" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1.5"/>
 <text x="130" y="619" fill="white" font-size="10" font-weight="600" text-anchor="middle">Pinia Store</text>
 <text x="130" y="634" fill="#94a3b8" font-size="7" text-anchor="middle">download.ts — queue, state</text>
@@ -116,7 +124,7 @@
 <rect x="732" y="112" width="14" height="9" rx="2" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1"/>
 <text x="752" y="120" fill="#94a3b8" font-size="8">Backend (Main Process)</text>
 <rect x="732" y="126" width="14" height="9" rx="2" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1"/>
-<text x="752" y="134" fill="#94a3b8" font-size="8">Binary (yt-dlp, ffmpeg)</text>
+<text x="752" y="134" fill="#94a3b8" font-size="8">Runtime deps (system/managed)</text>
 <rect x="732" y="140" width="14" height="9" rx="2" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1"/>
 <text x="752" y="148" fill="#94a3b8" font-size="8">Storage (Pinia, JSON)</text>
 <rect x="732" y="154" width="14" height="9" rx="2" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1"/>

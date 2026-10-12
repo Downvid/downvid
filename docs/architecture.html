@@ -53,7 +53,7 @@ svg{width:100%;min-width:900px;display:block}
         <button class="toolbar-toggle" onclick="this.parentElement.classList.toggle('expanded')" title="Export">⋯</button>
       </div>
     </div>
-    <p class="subtitle">Electron + Vue 3 multi-platform video downloader · yt-dlp backend</p>
+    <p class="subtitle">Electron + Vue 3 multi-platform video downloader · Go dependency sidecar + yt-dlp</p>
   </div>
 
   <div class="diagram-container">
@@ -107,11 +107,17 @@ svg{width:100%;min-width:900px;display:block}
       <!-- BINARIES -->
       <rect x="430" y="322" width="140" height="40" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
       <text x="500" y="340" fill="white" font-size="10" font-weight="600" text-anchor="middle">yt-dlp</text>
-      <text x="500" y="353" fill="#94a3b8" font-size="7" text-anchor="middle">bin/platform/arch</text>
+      <text x="500" y="353" fill="#94a3b8" font-size="7" text-anchor="middle">system PATH / managed</text>
       <rect x="530" y="322" width="140" height="40" rx="6" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1.5"/>
       <text x="600" y="340" fill="white" font-size="10" font-weight="600" text-anchor="middle">ffmpeg</text>
-      <text x="600" y="353" fill="#94a3b8" font-size="7" text-anchor="middle">audio/video merge</text>
-      <!-- PARSERS BOUNDARY -->
+      <text x="600" y="353" fill="#94a3b8" font-size="7" text-anchor="middle">merge / transcode</text>
+          <!-- RUNTIME DEPS SIDECAR -->
+    <rect x="680" y="322" width="150" height="40" rx="6" fill="rgba(52,211,153,0.25)" stroke="#34d399" stroke-width="1.5"/>
+    <text x="755" y="338" fill="white" font-size="9" font-weight="600" text-anchor="middle">downvid-deps (Go)</text>
+    <text x="755" y="351" fill="#94a3b8" font-size="7" text-anchor="middle">detect / fetch deps</text>
+    <line x1="750" y1="460" x2="755" y2="366" stroke="#34d399" stroke-width="1.5" marker-end="url(#ae)"/>
+    <text x="762" y="420" fill="#34d399" font-size="7">spawn</text>
+    <!-- PARSERS BOUNDARY -->
       <rect x="30" y="290" width="310" height="110" rx="12" fill="rgba(6,78,59,0.05)" stroke="#34d399" stroke-width="1" stroke-dasharray="8,4"/>
       <text x="42" y="305" fill="#34d399" font-size="9" font-weight="600">Parsers (electron/parsers/)</text>
       <rect x="50" y="312" width="100" height="45" rx="6" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1.5"/>
@@ -174,7 +180,7 @@ svg{width:100%;min-width:900px;display:block}
       <rect x="732" y="112" width="14" height="9" rx="2" fill="rgba(6,78,59,0.4)" stroke="#34d399" stroke-width="1"/>
       <text x="752" y="120" fill="#94a3b8" font-size="8">Backend (Main Process)</text>
       <rect x="732" y="126" width="14" height="9" rx="2" fill="rgba(120,53,15,0.3)" stroke="#fbbf24" stroke-width="1"/>
-      <text x="752" y="134" fill="#94a3b8" font-size="8">Binary (yt-dlp, ffmpeg)</text>
+      <text x="752" y="134" fill="#94a3b8" font-size="8">Runtime deps (system/managed)</text>
       <rect x="732" y="140" width="14" height="9" rx="2" fill="rgba(76,29,149,0.4)" stroke="#a78bfa" stroke-width="1"/>
       <text x="752" y="148" fill="#94a3b8" font-size="8">Storage (Pinia, JSON)</text>
       <rect x="732" y="154" width="14" height="9" rx="2" fill="rgba(136,19,55,0.4)" stroke="#fb7185" stroke-width="1"/>
@@ -191,8 +197,9 @@ svg{width:100%;min-width:900px;display:block}
       <div class="card-header"><div class="card-dot emerald"></div><h3>Main Process</h3></div>
       <ul>
         <li>• Electron main.ts — window, lifecycle, logging</li>
-        <li>• IPC handlers: download, history, app, system</li>
+        <li>• IPC handlers: download, history, app, system, deps</li>
         <li>• Parser dispatch: Douyin → Kuaishou → yt-dlp</li>
+        <li>• Runtime deps via Go sidecar: system PATH → managed dir → manual</li>
         <li>• Direct fetch (CDN) or spawn yt-dlp subprocess</li>
         <li>• Pause = kill process, resume = re-spawn from .part</li>
       </ul>
@@ -205,6 +212,7 @@ svg{width:100%;min-width:900px;display:block}
         <li>• Settings as floating panel, not a route</li>
         <li>• State: localStorage settings (not Pinia)</li>
         <li>• Progress via IPC broadcast, throttled 200ms</li>
+        <li>• DepPanel (settings) + DepsPrompt (missing deps) via deps:* IPC</li>
       </ul>
     </div>
     <div class="card">
@@ -215,6 +223,7 @@ svg{width:100%;min-width:900px;display:block}
         <li>• Direct URL → fetch + write stream</li>
         <li>• Otherwise → spawn yt-dlp with format selector</li>
         <li>• Audio: -x mp3 · Subs: --write-subs · Merge: ffmpeg</li>
+        <li>• Deps resolved by sidecar (no bundled binaries); missing → one-click download</li>
       </ul>
     </div>
   </div>

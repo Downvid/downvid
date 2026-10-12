@@ -169,16 +169,7 @@ sudo apt install yt-dlp ffmpeg
 winget install yt-dlp.yt-dlp Gyan.FFmpeg
 ```
 
-或者使用项目内置脚本一键下载：
-```bash
-# 自动检测平台并下载
-pnpm download-deps
-
-# 指定平台
-pnpm download-deps:mac
-pnpm download-deps:win
-pnpm download-deps:linux
-```
+> **这些依赖是可选的。** DownVid 会优先复用你机器上已安装的版本，找不到时可以在「设置 → 运行依赖」里一键下载，**无需**为了用 DownVid 而单独安装。上面的命令只是"自己装一份更省事"的替代方案。
 
 #### 3. 安装项目依赖
 
@@ -215,7 +206,12 @@ pnpm build:linux    # Linux
 | [从源码构建](./docs/build-from-source.md) | 开发环境搭建、依赖下载、构建生产版本 |
 | [故障排除指南](./docs/troubleshooting.md) | 各种问题的详细排查步骤和解决方案 |
 | [常见问题 (FAQ)](./docs/faq.md) | 使用中的常见疑问解答 |
+| [架构说明](./docs/architecture.html) | 进程结构、IPC 边界、下载与依赖解析流程 |
+| [仓库规范](./docs/standards.md) | 分支/提交规范、Issue 与 PR 流程、改动落点清单 |
+| [发布流程](./docs/release.md) | 版本语义、发布步骤、产物命名契约与回滚 |
 | [贡献指南](./CONTRIBUTING.md) | 如何参与项目开发 |
+| [安全政策](./SECURITY.md) | 如何报告漏洞、支持范围与安全边界 |
+| [贡献者行为准则](./CODE_OF_CONDUCT.md) | 社区行为规范 |
 
 ---
 
@@ -289,8 +285,7 @@ videdown/
 
 ### 开发规范
 
-- 代码遵循 TypeScript 严格模式
-- 使用 ESLint / Prettier 格式化代码
+- 代码遵循 TypeScript 严格模式（前端）与 `gofmt` / `go vet`（Go 侧车）
 - 提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/) 规范
 - 新增功能请同步更新文档和 CHANGELOG
 
@@ -299,7 +294,7 @@ videdown/
 ## ❓ 常见问题
 
 ### Q: 下载提示缺少 yt-dlp / ffmpeg？
-A: 请确保已安装这两个依赖工具。可以使用 `pnpm download-deps` 一键下载，或参考 [从源码构建](#从源码构建) 中的安装方式。
+A: DownVid 不再内置这两个工具，启动时会自动查找系统里已安装的版本；找不到就会弹出提示，点「下载并继续」即可自动装好（会校验 SHA-256，并放在 DownVid 自己的数据目录里，不污染系统）。也可以在「设置 → 运行依赖」里查看当前用的是哪个版本、来自哪里，并手动指定路径。
 
 ### Q: 为什么有些视频下载失败？
 A: 部分平台需要登录才能访问，请在设置中导入浏览器 Cookie。也可能是 yt-dlp 版本过旧，尝试更新到最新版本。
@@ -343,6 +338,8 @@ A: 首次安装时右键点击应用，选择"打开"，或在"系统设置 → 
 ## 📄 开源协议
 
 本项目基于 [MIT License](./LICENSE) 协议开源。
+
+安全问题请按 [安全政策](./SECURITY.md) 私下报告，不要开公开 Issue。
 
 基于 [Videdown](https://github.com/cshuangyy/videdown) (MIT License) 修改。
 

@@ -39,6 +39,10 @@ DownVid 是一个图形界面工具，底层使用 yt-dlp 作为下载引擎。�
 
 DownVid 会自动处理 yt-dlp 的命令行参数，你只需要粘贴链接、选择画质、点击下载。
 
+**DownVid 不内置 yt-dlp 和 ffmpeg**：启动时会自动识别你机器上已经装好的版本并直接复用；
+如果没装，「设置 → 运行依赖」里点一下就能自动下载安装（带 SHA-256 校验，放在 DownVid 自己的数据目录里）。
+这样安装包更小，也不会重复占用磁盘。
+
 ---
 
 ### DownVid 安全吗？
@@ -183,8 +187,8 @@ DownVid 会列出所有可用的画质选项供你选择。
 ```bash
 cd downvid
 git pull
-pnpm download-deps  # 更新 yt-dlp 和 ffmpeg
-pnpm build          # 重新构建
+pnpm install
+pnpm build          # 重新构建（会一并编译 Go 依赖边车，需要 Go 1.24+）
 ```
 
 ---
