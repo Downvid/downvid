@@ -46,10 +46,20 @@ function goBinaryName(): string {
  * 安装包不再携带 yt-dlp / ffmpeg，改由这个边车在运行时识别机器上已装好的版本，
  * 缺失时才下载到 userData。源码没变时 go 自己的构建缓存会让这一步很快。
  */
+// Node 的 process.platform 用的是 'win32'，而 Go 的 GOOS 是 'windows'。
+// 直接透传会得到 "unsupported GOOS/GOARCH pair win32/amd64"；
+// macOS 与 Linux 之所以没暴露这个问题，只是两个名字恰好一致。
+const GOOS_BY_PLATFORM: Record<string, string> = {
+  darwin: 'darwin',
+  linux: 'linux',
+  win32: 'windows',
+}
+
 function goBackend(): Plugin {
   return {
     name: 'downvid-go-backend',
     async buildStart() {
+      const goos = GOOS_BY_PLATFORM[process.platform] || process.platform
       const name = goBinaryName()
       for (const { dir, goarch } of targetArches()) {
         const outDir = path.join(BACKEND_BUILD_DIR, `${process.platform}-${dir}`)
@@ -60,7 +70,7 @@ function goBackend(): Plugin {
           execFileSync('go', ['build', '-o', outFile, './cmd/downvid-deps'], {
             cwd: BACKEND_DIR,
             stdio: 'inherit',
-            env: { ...process.env, GOOS: process.platform, GOARCH: goarch, CGO_ENABLED: '0' },
+            env: { ...process.env, GOOS: goos, GOARCH: goarch, CGO_ENABLED: '0' },
           })
         } catch (e: any) {
           // 没装 Go 时给出明确指引，而不是让整个构建以晦涩的错误失败

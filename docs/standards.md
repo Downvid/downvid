@@ -163,6 +163,22 @@ refactor(download): 拆分直链与 yt-dlp 两条路径
 - 校验值（`sha512`）还和实际文件一致吗？
 - macOS 自实现替换 `.app` 的逻辑是否受影响？
 
+## 5.1 跨平台构建的三个坑
+
+Windows runner 与 macOS/Linux 的默认环境差异很大，以下三点都已真实踩过：
+
+1. **`process.platform` 不是 `GOOS`**。Node 用 `win32`，Go 用 `windows`，
+   直接透传会报 `unsupported GOOS/GOARCH pair win32/amd64`。
+   macOS/Linux 只是两个名字恰好一致，因此本地与 CI 的 ubuntu/macos job 都发现不了。
+2. **默认 shell 不同**。Windows 上是 PowerShell：`/tmp` 会被解析成 `D:\tmp`，
+   `test ! -s` 等 POSIX 断言不成立。需要 POSIX 语义的步骤显式声明 `shell: bash`。
+3. **换行符**。Windows 默认 `core.autocrlf=true`，检出源码会变成 CRLF，
+   而 CRLF 不是 `gofmt` 的输出格式——`gofmt -l` 会把**每个** Go 文件都判为未格式化。
+   已由仓库根部的 `.gitattributes`（`* text=auto eol=lf`）统一，不要删除该文件。
+
+**因此：CI 里任何新增的构建/检查步骤，必须先在本地以"非宿主平台"的语义复现一遍**
+（例如交叉编译到 `win32`、用 `core.autocrlf=true` 检出），不能只核对 YAML 语法。
+
 ## 6. 废弃（deprecation）流程
 
 移除用户可见的能力必须分步，不能一步到位：
