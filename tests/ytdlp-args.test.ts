@@ -144,3 +144,28 @@ describe('buildYtdlpArgs', () => {
     expect(valueAfter(args, '--playlist-items')).toBe('1')
   })
 })
+
+describe('分块请求（下载速度的关键）', () => {
+  it('始终带 --http-chunk-size', () => {
+    const args = buildYtdlpArgs(base, OUT_DIR, ctx)
+    expect(args).toContain('--http-chunk-size')
+  })
+
+  it('分块大小是正数且带单位（yt-dlp 需要 10M 这类写法）', () => {
+    const size = valueAfter(buildYtdlpArgs(base, OUT_DIR, ctx), '--http-chunk-size')
+    expect(size).toMatch(/^\d+[KMG]$/)
+  })
+
+  // 回归背景：YouTube 等 CDN 对长连接限速。同一 17.6MB 文件实测
+  // 单连接 109s（0.16 MB/s），加分块后 3~5s（约 5 MB/s）。
+  // 若有人"清理无用参数"把它删掉，下载会退回极慢，因此这里锁死。
+  it('字幕模式也带分块（下载字幕文件同样受单连接限速影响）', () => {
+    const args = buildYtdlpArgs({ ...base, downloadMode: 'subtitle', subtitles: ['en'] }, OUT_DIR, { ...ctx, ffmpegLocation: '' })
+    expect(args).toContain('--http-chunk-size')
+  })
+
+  it('音频模式同样带分块', () => {
+    const args = buildYtdlpArgs({ ...base, downloadMode: 'audio' }, OUT_DIR, ctx)
+    expect(args).toContain('--http-chunk-size')
+  })
+})

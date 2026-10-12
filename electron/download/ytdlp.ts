@@ -23,6 +23,15 @@ const SUBS_PREFIX = '[dvsubs]'
 const PROGRESS_TEMPLATE = `download:${PROGRESS_PREFIX}%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s|%(progress.fragment_index)s|%(progress.fragment_count)s`
 const POSTPROCESS_TEMPLATE = `postprocess:${POSTPROCESS_PREFIX}%(progress.postprocessor)s|%(progress.status)s`
 
+/**
+ * 分块请求的大小。
+ *
+ * 与 10M / 25M 都实测过，两者都远快于不分块（0.16 MB/s → 5 MB/s 量级），
+ * 区间内的差异主要是网络波动。取 10M：足以打断限速节奏，又不会因为分块过多
+ * 而在慢速站点上增加额外往返。
+ */
+const HTTP_CHUNK_SIZE = '10M'
+
 /** 解析结果缓存的 info JSON 有效期：超过后媒体直链可能已过期，改为重新提取 */
 const INFO_JSON_TTL = 20 * 60 * 1000
 
@@ -109,8 +118,19 @@ export function buildYtdlpArgs(options: DownloadOptions, outputDir: string, ctx:
     '--newline', '--progress', '--progress-template', PROGRESS_TEMPLATE, '--progress-template', POSTPROCESS_TEMPLATE,
     // 字幕模式没有视频文件，改为输出字幕信息（语言代码可能含 '-'，不能直接写进字段路径）
     '--print', isSubtitleOnly ? `after_move:${SUBS_PREFIX}%(requested_subtitles)j` : `after_move:${FILE_PREFIX}%(filepath)s`,
-    // HLS/DASH 分片并发下载
+    // HLS/DASH 分片并发下载（仅对分片流生效，对单个 mp4 直链无效）
     '--concurrent-fragments', '8',
+    // 分块请求：规避"单连接被限速"。
+    //
+    // 这一步是下载速度的关键。YouTube 等站点的 CDN 会对长连接限速，同一个
+    // 17.6MB 文件实测：单连接 109 秒（0.16 MB/s），加上本参数后 3~5 秒
+    // （约 5 MB/s），**快 30 倍以上**。原理是把一个长请求拆成多个短请求。
+    //
+    // 注意 --concurrent-fragments 解决不了这个问题：它只作用于 HLS/DASH 分片，
+    // 而那些站点给的往往是单个 mp4 直链，走的是单连接。
+    //
+    // 对不支持 Range 的服务器会自动退化为普通下载（已实测），因此不需要按站点开关。
+    '--http-chunk-size', HTTP_CHUNK_SIZE,
   ]
 
   // 传目录而不是文件路径：yt-dlp 会在该目录里同时找 ffmpeg 与 ffprobe
