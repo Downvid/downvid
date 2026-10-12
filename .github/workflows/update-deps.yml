@@ -1,0 +1,82 @@
+name: Update dependencies manifest
+
+# 手动触发：把 yt-dlp / ffmpeg 的下载清单升到上游最新版本并提交。
+#
+# 与旧版的区别：不再下载二进制入库（那样会让仓库与安装包都变胖），
+# 只是把版本号与 SHA-256 写进 Go 侧车的 assets.gen.go。
+# 站点失效时通常只需跑一次本工作流，再打 tag 发版，用户端会自动下载新版本。
+on:
+  workflow_dispatch:
+    inputs:
+      ytdlp:
+        description: 'yt-dlp tag（留空取上游最新 nightly）'
+        required: false
+        default: ''
+      ffmpeg:
+        description: 'ffmpeg tag（留空沿用当前值）'
+        required: false
+        default: ''
+      platform:
+        description: '平台：all / win32 / darwin / linux'
+        required: true
+        default: all
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.24'
+          # 侧车只用标准库，没有 go.sum，无需缓存依赖
+          cache: false
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Install pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 11
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Refresh manifest
+        env:
+          YTDLP_TAG: ${{ inputs.ytdlp }}
+          FFMPEG_TAG: ${{ inputs.ffmpeg }}
+          PLATFORM: ${{ inputs.platform }}
+        run: |
+          args=()
+          [ -n "$YTDLP_TAG" ] && args+=(--ytdlp "$YTDLP_TAG")
+          # 只更新指定平台的哈希时，其余平台沿用现有值
+          [ -n "$FFMPEG_TAG" ] && args+=(--ffmpeg "$FFMPEG_TAG")
+          node scripts/gen-deps-manifest.mjs "${args[@]}"
+      - name: Verify backend still builds and tests
+        working-directory: backend
+        run: |
+          gofmt -l . | tee /tmp/gofmt.out
+          test ! -s /tmp/gofmt.out
+          go vet ./...
+          go test ./...
+      - name: Show versions
+        run: |
+          grep -E 'YtDlpTag|FFmpegTag' backend/internal/manifest/assets.gen.go
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add backend/internal/manifest/assets.gen.go
+          if git diff --cached --quiet; then
+            echo "依赖清单无变化"
+            exit 0
+          fi
+          YTDLP=$(grep -oP 'YtDlpTag = "\K[^"]+' backend/internal/manifest/assets.gen.go || echo unknown)
+          FFMPEG=$(grep -oP 'FFmpegTag = "\K[^"]+' backend/internal/manifest/assets.gen.go || echo unknown)
+          git commit -m "chore(deps): 更新运行依赖清单" -m "yt-dlp ${YTDLP}、ffmpeg ${FFMPEG}（${{ inputs.platform }}）"
+          git push origin "HEAD:${GITHUB_REF_NAME}"

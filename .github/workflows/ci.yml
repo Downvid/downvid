@@ -17,11 +17,24 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     steps:
-      # 类型检查与构建不需要 yt-dlp/ffmpeg 二进制，不拉取 LFS
       - uses: actions/checkout@v7
+      # 运行依赖（yt-dlp / ffmpeg）不再入库，改为运行时探测与下载，
+      # 因此 CI 只需构建 Go 边车，不再拉取任何二进制
+      - name: Setup Go
+        uses: actions/setup-go@v7
         with:
-          lfs: false
+          go-version: '1.24'
+          # 侧车只用标准库，没有 go.sum，无需缓存依赖
+          cache: false
+      - name: Check Go backend
+        working-directory: backend
+        run: |
+          gofmt -l . | tee /tmp/gofmt.out
+          test ! -s /tmp/gofmt.out
+          go vet ./...
+          go test ./...
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:
@@ -34,12 +47,31 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Type check
         run: pnpm vue-tsc --noEmit
+      # 依赖清单必须与上游一致：版本落后或哈希对不上会在用户端变成"下载即校验失败"
+      - name: Check dependency manifest
+        if: runner.os == 'Linux'
+        run: pnpm deps:manifest:check
       - name: Build
         run: pnpm vite build
       # 校验 electron-builder 配置并打包到目录（不生成安装包），配置与新版 schema 不兼容时在 PR 阶段即可发现
       - name: Package (dir)
         if: runner.os == 'Linux'
         run: pnpm exec electron-builder --linux dir --publish never --config electron-builder.json5
+      # 打包产物必须带上依赖边车，否则用户机上依赖检测与下载会整体失效
+      - name: Verify sidecar bundled
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          test -x release/*/linux-unpacked/resources/downvid-deps/downvid-deps
+      # 安装包里不应再出现 yt-dlp / ffmpeg（体积与授权都靠这条约束守住）
+      - name: Verify no bundled binaries
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          if find release/*/linux-unpacked/resources -name 'yt-dlp*' -o -name 'ffmpeg*' | grep -q .; then
+            echo "::error::安装包中仍包含 yt-dlp/ffmpeg 二进制"
+            exit 1
+          fi
       - name: Update manifest script
         shell: bash
         run: |
