@@ -40,7 +40,7 @@
           class="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-surface-container-low hover:bg-surface-container-highest transition-colors group border border-outline-variant/10 text-left"
         >
           <div class="w-9 h-9 rounded-lg bg-surface-container-highest flex items-center justify-center group-hover:bg-surface transition-colors">
-            <MaterialIcon name="code" :size="18" class="text-on-surface" />
+            <GitHubIcon :size="18" class="text-on-surface" />
           </div>
           <div class="flex-1 min-w-0">
             <p class="text-sm font-medium text-on-surface">GitHub</p>
@@ -159,6 +159,35 @@
         <span class="text-xs font-medium text-primary bg-primary/10 px-3 py-1 rounded-full">MIT License</span>
       </div>
 
+      <!-- 支持项目 -->
+      <div class="mt-6 p-4 rounded-xl bg-surface-container-low border border-outline-variant/10">
+        <div class="flex items-center gap-2 mb-3">
+          <MaterialIcon name="favorite" :size="18" class="text-primary" />
+          <p class="text-sm font-medium text-on-surface">支持 DownVid</p>
+        </div>
+        <p class="text-xs text-on-surface-variant leading-relaxed mb-3">
+          如果这个工具对你有帮助，欢迎请作者喝杯咖啡 ☕
+        </p>
+        <button
+          class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-surface-container-high hover:bg-surface-container-highest transition-colors border border-outline-variant/15"
+          @click="showDonate = !showDonate"
+        >
+          <MaterialIcon :name="showDonate ? 'expand_less' : 'qr_code_2'" :size="18" class="text-on-surface-variant" />
+          <span class="text-sm font-medium text-on-surface">{{ showDonate ? '收起赞赏码' : '显示赞赏码' }}</span>
+        </button>
+
+        <Transition name="donate">
+          <div v-if="showDonate" class="mt-3 flex flex-col items-center gap-2">
+            <img
+              src="../assets/donate.jpg"
+              alt="微信赞赏码"
+              class="w-52 rounded-lg border border-outline-variant/15"
+            />
+            <p class="text-[11px] text-on-surface-variant">微信扫码赞赏 — 给 Black Cat 赞赏</p>
+          </div>
+        </Transition>
+      </div>
+
       <!-- Copyright -->
       <div class="text-center pt-4">
         <p class="text-xs text-on-surface-variant/60">© 2026 DownVid</p>
@@ -174,6 +203,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import MaterialIcon from './icons/MaterialIcon.vue'
+import GitHubIcon from './icons/GitHubIcon.vue'
 import UpdateModal from './UpdateModal.vue'
 import { ISSUES_URL, REPO_SLUG, REPO_URL } from '../../shared/app'
 
@@ -189,6 +219,8 @@ interface Contributor {
 
 /** 界面展示用的仓库标识（去掉 https:// 前缀） */
 const repoLabel = `github.com/${REPO_SLUG}`
+
+const showDonate = ref(false)
 
 const appVersion = ref('1.0.0')
 const showUpdateDrawer = ref(false)
@@ -234,3 +266,8 @@ async function openExternal(url: string) {
   } catch {}
 }
 </script>
+
+<style scoped>
+.donate-enter-active, .donate-leave-active { transition: opacity 0.2s ease, transform 0.2s ease; }
+.donate-enter-from, .donate-leave-to { opacity: 0; transform: translateY(-4px); }
+</style>

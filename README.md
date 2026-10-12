@@ -52,9 +52,9 @@
   - [从源码构建](#从源码构建)
 - [文档](#-文档)
 - [技术栈](#-技术栈)
-- [架构图](#-架构图)
+- [架构](#-架构)
 - [项目结构](#-项目结构)
-- [贡献指南](#-贡献指南)
+- [贡献](#-贡献)
 - [常见问题](#-常见问题)
 - [更新日志](#-更新日志)
 - [支持项目](#-支持项目)
@@ -128,48 +128,19 @@ DownVid 通过 yt-dlp 支持 **1000+ 个**视频和音频平台。主要支持�
 
 ### 从源码构建
 
-#### 环境要求
-
-| 依赖 | 版本 | 用途 |
-|------|------|------|
-| [Node.js](https://nodejs.org/) | >= 22 | 构建前端与主进程 |
-| [pnpm](https://pnpm.io/) | >= 8 | 包管理（勿用 npm / yarn，会破坏 workspace） |
-| [Go](https://go.dev/) | >= 1.24 | 编译依赖边车 `backend/cmd/downvid-deps` |
-| Git | — | — |
-
-> yt-dlp / ffmpeg **无需**预先安装：运行时由边车自动识别，缺失时可在应用内一键下载。
-> 想自己装一份也行（`brew install yt-dlp ffmpeg` / `winget install yt-dlp.yt-dlp Gyan.FFmpeg`），会被优先复用。
-
-#### 1. 克隆并安装
+需要 **Node.js ≥ 22**、**pnpm ≥ 8**、**Go ≥ 1.24**（编译依赖边车）。
+yt-dlp / ffmpeg **无需**预先安装——运行时由边车自动识别系统版本，缺失可在应用内一键下载。
 
 ```bash
 git clone https://github.com/yxxbc/downvid.git
 cd downvid
 pnpm install
-```
-
-#### 2. 运行与构建
-
-```bash
 pnpm dev              # 开发模式（Vite + Electron 热重载，会自动编译 Go 边车）
-
-pnpm build            # 构建当前平台安装包
-pnpm build:mac:arm64  # 指定平台与架构，另有 :mac:x64 / :win / :linux:x64 / :linux:arm64
+pnpm build            # 打包当前平台安装包
 ```
 
-#### 3. 代码检查
-
-```bash
-pnpm vue-tsc --noEmit      # 前端类型检查
-pnpm test                  # 纯逻辑单测（Vitest）
-pnpm lint:ipc              # IPC 契约校验（三处同步）
-cd backend && go vet ./... && go test ./...   # Go 边车
-pnpm deps:manifest:check   # 依赖清单是否落后上游
-```
-
-> 📖 详细的构建说明请查看 [从源码构建指南](./docs/build-from-source.md)，改动流程见 [仓库规范](./docs/standards.md)。
-
----
+> 📖 环境要求、各平台构建命令、代码检查与常见构建问题见 [从源码构建指南](./docs/build-from-source.md)。
+> 改动流程与手动维护点见 [仓库规范](./docs/standards.md)。
 
 ## 📚 文档
 
@@ -180,6 +151,7 @@ pnpm deps:manifest:check   # 依赖清单是否落后上游
 | [故障排除指南](./docs/troubleshooting.md) | 各种问题的详细排查步骤和解决方案 |
 | [常见问题 (FAQ)](./docs/faq.md) | 使用中的常见疑问解答 |
 | [架构说明](./docs/architecture.html) | 进程结构、IPC 边界、下载与依赖解析流程 |
+| [项目结构](./docs/project-structure.md) | 目录树、各脚本用途、手动维护点清单 |
 | [仓库规范](./docs/standards.md) | 分支/提交规范、Issue 与 PR 流程、改动落点清单 |
 | [发布流程](./docs/release.md) | 版本语义、发布步骤、产物命名契约与回滚 |
 | [贡献指南](./CONTRIBUTING.md) | 如何参与项目开发 |
@@ -210,88 +182,56 @@ pnpm deps:manifest:check   # 依赖清单是否落后上游
 
 ---
 
-## 📐 架构图
+## 📐 架构
 
-<details>
-<summary>点击展开完整架构图（也可直接查看 <a href="docs/architecture.html">交互式版本</a>）</summary>
-<br />
+DownVid 由三个进程/组件构成：**渲染进程**（Vue 3 界面）、**主进程**（Node.js，负责下载、解析、更新）、
+**Go 依赖边车**（探测与安装 yt-dlp / ffmpeg）。三者通过 IPC 与 NDJSON 通信。
 
-<img src="docs/architecture.svg" alt="DownVid Architecture" width="100%" />
-
-</details>
+> 📖 交互式架构图见 [docs/architecture.html](./docs/architecture.html)（也可导出 PNG / PDF）。
 
 ---
 
 ## 📁 项目结构
 
-```
-downvid/
-├── backend/                # Go 依赖边车（探测 + 下载 yt-dlp / ffmpeg）
-│   ├── cmd/downvid-deps/   # 入口：detect / fetch 两个子命令
-│   └── internal/
-│       ├── probe/          # 执行二进制并解析版本号
-│       ├── runtime/        # 候选路径解析（系统优先，登录 shell 补 PATH）
-│       ├── fetch/          # 下载、SHA-256 校验、原子安装
-│       ├── manifest/       # 版本与哈希清单（由脚本生成）
-│       └── cli/            # NDJSON 输出
-├── electron/               # Electron 主进程
-│   ├── main.ts             # 入口：窗口、生命周期、日志
-│   ├── ipc/                # IPC 按域拆分：app / deps / download / history / system
-│   ├── download/           # 下载实现：direct（CDN 直链）/ ytdlp / progress
-│   ├── parsers/            # 平台解析：douyin / kuaishou / ytdlp / formats
-│   ├── utils/              # runtime（边车）、binary（依赖解析）、cookies、browser
-│   └── updater.ts          # 应用内更新（含 macOS 自实现替换 .app）
-├── src/                    # 渲染进程（Vue 3 + Tailwind + Pinia）
-│   ├── components/         # 视图与组件（含 DepPanel / DepsPrompt）
-│   ├── composables/        # useErrorModal / useUpdater
-│   ├── stores/             # Pinia：download（队列）、deps（运行依赖）
-│   └── types/              # 共享类型
-├── shared/app.ts           # 仓库坐标与外部链接的唯一来源
-├── tests/                  # Vitest 纯逻辑单测
-├── scripts/                # 清单生成、构建边车、IPC 契约校验
-├── docs/                   # 安装、构建、故障排除、规范、发布、架构
-└── .github/workflows/      # CI / CodeQL / 依赖审查 / 发布 / 依赖清单更新
-```
+| 目录 | 说明 |
+|------|------|
+| `backend/` | Go 依赖边车：探测并复用系统已安装的 yt-dlp / ffmpeg，缺失时下载 |
+| `electron/` | 主进程：窗口、IPC、下载实现、平台解析器、更新 |
+| `src/` | 渲染进程：Vue 3 + Tailwind + Pinia |
+| `shared/` | 仓库坐标与外部链接的唯一来源 |
+| `tests/` | Vitest 纯逻辑单测 |
+| `scripts/` | 清单生成、构建边车、IPC 契约校验、Release 正文生成 |
+| `docs/` | 安装、构建、故障排除、规范、发布、架构 |
 
-构建产物（`dist/`、`dist-electron/`、`backend/build/`、`release/`）不入库。
+> 📖 完整的目录树、各脚本用途与**手动维护点清单**见 [项目结构](./docs/project-structure.md)。
 
 ---
 
-## 🤝 贡献指南
+## 🤝 贡献
 
-欢迎贡献！请遵循以下步骤：
+欢迎提交 Issue 与 PR。
 
-1. **Fork** 本仓库
-2. 创建你的特性分支：`git checkout -b feature/AmazingFeature`
-3. 提交你的更改：`git commit -m 'Add some AmazingFeature'`
-4. 推送到分支：`git push origin feature/AmazingFeature`
-5. 开启一个 **Pull Request**
-
-### 开发规范
-
-- 代码遵循 TypeScript 严格模式（前端）与 `gofmt` / `go vet`（Go 侧车）
-- 提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/) 规范
-- 新增功能请同步更新文档和 CHANGELOG
+- 📖 流程与规范见 [贡献指南](./CONTRIBUTING.md) 与 [仓库规范](./docs/standards.md)
+- 提交信息遵循 [Conventional Commits](https://www.conventionalcommits.org/zh-hans/)
+- 提交前请跑一遍：`pnpm vue-tsc --noEmit && pnpm test && pnpm lint:ipc`
 
 ---
 
 ## ❓ 常见问题
 
-### Q: 下载提示缺少 yt-dlp / ffmpeg？
-A: DownVid 不再内置这两个工具，启动时会自动查找系统里已安装的版本；找不到就会弹出提示，点「下载并继续」即可自动装好（会校验 SHA-256，并放在 DownVid 自己的数据目录里，不污染系统）。也可以在「设置 → 运行依赖」里查看当前用的是哪个版本、来自哪里，并手动指定路径。
+**下载提示缺少 yt-dlp / ffmpeg？**
+安装包不内置这两个工具，启动时会自动识别系统里已安装的版本。找不到就点弹出的「下载并继续」，
+或到「设置 → 运行依赖」查看每一项的版本、来源与路径。
 
-### Q: 为什么有些视频下载失败？
-A: 部分平台需要登录才能访问，请在设置中导入浏览器 Cookie。也可能是 yt-dlp 版本过旧，尝试更新到最新版本。
+**macOS 提示「无法打开，因为无法验证开发者」？**
+首次安装时右键点击应用选「打开」，或到「系统设置 → 隐私与安全性」点「仍要打开」。
+若提示「已损坏」，执行 `xattr -cr /Applications/DownVid.app`。首次打开后应用会自动处理，
+后续的应用内更新无需重复操作。
 
-### Q: 支持哪些视频画质？
-A: 支持 360p / 480p / 720p / 1080p，具体取决于源平台提供的画质选项。也支持纯音频下载模式。
+**有些视频下载失败？**
+多数是需要登录的平台，请在设置中导入浏览器 Cookie 或使用自动读取。
 
-### Q: macOS 提示"无法打开，因为无法验证开发者"？
-A: 首次安装时右键点击应用，选择"打开"，或在"系统设置 → 隐私与安全性"中点击"仍要打开"；若提示"已损坏"，在终端执行 `xattr -cr /Applications/DownVid.app`。首次成功打开后，DownVid 会自动移除自身的隔离属性，之后的应用内更新也会自动处理，无需重复操作。
-
-> 📖 更多常见问题请查看 [常见问题 (FAQ)](./docs/faq.md)
-> 
-> 📖 遇到问题？查看 [故障排除指南](./docs/troubleshooting.md)
+> 📖 更多问题见 [常见问题](./docs/faq.md)，排查步骤见 [故障排除](./docs/troubleshooting.md)。
 
 ---
 
@@ -309,10 +249,13 @@ A: 首次安装时右键点击应用，选择"打开"，或在"系统设置 → 
 
 如果 DownVid 对你有帮助，欢迎请作者喝杯咖啡 ☕
 
-<div align="center">
-  <img src="src/assets/donate.jpg" alt="微信赞赏码" width="260" />
-  <p><em>微信扫码赞赏 — 给 Black Cat 赞赏</em></p>
-</div>
+<details>
+<summary>点击展开微信赞赏码</summary>
+<br />
+
+<img src="src/assets/donate.jpg" alt="微信赞赏码" width="240" />
+
+</details>
 
 ---
 

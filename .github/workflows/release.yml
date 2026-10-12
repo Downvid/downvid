@@ -253,24 +253,18 @@ jobs:
       - name: Generate update manifests
         run: node scripts/gen-update-manifests.mjs artifacts "$VERSION"
 
-      - name: Extract release notes from CHANGELOG
+      # 正文顶部生成「点徽章即下载」的引导区：Release 里 CHANGELOG 内容较长，
+      # 此前不少用户拉到页面后不知道点哪里下载。下载链接按实际产物生成，
+      # 不会出现指向不存在文件的死链。
+      - name: Generate release notes
         id: changelog
         run: |
-          TAG="v${VERSION}"
-          
-          NOTES=$(awk "/^## \\[${VERSION}\\]/{found=1; next} /^## \\[/{if(found) exit} found{print}" CHANGELOG.md)
-          
-          if [ -z "$NOTES" ]; then
-            NOTES=$(awk '/^## \[Unreleased\]/{found=1; next} /^## \[/{if(found) exit} found{print}' CHANGELOG.md)
-          fi
-          
-          if [ -z "$NOTES" ]; then
-            NOTES="DownVid ${TAG} 发布"
-          fi
-          
-          echo "notes<<EOF" >> $GITHUB_OUTPUT
-          echo "$NOTES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          node scripts/gen-release-notes.mjs artifacts "$VERSION" CHANGELOG.md > /tmp/release-notes.md
+          {
+            echo "notes<<RELEASE_NOTES_EOF"
+            cat /tmp/release-notes.md
+            echo "RELEASE_NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Create Release
         uses: softprops/action-gh-release@v3

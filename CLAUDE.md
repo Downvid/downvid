@@ -1,99 +1,304 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Guidance when working in this repository. Mirror of `AGENTS.md` (Chinese) — **keep the two in sync**.
 
-## Project
+This project has more coupling than its file count suggests: several things are **hand-maintained in
+multiple places**, and missing one fails silently (no error, feature just doesn't work). Read
+"Change-impact checklist" before touching anything.
 
-DownVid — Electron 44 + Vue 3 desktop video downloader wrapping `yt-dlp` + `ffmpeg`. Repo dir is `videdown`, package/product name is `downvid`/DownVid. All UI strings, comments and commit bodies are Chinese — match that.
+---
 
 ## Commands
 
 ```bash
 pnpm install
-# Note: pnpm dev / pnpm build also compile the Go sidecar (requires Go 1.24+)
-pnpm dev                    # vite dev server + electron (hot reload for both processes)
-pnpm vue-tsc --noEmit       # type check — this is the only "lint" in CI
+pnpm dev                    # vite dev server + electron, hot reload; also compiles the Go sidecar
+pnpm vue-tsc --noEmit       # renderer/main type check (strict + noUnusedLocals + noUnusedParameters)
+pnpm test                   # pure-logic unit tests (Vitest, tests/*.test.ts)
+pnpm lint:ipc               # static check of the hand-maintained IPC wiring
+pnpm deps:manifest:check    # is the dependency manifest behind upstream?
 pnpm build                  # vue-tsc && vite build && electron-builder (current platform)
 pnpm build:mac:arm64        # also :mac:x64 :win :linux:x64 :linux:arm64
+cd backend && gofmt -l . && go vet ./... && go test ./...
 ```
 
-TypeScript is pinned to 5.x: vue-tsc can't run on TypeScript 7 (the Go port drops `typescript/lib/tsc`); Dependabot ignores its major bumps.
+Requires **Node ≥ 22, pnpm ≥ 8, Go ≥ 1.24**. yt-dlp / ffmpeg need *not* be preinstalled.
 
-No ESLint/Prettier installed (CONTRIBUTING.md claims otherwise). Tests live in two places: `backend/internal/*/**_test.go` (`go test ./...`) and `tests/*.test.ts` (`pnpm test`, Vitest — pure logic only). `pnpm lint:ipc` statically checks the hand-maintained IPC wiring. CI (`.github/workflows/ci.yml`) runs `gofmt -l` + `go vet` + `go test` on the backend, `pnpm deps:manifest:check`, `pnpm lint:ipc`, `vue-tsc --noEmit`, `pnpm test`, `vite build`, and a packaging smoke test (+ `scripts/gen-update-manifests.mjs`) on the 3 OSes. `tsconfig.json` has `strict` + `noUnusedLocals` + `noUnusedParameters`, so an unused import fails the build.
+No ESLint/Prettier — **do not add them** (formatting churn would swamp the history). TypeScript is
+pinned to 5.x: vue-tsc can't run on TypeScript 7 (the Go port drops `typescript/lib/tsc`); Dependabot
+ignores its major bumps.
 
-Release: bump `package.json` version → add a `## [x.y.z]` section to `CHANGELOG.md` → push tag `v*` (or run `release.yml` manually with a `version` input equal to `package.json`'s; the workflow then creates the tag). `release.yml` builds 5 arch targets (each job just installs Go + Node — no binaries are checked in), regenerates every `latest*.yml` from the final artifacts via `scripts/gen-update-manifests.mjs` (per-job manifests used to overwrite each other), and greps release notes out of CHANGELOG by that exact header. Artifact names are what old clients' updater manifests point at — don't rename `DownVid-Setup-*`, `DownVid-<arch>-Mac-*`, `DownVid-x86_64-Linux-*` etc.
+### Tests
 
-Updating the runtime dependency manifest: run the `Update dependencies manifest` workflow (`update-deps.yml`, manual) — it runs `scripts/gen-deps-manifest.mjs`, which scrapes upstream tags and SHA-256s and commits `backend/internal/manifest/assets.gen.go`. Locally: `pnpm deps:manifest`. Nothing binary is checked in any more.
+Two layers: Go sidecar (`backend/internal/*/**_test.go`) and renderer/main pure logic
+(`tests/*.test.ts`, Vitest, `environment: 'node'` — deliberately no jsdom).
+
+- Cover **pure functions only**: format selection, dependency-error parsing, yt-dlp arg assembly,
+  parser shared helpers, the updater state machine.
+- Do **not** unit-test anything needing the DOM or a real subprocess — type check, `lint:ipc` and
+  real-app verification cover that instead.
+- Target **branches that have actually broken before**, not coverage numbers.
+- **Mutation-check every new test**: break the implementation, confirm the test fails.
+  A test that cannot fail is worthless.
+- `vitest.config.ts` is separate from `vite.config.ts` on purpose — the latter runs `go build`
+  in `buildStart`, which tests must not trigger.
+
+---
+
+## Cross-platform build traps
+
+All four have bitten us for real; the CI windows job caught them, not local macOS.
+
+1. **`process.platform` is not `GOOS`.** Node says `win32`, Go says `windows`. Passing it through
+   yields `unsupported GOOS/GOARCH pair win32/amd64`. macOS/Linux pass only because the names
+   coincide — that's why local and the ubuntu/macos CI jobs are blind to it. See
+   `GOOS_BY_PLATFORM` in `vite.config.ts` and `scripts/build-backend.sh`.
+2. **The default shell differs.** Windows runners use PowerShell: `/tmp` resolves to `D:\tmp` and
+   `test ! -s` doesn't exist. Add `shell: bash` for POSIX semantics.
+3. **Line endings.** Windows defaults to `core.autocrlf=true`, so files check out as CRLF — and CRLF
+   is not what `gofmt` emits, so `gofmt -l` flags **every** Go file. The repo root `.gitattributes`
+   (`* text=auto eol=lf`) normalizes this. **Do not delete that file.**
+4. **Path assertions.** Never hardcode `/tmp/out/...` in tests; production code uses `path.join`,
+   which yields backslashes on Windows. Build expectations with `path.join`.
+
+**Hard rule**: any new CI build/check step must first be reproduced locally under
+non-host-platform semantics (cross-compile to `win32`, check out with `core.autocrlf=true`).
+Validating YAML syntax is not enough.
+
+---
 
 ## Architecture
 
-Two processes, both TypeScript, both built by `vite-plugin-electron/simple` from one `vite.config.ts`:
+Three components: **renderer** (Vue 3 UI), **main process** (Node — downloading, parsing, updates),
+and a **Go sidecar** (detects and installs yt-dlp / ffmpeg). They talk over IPC and NDJSON.
 
-- `electron/` → main process, output `dist-electron/`
-- `src/` → Vue 3 renderer (`<script setup>`, Tailwind, Pinia), output `dist/`
+| Path | Contents | Output |
+|------|----------|--------|
+| `backend/` | Go dependency sidecar | `backend/build/<platform>-<arch>/` |
+| `electron/` | main process | `dist-electron/` |
+| `src/` | Vue 3 renderer (`<script setup>`, Tailwind v4, Pinia) | `dist/` |
+| `shared/app.ts` | **single source** of repo coordinates and external links | imported by all three |
+| `tests/` | Vitest pure-logic tests | — |
+| `scripts/` | manifest generation, sidecar build, IPC lint, release notes | — |
 
-### The IPC boundary is hand-maintained in three places
+Both Electron processes are built by `vite-plugin-electron/simple` from one `vite.config.ts`;
+the Go sidecar comes from the `goBackend()` plugin in that same file.
 
-Adding anything the renderer calls in main means editing all three or it silently breaks:
+### Change-impact checklist
 
-1. `electron/ipc/<domain>.ts` — `ipcMain.handle(...)`, registered from `electron/main.ts`
-2. `electron/preload.ts` — `contextBridge` entry under `window.electronAPI`
-3. `src/env.d.ts` — the `Window.electronAPI` type (no generation, purely manual)
+**1. New renderer-callable main capability → three files must change together:**
 
-Progress/events flow the other way as broadcasts (`download:progress`, `history:updated`, `update:status`, `menu:showAbout`); renderer subscribers return an unsubscribe closure.
+| # | File | Change |
+|---|------|--------|
+| 1 | `electron/ipc/<domain>.ts` | `ipcMain.handle(...)`, registered from `electron/main.ts` |
+| 2 | `electron/preload.ts` | `contextBridge` entry |
+| 3 | `src/env.d.ts` | `Window.electronAPI` type |
+
+`pnpm lint:ipc` cross-checks all three (registered-but-not-exposed, exposed-but-not-implemented,
+declared-but-not-exposed, API-group coverage both ways).
+
+> `src/env.d.ts` must have **no top-level import/export** — that turns it from a global declaration
+> script into a module and `interface Window` stops applying. Reference dependency types inline:
+> `import('./types/deps')`. A second `Window.electronAPI` in `electron/electron-env.d.ts` used to
+> shadow the real one and hide broken call sites from the type checker. That file is deleted —
+> don't restore it.
+
+**2. New broadcast event (main → renderer) → four places:**
+
+1. the send site (`broadcast('…')` / `webContents.send('…')`)
+2. `electron/preload.ts` `ipcRenderer.on` returning an unsubscribe closure
+3. the type in `src/env.d.ts`
+4. subscribers **must call unsubscribe on unmount** (otherwise hot reload accumulates listeners)
+
+Existing: `download:progress`, `history:updated`, `update:status`, `menu:showAbout`, `deps:progress`.
+A broadcast event must **not** double as an `ipcMain.handle` channel (`lint:ipc` enforces this).
+
+**3. Changing user settings shape → silently breaks existing users.**
+
+Settings live in `localStorage['settings']` (**not** Pinia) and are read directly by several
+components. Fields: `downloadDir`, `filenameTemplate`, `preferredQuality`, `cookieMode`,
+`cookiesFile`, `proxy`, `depPaths`.
+
+- `grep -rn "localStorage.getItem('settings')"` first; confirm each read has a default
+- Read as `{ ...defaults, ...JSON.parse(saved) }` so old data still works
+- **Removing or renaming a field is a MAJOR change** (see `docs/release.md`)
+- Update `src/components/SettingsView.vue` and `src/components/DepPanel.vue` too
+
+**4. Runtime dependencies (yt-dlp / ffmpeg / ffprobe):**
+
+- New dep kind → `backend/internal/runtime` (`Kinds`/`Optional`/candidates) + `DepKind` in `src/types/deps.ts`
+- Source or version change → only edit the asset table in `scripts/gen-deps-manifest.mjs`, then
+  `pnpm deps:manifest`. **Never hand-edit** `assets.gen.go` (generated)
+- New platform → manifest asset table + `electron-builder.json5` + `release.yml` matrix
+- The `[[deps-missing:<kind>]]` marker is a contract between `electron/utils/binary.ts` (produces)
+  and `readMissingKinds` in `src/stores/deps.ts` (parses) — covered by `tests/deps-error.test.ts`
+
+**5. Changing release artifacts → cuts off auto-update for existing users.**
+
+Names are referenced by older clients' `latest*.yml`. Renaming `DownVid-Setup-*`,
+`DownVid-Portable-*`, `DownVid-<arch>-Mac-*`, `DownVid-x86_64-Linux-*` breaks every installed copy.
+`lint:ipc` checks the `artifactName` entries. Linux uses `amd64`/`x86_64`, not `x64`.
+
+**6. Repo coordinates / links** live only in `shared/app.ts` (main re-exports via
+`electron/constants.ts`). `electron-builder.json5`'s `publish` is build-time config that runtime
+can't read — `lint:ipc` cross-checks it. Moving repos means editing `shared/app.ts` + `publish` +
+workflow references, all three.
+
+---
 
 ### Runtime dependencies (yt-dlp / ffmpeg)
 
-**The installer no longer ships yt-dlp or ffmpeg.** On startup a Go sidecar resolves them in this order ("prefer the machine's own, download only if missing"):
+**The installer ships no binaries** (was ~80 MB per arch, and Git LFS pushed the repo past 800 MB).
+A Go sidecar resolves them at startup, "prefer the machine's own, download only if missing":
 
-1. Paths set manually in settings (`localStorage['settings'].depPaths`)
-2. `userData/runtime/bin/` (installed by DownVid, safe to overwrite)
-3. The login shell's `PATH` (GUI apps only get a stripped `PATH`, so this step matters) plus per-platform common install dirs
-4. Bare command names, left to `PATH`
+1. Paths set manually in settings (`localStorage['settings'].depPaths`) — **detection only**
+2. `userData/runtime/bin/` (DownVid-installed, safe to overwrite)
+3. login shell `PATH` (GUI apps get a stripped `PATH`, so this step is essential) + per-platform
+   common install dirs
+4. bare command names, left to `PATH`
 
-- The sidecar (`backend/cmd/downvid-deps`) has two subcommands: `detect` and `fetch`. **stdout carries NDJSON only; every log line goes to stderr**, and Electron parses stdout line by line.
-- `electron/utils/runtime.ts` locates the sidecar (packaged: `resources/downvid-deps/`), runs it, caches detection for 60s, and broadcasts `deps:progress`; `electron/ipc/deps.ts` exposes `deps:status/check/download/cancel/openDir/diagnostics`.
-- `resolveDependency()` in `electron/utils/binary.ts` is the single entry point. On failure it throws `MissingDependencyError` whose message contains a `[[deps-missing:<kind>]]` marker, which the renderer turns into a one-click download prompt (same idea as the cookie hint's `\n\n提示：` marker).
-- **Manual paths only affect detection**; `fetch` ignores them and always writes to the managed dir, so a user's own install is never overwritten.
-- Versions are pinned rather than "latest": `backend/internal/manifest/assets.gen.go` is generated by `scripts/gen-deps-manifest.mjs` and records each tag + SHA-256. ffmpeg comes from ffmpeg-static (smaller, has libmp3lame/aac/x264); gzip artifacts are verified **as downloaded** and only extracted after the checksum passes.
-- On macOS, install must `xattr -c` + `codesign --force --sign -`: network-downloaded executables carry quarantine and Apple Silicon kills them outright (`killed: 9`).
-- Renderer side: `src/stores/deps.ts`, `src/components/DepPanel.vue` (the settings section) and `src/components/DepsPrompt.vue` (the download prompt mounted in `App.vue`).
+- Sidecar has two subcommands, `detect` and `fetch`. **stdout carries NDJSON only; logs go to
+  stderr** — Electron parses stdout line by line, so a stray log line breaks parsing.
+- Go standard library only: it's cross-compiled into five binaries shipped in the installer, so
+  auditability wins over convenience. Think twice before adding a third-party dep.
+- gzip artifacts are verified **as downloaded** (hash of the compressed file), then extracted.
+  Writes go to `.part` and are atomically renamed — a failure never leaves half an executable.
+- macOS install must `xattr -c` + `codesign --force --sign -`: network-downloaded executables carry
+  quarantine and Apple Silicon kills them outright (`killed: 9`).
+- URLs in error messages get their query string stripped — GitHub's signed JWT is hundreds of
+  characters and would swamp the UI.
+- `electron/utils/runtime.ts` locates the sidecar (packaged: `resources/downvid-deps/`), runs it,
+  caches detection 60 s, broadcasts `deps:progress`. Downloads run in main, so closing the window
+  doesn't abort them. `electron/ipc/deps.ts` exposes
+  `deps:status/check/download/cancel/openDir/diagnostics`.
+- `resolveDependency()` in `electron/utils/binary.ts` is the single entry point; on failure it throws
+  `MissingDependencyError` carrying a `[[deps-missing:<kind>]]` marker the renderer turns into a
+  one-click download prompt (same trick as the cookie hint's `\n\n提示：`).
+- **Manual paths only affect detection**; `fetch` ignores them, so a user's own install is never
+  overwritten.
+- `pnpm deps:manifest` (or the `Update dependencies manifest` workflow) refreshes
+  `assets.gen.go`. A stale manifest or hash mismatch shows up as "download then checksum failure" on
+  user machines, hence `deps:manifest:check` in CI. ffmpeg-static has no published checksums, so the
+  script downloads each gzip to hash it (~130 MB of traffic).
 
-### Parse dispatch (`electron/ipc/download.ts` → `ytdlp:parse`)
+### Parse dispatch (`ytdlp:parse`)
 
-Douyin and Kuaishou have bespoke parsers (`electron/parsers/`): platform API first, headless `puppeteer-core` driving a *system-installed* Chrome/Edge (`utils/browser.ts`) as fallback. Every failure is swallowed by an empty `catch` and falls through to `parseWithYtdlp`. When debugging a parse bug, check which branch actually ran — the errors are invisible.
+Douyin and Kuaishou have bespoke parsers: platform API first, headless `puppeteer-core` driving a
+*system-installed* Chrome/Edge as fallback. Every failure is swallowed by an empty `catch` and falls
+through to `parseWithYtdlp`. When debugging a parse bug, check which branch actually ran — the errors
+are invisible.
 
 ### Download has two entirely separate paths
 
-- `directUrl` present (Douyin/Kuaishou only — their parsers return a CDN URL) → `downloadDirectFile`, a plain `fetch` + write stream with hand-rolled progress.
-- Otherwise → `spawn(yt-dlp)` with `--load-info-json <parse cacheFile>` when the parse result is < 20 min old (skips re-extraction; falls back to the URL if it fails before downloading). Progress comes from `--progress-template` lines prefixed `[dvp]` (stdout) / `[dvpp]` (postprocess — **stderr** under the quiet mode `--print` implies); the final path from `--print after_move:[dvfile]%(filepath)s`. Format selector (`buildFormatSelector`: merge `bestaudio` only when the format has no audio), audio-only (`-x mp3`), subtitle-only, YouTube multi-audio-track are all assembled as arg arrays here.
-- Direct downloads use 4 parallel `Range` segments when the CDN supports it; pause goes through an `AbortController` stored in `activeDownloads`.
-- Video formats are built by the pure `electron/parsers/formats.ts`: formats without `vcodec` (X/Twitter mp4) are kept, m3u8 only kept for heights with no direct link, and a `bv*+ba/b` "最佳画质" fallback is offered when nothing has a height.
+Implementation lives in `electron/download/`; `electron/ipc/download.ts` only dispatches.
 
-Pause = `child.kill()` (plus `taskkill /T /F` on Windows) and the task is dropped from `activeDownloads` in `electron/store.ts`. Resume re-spawns yt-dlp, which continues from the leftover `.part` file. There is no cross-restart resume.
+- **`direct.ts`**: `directUrl` present (Douyin/Kuaishou only) → plain `fetch` + write stream, 4
+  parallel `Range` segments when supported (CDNs throttle single connections), per-segment resume.
+  Pause via an `AbortController` in `activeDownloads`. This path exists because those CDN URLs expire
+  fast and going through yt-dlp would re-hit the platform API for a different URL.
+- **`ytdlp.ts`**: `spawn(yt-dlp)`, using `--load-info-json <parse cacheFile>` when the parse is
+  < 20 min old (falls back to the URL if it fails before downloading starts). Progress comes from
+  `--progress-template` lines prefixed `[dvp]` (stdout) / `[dvpp]` (postprocess — **stderr** under
+  the quiet mode `--print` implies); final path from `--print after_move`. Format selector,
+  audio-only, subtitle-only and YouTube multi-audio-track are assembled in `buildYtdlpArgs`.
+- **`progress.ts`**: shared broadcast + throttle (≤1 IPC per 200 ms per task). Progress formatting is
+  defined here only — don't duplicate it.
+
+`buildYtdlpArgs` is a **pure function**: paths and JS runtime arrive via `BuildArgsContext`, so arg
+lists can be asserted without spawning anything (`tests/ytdlp-args.test.ts`).
+
+Formats are built by the pure `electron/parsers/formats.ts`. Three regressions it guards (all
+tested): keep formats without `vcodec` (X/Twitter mp4 has none), keep m3u8 only for heights with no
+direct link, and offer a `bv*+ba/b` fallback when nothing reports a height.
+
+Pause = `child.kill()` (plus `taskkill /T /F` on Windows), task dropped from `activeDownloads`.
+Resume re-spawns and continues from the `.part` file. **No cross-restart resume.**
 
 ### yt-dlp environment quirks
 
-- `utils/binary.ts`'s `resolveDependency()` gets `yt-dlp`/`ffmpeg` paths from the Go sidecar's detection result (see the "Runtime dependencies" section); **no binaries ship in the installer**.
-- YouTube needs a JS runtime for yt-dlp; `checkJsRuntime()` returns `process.execPath` (the Electron binary) as `--js-runtimes node:<path>`, so no separate Node install is needed in a packaged app.
-- Cookies go through `utils/cookies.ts` `runWithCookies`: manual file → none, or (auto) each installed browser → exported snapshot `userData/ytdlp-cookies/browser-cookies.txt` → none. It only moves to the next source on a cookie *load* error (`isCookieError`), never on auth errors, and an exception while preparing a source only skips that source. Downloads prefer a fresh (<30 min) snapshot so they match the parse. When a browser's cookies couldn't be read, errors get a `cookieFailureHint` appended after the `\n\n提示：` marker, which the renderer splits off into the error modal's `hint`.
-- Never create anything in `userData` whose name case-insensitively matches a Chromium file (`Cookies`, `Network`, `Preferences`, `Local Storage`…): macOS/Windows filesystems are case-insensitive (issue #31 — `userData/cookies` hit `EEXIST`).
+- `--ffmpeg-location` takes a **directory**, not a file: yt-dlp looks for both ffmpeg and ffprobe
+  there, which is what makes a managed-dir install work.
+- YouTube needs a JS runtime; `checkJsRuntime()` returns `process.execPath` (the Electron binary) as
+  `--js-runtimes node:<path>`, so packaged apps need no separate Node. Outside Electron a missing
+  runtime now errors explicitly (it used to be skipped silently).
+- **Subtitle mode doesn't need ffmpeg** — it isn't resolved, and no `--ffmpeg-location` is passed.
+- Cookies go through `utils/cookies.ts` `runWithCookies`: manual file → none, or (auto) each installed
+  browser → snapshot `userData/ytdlp-cookies/browser-cookies.txt` → none. It only moves to the next
+  source on a cookie *load* error (`isCookieError`), never on auth errors; an exception while
+  preparing a source only skips that source. Downloads prefer a fresh (<30 min) snapshot to match the
+  parse. Read failures append a `cookieFailureHint` after the `\n\n提示：` marker, which the renderer
+  splits into the error modal's `hint`.
+- **Never create anything in `userData` whose name case-insensitively matches a Chromium file**
+  (`Cookies`, `Network`, `Preferences`, `Local Storage`…): macOS/Windows filesystems are
+  case-insensitive (issue #31 — `userData/cookies` hit `EEXIST`).
 
 ### State
 
-- One Pinia store, `src/stores/download.ts` — queue, selection, and the download orchestration (`processDownload`).
-- User settings are **not** in Pinia: raw `localStorage['settings']` JSON (`downloadDir`, `filenameTemplate`, `preferredQuality`, `cookieMode`, `cookiesFile`), read directly by the store and several components. Change the shape in one place and you must grep for the rest.
-- Download history is main-process owned: `userData/download-history.json`, capped at 100 records, rebroadcast on every mutation.
-- No router. `App.vue` `v-show`es four views; cross-component navigation uses `window` CustomEvents (`tab-changed`, `navigate-to-settings`).
+| State | Where |
+|-------|-------|
+| Download queue / selection / orchestration | Pinia `src/stores/download.ts` |
+| User settings | **not** Pinia — `localStorage['settings']` |
+| Download history | main process, `userData/download-history.json`, capped at 100, rebroadcast on change |
+| Runtime dependencies | Pinia `src/stores/deps.ts` |
 
-### Gotchas
+- Deps UI: `src/components/DepPanel.vue` (settings section) and `DepsPrompt.vue` (download prompt
+  mounted in `App.vue`).
+- No router. `App.vue` `v-show`s views; navigation uses `window` CustomEvents (`tab-changed`,
+  `navigate-to-settings`).
+- The updater state machine is `src/composables/useUpdater.ts` (extracted from `UpdateModal.vue`).
+  Two easy-to-miss points are documented there: IPC return values and `update:status` broadcasts are
+  **two sources that both need handling**, and an error while downloading must be classified as the
+  download phase or the retry button jumps back to "check".
 
-- `electron/main.ts` disables GPU via six `commandLine.appendSwitch` calls — a macOS Tahoe + Electron 30 crash workaround. Don't drop them casually.
-- Updates live in `electron/updater.ts` (IPC in `ipc/app.ts` just delegates). Windows/Linux use electron-updater with `autoDownload = false`; macOS is unsigned so Squirrel can't work — it downloads the arch zip itself, verifies sha512, strips `com.apple.quarantine`, ad-hoc signs, and a detached bash script swaps the `.app` after quit (with rollback). Unsupported installs (tar.gz, Windows portable, running from DMG) get a GitHub-API check and a "go to releases" button. electron-updater uses its own `electron-updater` session partition, so `app:setProxy` sets the proxy there too.
-- Main process logs to `userData/downvid.log` (with a 5s heartbeat) and the Settings view reads the last 500 lines via `app:getLog` — that's the fastest way to diagnose a packaged-app crash.
-- Tailwind v4, CSS-first: no `tailwind.config.js`; Material-3-style semantic color tokens live in the `@theme` block of `src/style.css` (`bg-surface`, `text-on-surface-variant`, `surface-container-high`, …). Use those, not raw hex. The `@layer base` compat block there keeps v3 defaults (gray-200 borders, pointer cursor on buttons). `@custom-variant dark` is declared but nothing ever toggles the class.
-- Repo owner/name for the GitHub API and updater is hardcoded in `electron/constants.ts` and `electron-builder.json5`.
+### UI conventions
 
-## Conventions
+- **Tailwind v4**, CSS-first — no `tailwind.config.js`. Material-3 semantic tokens
+  (`bg-surface`, `text-on-surface-variant`, `surface-container-high`, …) are defined in `src/style.css`
+  `@theme`. **Use tokens, not raw hex.**
+- `@custom-variant dark` is declared but nothing ever toggles the class — there is **no dark mode
+  toggle**; don't claim otherwise in docs.
+- Icons: generic ones via `src/components/icons/MaterialIcon.vue` (Material Symbols). **Brand icons need
+  a dedicated SVG component** (e.g. `GitHubIcon.vue`) — don't substitute a generic Material glyph (a
+  `code` chevron was previously standing in for the GitHub mark).
+- Most `window.electronAPI` call sites use optional chaining (`?.`) because module-level calls can run
+  before preload finishes. Keep that habit.
 
-Conventional Commits (`feat(parser): …`), branches `feat/…` `fix/…` `docs/…` `chore/…`, PRs target `main`. See `CONTRIBUTING.md`.
+---
+
+## Release
+
+Bump `package.json` → add a `## [x.y.z]` section to `CHANGELOG.md` → push tag `v*` (or run
+`release.yml` manually with a `version` equal to `package.json`'s; the workflow creates the tag).
+
+`release.yml` builds 5 arch targets (each job installs only Go + Node — no binaries are checked in),
+then regenerates every `latest*.yml` from the **final artifacts** via
+`scripts/gen-update-manifests.mjs` (per-job manifests would overwrite each other).
+
+Release body is generated by `scripts/gen-release-notes.mjs`: clickable download badges on top, and
+links are built from **scanned artifacts** so they can't 404. Re-test it against fake artifacts after
+editing the template.
+
+Artifact names are what old clients' updater manifests point at — don't rename them.
+
+---
+
+## Gotchas
+
+- `electron/main.ts` has one `commandLine.appendSwitch('disable-gpu-sandbox')` — a macOS Tahoe +
+  Electron crash workaround. **Don't remove it.**
+- The app menu (`electron/menu.ts`) is registered **only on macOS**: on Windows/Linux Electron
+  renders it as an in-window menu bar on top of the custom header (`titleBarStyle: 'hidden'`), which
+  users saw as a stray tab strip.
+- Updates live in `electron/updater.ts` (IPC in `ipc/app.ts` just delegates). Windows/Linux use
+  electron-updater with `autoDownload = false`; macOS is unsigned so Squirrel can't work — it
+  downloads the arch zip, verifies sha512, strips quarantine, ad-hoc signs, and a detached bash script
+  swaps the `.app` after quit (with rollback). Unsupported installs (tar.gz, Windows portable, running
+  from DMG) get a GitHub-API check and a "go to releases" button. electron-updater uses its own
+  session partition, so `app:setProxy` sets the proxy there too.
+- Main logs to `userData/downvid.log` (5 s heartbeat); Settings reads the last 500 lines via
+  `app:getLog` — the fastest way to diagnose a packaged-app crash.
+- All UI strings, comments and commit bodies are **Chinese** — match that.
+- Branch names `feat/…` `fix/…` `docs/…` `chore/…`, Conventional Commits. `main` is **not** protected;
+  the maintainer pushes directly. PR conventions are advice for outside contributors.
+- `AGENTS.md` (Chinese) and `CLAUDE.md` (this file) are the same knowledge in two languages —
+  **changing one means changing the other.**
