@@ -1,0 +1,28 @@
+name: Dependency Review
+
+# 在 PR 上拦截新增的高危依赖与许可证问题。
+# 本项目会分发二进制到用户机器，供应链风险等同于发布风险，因此依赖变更必须过闸。
+#
+# 注意：只有 PR 中的依赖变更会被检查；Dependabot 的 PR 同样适用。
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Dependency Review
+        uses: actions/dependency-review-action@v5
+        with:
+          # 高危及以上直接拦截；低危只提示
+          fail-on-severity: high
+          # 允许的许可证白名单：项目本身是 MIT，不能引入与之冲突的强著佐权依赖
+          allow-licenses: MIT, ISC, Apache-2.0, BSD-2-Clause, BSD-3-Clause, 0BSD, Unlicense, CC0-1.0, Python-2.0, MPL-2.0
+          comment-summary-in-pr: on-failure

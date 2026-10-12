@@ -1,0 +1,22 @@
+# 代码所有者
+#
+# 这些路径的改动会自动请求对应维护者评审。
+# 目前由 @yxxbc 统一负责；后续如有共同维护者，按目录拆分职责即可。
+
+# 默认：所有文件
+*                       @yxxbc
+
+# 发布与供应链相关：改动会影响已发布客户端的更新能力，需格外谨慎
+/.github/workflows/     @yxxbc
+/electron-builder.json5 @yxxbc
+/scripts/gen-update-manifests.mjs @yxxbc
+/scripts/gen-deps-manifest.mjs    @yxxbc
+/backend/internal/manifest/       @yxxbc
+
+# 更新逻辑：换仓库 / 改清单会直接影响存量用户能否升级
+/electron/updater.ts    @yxxbc
+/electron/constants.ts  @yxxbc
+
+# 安全政策与治理
+/SECURITY.md            @yxxbc
+/CODE_OF_CONDUCT.md     @yxxbc

@@ -1,20 +1,61 @@
 version: 2
+
 updates:
+  # ===== 前端 / 主进程依赖 =====
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "build(deps)"
+      prefix-development: "build(deps-dev)"
+    labels: ["dependencies"]
     ignore:
-      # vue-tsc 尚不支持 TypeScript 7（Go 重写版）
+      # vue-tsc 尚不支持 TypeScript 7（Go 重写版去掉了 typescript/lib/tsc），
+      # 升级会导致 pnpm vue-tsc 直接无法运行
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
+      # Electron 大版本会改变原生 ABI，需人工验证打包与更新链路
+      - dependency-name: "electron"
+        update-types: ["version-update:semver-major"]
+    groups:
+      # 小版本与补丁合并成一个 PR，减少评审噪音
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
+  # ===== Go 依赖边车 =====
+  # 当前只用标准库，此处为后续引入第三方库预留；
+  # 无依赖时 Dependabot 不会产生任何 PR。
+  - package-ecosystem: "gomod"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "build(deps)"
+    labels: ["dependencies", "backend"]
     groups:
       minor-and-patch:
         update-types:
           - "minor"
           - "patch"
 
+  # ===== GitHub Actions =====
+  # 本项目大量依赖 CI 完成发布，Action 版本落后会带来供应链风险
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "ci(deps)"
+    labels: ["dependencies", "ci"]
+    groups:
+      actions:
+        patterns:
+          - "*"
