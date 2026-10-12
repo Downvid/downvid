@@ -149,6 +149,6 @@ git tag -d v1.3.0 && git push origin :refs/tags/v1.3.0
 
 ## 分支与 CI
 
-- `main` 受保护，所有改动走 PR
-- 推送 tag `v*` 触发发布；PR 触发 CI（类型检查 + Go 测试 + 打包校验 + CodeQL + 依赖审查）
+- `main` 未开启分支保护，维护者可直接推送；外部贡献建议走 PR
+- 推送 tag `v*` 触发发布；推送 `main` 或开 PR 都会触发 CI（类型检查 + Go 测试 + 打包校验 + CodeQL + 依赖审查）
 - `release.yml` 的 `permissions` 只申请 `contents: write`，不要在 job 内扩大权限
