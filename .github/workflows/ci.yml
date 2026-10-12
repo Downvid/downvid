@@ -52,6 +52,9 @@ jobs:
           version: 11
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      # IPC 三处（主进程 / preload / env.d.ts）是手工同步的，漏改会静默失败
+      - name: Lint IPC contract
+        run: pnpm lint:ipc
       - name: Type check
         run: pnpm vue-tsc --noEmit
       # 依赖清单必须与上游一致：版本落后或哈希对不上会在用户端变成"下载即校验失败"

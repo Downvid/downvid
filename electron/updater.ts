@@ -5,7 +5,7 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { GITHUB_OWNER, GITHUB_REPO } from './constants'
+import { APP, GITHUB_API, HTTP_USER_AGENT, RELEASES_URL } from './constants'
 import { broadcast } from './store'
 
 // 更新流程：
@@ -19,7 +19,6 @@ import { broadcast } from './store'
 // 参数需与其一致：分区首次创建时的配置会被后续调用复用
 const updaterSession = () => session.fromPartition('electron-updater', { cache: false })
 
-const RELEASES_URL = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases`
 const CHECK_TIMEOUT = 20_000
 
 export interface CheckResult {
@@ -218,8 +217,8 @@ function unsupportedReason(): string | undefined {
 
 async function checkViaGitHubApi(): Promise<{ version: string; releaseNotes: string; releaseDate: string }> {
   const response = await updaterSession().fetch(
-    `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`,
-    { headers: { 'Accept': 'application/vnd.github+json', 'User-Agent': 'DownVid-App' } },
+    `${GITHUB_API}/repos/${APP.owner}/${APP.repo}/releases/latest`,
+    { headers: { 'Accept': 'application/vnd.github+json', 'User-Agent': HTTP_USER_AGENT } },
   )
   if (!response.ok) throw new Error(`HTTP ${response.status}`)
   const data = await response.json()

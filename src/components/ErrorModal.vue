@@ -101,6 +101,7 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { newIssueUrl } from '../../shared/app'
 
 const props = defineProps<{
   visible: boolean
@@ -126,10 +127,12 @@ const title = computed(() => props.title || {
 }[type.value])
 
 const issueUrl = computed(() => {
-  const body = encodeURIComponent(
-    `## 问题描述\n\n${props.message}\n\n## 错误详情\n\n\`\`\`\n${props.detail || '无'}\n\`\`\`\n\n## 环境信息\n\n- 操作系统: ${navigator.platform}\n- 用户代理: ${navigator.userAgent}`
-  )
-  return `https://github.com/yxxbc/downvid/issues/new?title=${encodeURIComponent(`[Bug] ${props.message}`)}&body=${body}&labels=bug`
+  const body = [
+    '## 问题描述', '', props.message, '',
+    '## 错误详情', '', '```', props.detail || '无', '```', '',
+    '## 环境信息', '', `- 操作系统: ${navigator.platform}`, `- 用户代理: ${navigator.userAgent}`,
+  ].join('\n')
+  return newIssueUrl({ title: `[Bug] ${props.message}`, body, labels: 'bug' })
 })
 
 function close() {

@@ -211,6 +211,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import MaterialIcon from './icons/MaterialIcon.vue'
+import { RELEASES_URL } from '../../shared/app'
 
 const props = defineProps<{
   visible: boolean
@@ -229,7 +230,7 @@ const releaseNotes = ref('')
 const errorMsg = ref('')
 const downloadPercent = ref(0)
 const downloadSpeed = ref('')
-const downloadUrl = ref('https://github.com/yxxbc/downvid/releases')
+const downloadUrl = ref(RELEASES_URL)
 // 当前安装方式不支持自动安装（便携版、tar.gz、DMG 内运行等），只能手动下载
 const manual = ref(false)
 const manualReason = ref('')

@@ -36,7 +36,7 @@
       <!-- Links -->
       <div class="space-y-3 mb-6">
         <button
-          @click="openExternal('https://github.com/yxxbc/downvid')"
+          @click="openExternal(REPO_URL)"
           class="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-surface-container-low hover:bg-surface-container-highest transition-colors group border border-outline-variant/10 text-left"
         >
           <div class="w-9 h-9 rounded-lg bg-surface-container-highest flex items-center justify-center group-hover:bg-surface transition-colors">
@@ -44,13 +44,13 @@
           </div>
           <div class="flex-1 min-w-0">
             <p class="text-sm font-medium text-on-surface">GitHub</p>
-            <p class="text-xs text-on-surface-variant truncate">github.com/yxxbc/downvid</p>
+            <p class="text-xs text-on-surface-variant truncate">{{ repoLabel }}</p>
           </div>
           <MaterialIcon name="arrow_forward_ios" :size="14" class="text-on-surface-variant" />
         </button>
 
         <button
-          @click="openExternal('https://github.com/yxxbc/downvid/issues')"
+          @click="openExternal(ISSUES_URL)"
           class="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-surface-container-low hover:bg-surface-container-highest transition-colors group border border-outline-variant/10 text-left"
         >
           <div class="w-9 h-9 rounded-lg bg-surface-container-highest flex items-center justify-center group-hover:bg-surface transition-colors">
@@ -175,6 +175,7 @@
 import { ref, reactive, onMounted } from 'vue'
 import MaterialIcon from './icons/MaterialIcon.vue'
 import UpdateModal from './UpdateModal.vue'
+import { ISSUES_URL, REPO_SLUG, REPO_URL } from '../../shared/app'
 
 interface Contributor {
   login: string
@@ -185,6 +186,9 @@ interface Contributor {
   isAI?: boolean
   isDeveloper: boolean
 }
+
+/** 界面展示用的仓库标识（去掉 https:// 前缀） */
+const repoLabel = `github.com/${REPO_SLUG}`
 
 const appVersion = ref('1.0.0')
 const showUpdateDrawer = ref(false)

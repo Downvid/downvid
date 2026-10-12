@@ -1,5 +1,5 @@
 import { ipcMain, app } from 'electron'
-import { GITHUB_OWNER, GITHUB_REPO } from '../constants'
+import { APP } from '../constants'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fetchAllContributors } from '../utils/contributors'
@@ -43,7 +43,7 @@ function writeFileCache(data: any[]) {
 
 // 从 GitHub API 获取贡献者（含匿名作者、Bot 与 AI 共同作者）
 function fetchContributorsFromAPI() {
-  return fetchAllContributors(GITHUB_OWNER, GITHUB_REPO)
+  return fetchAllContributors(APP.owner, APP.repo)
 }
 
 export function registerAppIpc() {

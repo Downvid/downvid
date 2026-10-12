@@ -1,6 +1,8 @@
-// GitHub 仓库配置
-export const GITHUB_OWNER = 'yxxbc'
-export const GITHUB_REPO = 'downvid'
+// GitHub 仓库配置的唯一来源。
+//
+// 主进程不再自己定义 owner/repo，而是复用 shared/app.ts（渲染进程也用同一份），
+// 避免两边各写一遍导致改仓库时漏改。
+export { APP, GITHUB_API, HTTP_USER_AGENT, ISSUES_URL, LATEST_RELEASE_URL, RELEASES_URL, REPO_SLUG, REPO_URL, newIssueUrl } from '../shared/app'
 
 // YouTube 多音轨语言名称映射
 export const LANG_NAMES: Record<string, string> = {

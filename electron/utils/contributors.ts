@@ -1,6 +1,8 @@
 // 贡献者统计：GitHub /contributors 接口不含匿名作者，也完全不统计 Co-authored-by 署名，
 // 这里合并 contributors(anon=1) 与提交记录中的共同作者，得到完整名单
 
+import { DEVELOPER_LOGINS } from '../../shared/app'
+
 export interface Contributor {
   login: string
   avatarUrl: string
@@ -11,7 +13,6 @@ export interface Contributor {
   isDeveloper: boolean
 }
 
-const DEVELOPER_LOGINS = ['yxxbc']
 
 // 常见 AI 编程助手的共同作者邮箱 → 展示信息（头像取对应组织的 GitHub 头像）
 const AI_COAUTHORS: Record<string, { name: string; org: string; url: string }> = {

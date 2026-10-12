@@ -104,6 +104,10 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import MaterialIcon from './icons/MaterialIcon.vue'
 import { useDownloadStore } from '../stores/download'
+import { REPO_URL } from '../../shared/app'
+
+/** YouTube Cookie 配置指引（wiki 页面） */
+const YOUTUBE_COOKIE_GUIDE_URL = `${REPO_URL}/wiki/YouTube-Cookie-Setup`
 
 const store = useDownloadStore()
 
@@ -196,7 +200,7 @@ function goToSettings() {
 }
 
 function openCookieHelp() {
-  window.electronAPI?.shell?.openExternal?.('https://github.com/yxxbc/downvid/wiki/YouTube-Cookie-Setup')
+  window.electronAPI?.shell?.openExternal?.(YOUTUBE_COOKIE_GUIDE_URL)
 }
 
 onMounted(() => document.addEventListener('click', hideContextMenu))
