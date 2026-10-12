@@ -4,8 +4,9 @@
     :class="isMac ? 'pl-[78px] pr-6 py-3' : 'px-6 py-3'"
     style="-webkit-app-region: drag"
   >
-    <!-- Logo (non-macOS) -->
-    <div v-if="!isMac" class="flex items-center gap-3 text-on-surface" style="-webkit-app-region: no-drag">
+    <!-- Logo：所有平台都显示。macOS 上靠 header 的 pl-[78px] 让出原生红绿灯按钮的位置
+         （按钮占 x=16~68，78px 留 10px 余量），不要在这里用 v-if 隐藏，否则会空出一块。 -->
+    <div class="flex items-center gap-3 text-on-surface shrink-0" style="-webkit-app-region: no-drag">
       <div class="size-6 rounded-md overflow-hidden bg-primary/10 flex items-center justify-center shrink-0">
         <img src="@/assets/logo.png" alt="DownVid" class="w-full h-full object-contain" />
       </div>
