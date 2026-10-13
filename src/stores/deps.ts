@@ -151,8 +151,8 @@ export const useDepsStore = defineStore('deps', () => {
     try {
       const { depPaths, proxy } = readSettings()
       const res = force
-        ? await window.electronAPI.deps.check({ manualPaths: depPaths, proxy })
-        : await window.electronAPI.deps.status({ manualPaths: depPaths, proxy })
+        ? await window.electronAPI.deps.check({ manualPaths: { ...depPaths }, proxy })
+        : await window.electronAPI.deps.status({ manualPaths: { ...depPaths }, proxy })
       if (res.success && res.status) {
         status.value = res.status
       } else if (res.error) {
@@ -176,7 +176,15 @@ export const useDepsStore = defineStore('deps', () => {
     total.value = 0
     try {
       const { depPaths, proxy } = readSettings()
-      const res = await window.electronAPI.deps.download({ manualPaths: depPaths, proxy, only, force })
+      // 必须传普通对象/数组：调用方（如 DepsPrompt）可能直接把手动的
+      // reactive 数组传进来，而 Vue 的 Proxy **无法被 structured clone**，
+      // 会抛 `An object could not be cloned`。这里统一拍平。
+      const res = await window.electronAPI.deps.download({
+        manualPaths: { ...depPaths },
+        proxy,
+        only: only ? [...only] : undefined,
+        force,
+      })
       if (res.success && res.status) {
         status.value = res.status
         notice.value = '依赖已就绪'

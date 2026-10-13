@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { VideoInfo, VideoFormat, DownloadTask, AudioFormat, AudioTrack } from '../types'
 import { useDepsStore, readMissingKinds, stripDepMarkers } from './deps'
+import { shouldIgnoreProgress, statusAfterResult, shouldRecordHistory } from './download-rules'
 
 /**
  * 把 yt-dlp / 网络层的原始错误翻译成用户能看懂、且能据此行动的一句话。
@@ -186,7 +187,10 @@ export const useDownloadStore = defineStore('download', () => {
 
     const cleanup = window.electronAPI.onDownloadProgress((data: any) => {
       if (data.taskId === task.id) {
-        if (pausedTasks.has(task.id) && data.status !== 'completed') return
+        // 已暂停的任务忽略**所有**进度事件，包括 completed：
+        // 主进程 kill 子进程时可能还会残留一条结束事件，若照单全收，
+        // 会把任务标成"已完成"并清掉 paused 标记，用户就只能重新下载了。
+        if (shouldIgnoreProgress(pausedTasks.has(task.id))) return
         const idx = downloadTasks.value.findIndex(t => t.id === task.id)
         if (idx !== -1) {
           if (data.status === 'merging') {
@@ -241,21 +245,36 @@ export const useDownloadStore = defineStore('download', () => {
       if ((task as any).selectedAudioTrack) downloadOptions.audioTrack = { ...(task as any).selectedAudioTrack }
       if ((task as any).selectedSubtitles?.length > 0) downloadOptions.subtitles = (task as any).selectedSubtitles
 
-      const result = await window.electronAPI.ytdlp.download(downloadOptions)
+      const result = (await window.electronAPI.ytdlp.download(downloadOptions)) as any
+
+      // 暂停时主进程会返回 { paused: true }。此时**不能**标成完成，
+      // 否则界面显示"已完成"、进度 100%，用户没法继续，只能重新下载。
+      if (result?.paused) {
+        const pausedIdx = downloadTasks.value.findIndex(t => t.id === task.id)
+        if (pausedIdx !== -1) {
+          downloadTasks.value[pausedIdx].status = statusAfterResult(result)
+          downloadTasks.value[pausedIdx].speed = undefined
+          downloadTasks.value[pausedIdx].eta = undefined
+        }
+        return
+      }
 
       const finalIdx = downloadTasks.value.findIndex(t => t.id === task.id)
       if (finalIdx !== -1) {
         downloadTasks.value[finalIdx].status = 'completed'
-        downloadTasks.value[finalIdx].filePath = (result as any).filePath
+        downloadTasks.value[finalIdx].filePath = result?.filePath
         downloadTasks.value[finalIdx].progress = 100
       }
+
+      // 只在**确实拿到文件**时记历史（规则见 download-rules.ts）
+      if (!shouldRecordHistory(result)) return
 
       try {
         await window.electronAPI.history.add({
           title: task.videoInfo.title,
           thumbnail: task.videoInfo.thumbnail,
           url: task.url,
-          filePath: (result as any).filePath,
+          filePath: result.filePath,
           format: task.selectedFormat.ext,
           quality: task.selectedFormat.quality,
         })
@@ -290,10 +309,15 @@ export const useDownloadStore = defineStore('download', () => {
     if (downloadMode.value === 'audio' && !selectedAudioFormat.value) return
     if (downloadMode.value === 'subtitle' && selectedSubtitles.value.length === 0) return
 
-    // 依赖缺失时先引导下载，而不是把任务丢进队列再报错
-    // （ffmpeg 仅音视频合并/转码需要，字幕模式不依赖它）
+    // 依赖检查放在**下载**这一步（元数据解析只需要 yt-dlp，已由解析成功证明可用）。
+    //
+    // 这里刻意不 `await deps.refresh()`：那会启动 Go 边车做一次完整探测
+    // （冷启动 1~3 秒），用户每次点下载都要白等；而且探测是异步的，
+    // 弹窗还可能出现在「正在提取元数据」之后，看起来像先解析后才提示。
+    //
+    // 改为读**已有的缓存状态**：启动时已后台探测过一次，解析成功也说明
+    // yt-dlp 可用；只有确实缺必需依赖时才弹引导。
     const deps = useDepsStore()
-    await deps.refresh()
     const missing = deps.deps
       .filter(d => !d.found && !d.optional)
       .filter(d => !(downloadMode.value === 'subtitle' && d.kind === 'ffmpeg'))
