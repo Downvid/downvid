@@ -124,7 +124,7 @@ const platformNote = [
 
 const body = `<!-- 此正文由 scripts/gen-release-notes.mjs 生成，请勿手动编辑 -->
 <div align="center">
-
+如果你在更新页面开到这个开头，请往下滑看详细的更新日志
 ### ⬇️ 点击徽章直接下载
 
 ${primaryBadges.join('\n')}
