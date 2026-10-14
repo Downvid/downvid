@@ -9,6 +9,7 @@ import { downloadDirectFile } from '../download/direct'
 import { runYtdlpDownload, pauseDownload } from '../download/ytdlp'
 import { sendDownloadProgress, throttledProgress, clearProgressThrottle } from '../download/progress'
 import type { DownloadOptions } from '../download/ytdlp'
+import { detectAria2 } from '../download/aria2'
 
 /**
  * 下载相关的 IPC 注册与分发。
@@ -20,6 +21,7 @@ import type { DownloadOptions } from '../download/ytdlp'
  * 本文件只负责把请求分发到对应路径。
  */
 export function registerDownloadIpc() {
+  ipcMain.handle('ytdlp:accelerationStatus', (_, manual?: string) => detectAria2(manual || ''))
   ipcMain.handle('ytdlp:parse', async (_event, ...args) => {
     const url = args[0] as string
     const cookiesFile = args[1] as string | undefined
@@ -71,6 +73,7 @@ export function registerDownloadIpc() {
           pageUrl: options.url,
           outputPath,
           signal: controller.signal,
+          acceleration: options.acceleration,
           report: (data) => throttledProgress({
             taskId: options.taskId,
             url: options.url,

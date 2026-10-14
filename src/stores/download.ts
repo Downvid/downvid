@@ -274,6 +274,7 @@ export const useDownloadStore = defineStore('download', () => {
         filenameTemplate,
         proxy,
         hasAudio: task.selectedFormat.hasAudio,
+        acceleration: (task as any).acceleration || readSettings().acceleration,
         // 解析时保存的 info JSON，下载时跳过 yt-dlp 二次提取
         cacheFile: task.videoInfo.cacheFile,
       }
@@ -389,6 +390,7 @@ export const useDownloadStore = defineStore('download', () => {
         createdAt: new Date().toISOString(),
       }
       ;(task as any).downloadMode = 'subtitle'
+      ;(task as any).acceleration = { ...readSettings().acceleration }
       ;(task as any).selectedSubtitles = [...selectedSubtitles.value]
       downloadTasks.value.unshift(task)
       processDownload(task)
@@ -409,6 +411,7 @@ export const useDownloadStore = defineStore('download', () => {
       createdAt: new Date().toISOString(),
     }
     ;(task as any).downloadMode = downloadMode.value
+    ;(task as any).acceleration = { ...readSettings().acceleration }
     ;(task as any).selectedAudioTrack = selectedAudioTrack.value ? { ...selectedAudioTrack.value } : null
     ;(task as any).selectedSubtitles = []
     downloadTasks.value.unshift(task)

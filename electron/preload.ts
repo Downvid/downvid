@@ -58,8 +58,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // YT-DLP 操作
   ytdlp: {
+    accelerationStatus: (manual?: string) => ipcRenderer.invoke('ytdlp:accelerationStatus', manual),
     parse: (url: string, cookiesFile?: string, proxy?: string) => ipcRenderer.invoke('ytdlp:parse', url, cookiesFile, proxy),
-    download: (options: { url: string; formatId: string; outputDir: string; filename?: string; taskId: string; directUrl?: string; cookiesFile?: string; downloadMode?: 'video' | 'audio' | 'subtitle'; audioTrack?: any; subtitles?: string[]; proxy?: string; cacheFile?: string; hasAudio?: boolean; filenameTemplate?: string }) => 
+    download: (options: { url: string; formatId: string; outputDir: string; filename?: string; taskId: string; directUrl?: string; cookiesFile?: string; downloadMode?: 'video' | 'audio' | 'subtitle'; audioTrack?: any; subtitles?: string[]; proxy?: string; cacheFile?: string; hasAudio?: boolean; filenameTemplate?: string; acceleration?: import('../shared/acceleration').AccelerationSettings }) =>
       ipcRenderer.invoke('ytdlp:download', options),
     pauseDownload: (taskId: string) => ipcRenderer.invoke('ytdlp:pauseDownload', taskId),
   },

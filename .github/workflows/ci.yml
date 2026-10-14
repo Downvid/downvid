@@ -65,6 +65,8 @@ jobs:
       # 纯逻辑单测：格式选择、依赖错误识别、yt-dlp 参数组装、解析器共用工具
       - name: Unit tests
         run: pnpm test
+      - name: Download integration regression
+        run: pnpm test:download:integration
       - name: Native Windows runtime regression
         if: runner.os == 'Windows'
         run: pnpm test:runtime:windows
