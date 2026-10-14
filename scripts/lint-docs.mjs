@@ -54,6 +54,11 @@ const FILE_REF = /`(\.?[A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:ts|vue|go|mjs|js|json5|j
 function buildRepoIndex() {
   const byName = new Map()
   const bySuffix = new Set()
+  // 文档里的路径一律用正斜杠。这里同时处理两种分隔符（而不是 path.sep），
+  // 因为**这个差异只在 Windows 检出时暴露**：写死 '/' 在 macOS/Linux 上
+  // 一直是对的，CI 的 windows job 才会报出一堆「引用了不存在的路径」。
+  // 用 [\/] 归一化后，本地也能验证。
+  const toPosix = (p) => p.split(/[\\/]/).join('/')
   const SKIP = new Set(['node_modules', '.git', 'dist', 'dist-electron', 'release', 'build', '.vercel'])
   const walk = (dir) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -62,7 +67,8 @@ function buildRepoIndex() {
       if (entry.isDirectory()) {
         walk(full)
       } else {
-        const rel = path.relative(ROOT, full)
+        // 归一化成文档里的写法（正斜杠）后再建索引
+        const rel = toPosix(path.relative(ROOT, full))
         if (!byName.has(entry.name)) byName.set(entry.name, rel)
         // 记录每一级后缀，供 `utils/cookies.ts` 这类短路径匹配
         const parts = rel.split('/')

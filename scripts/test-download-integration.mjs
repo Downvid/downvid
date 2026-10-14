@@ -78,8 +78,21 @@ async function directChecks() {
     requests.length = 0
     await complete()
     const resumed = requests.filter(item => item.range !== 'bytes=0-0')
-    assert.deepEqual(resumed.map(item => item.start).sort((a, b) => a - b),
-      saved.segments.filter(segment => segment.offset < segment.end).map(segment => segment.offset).sort((a, b) => a - b))
+    // 断言「每个未完成分段都被续传」，而**不是**「请求序列与检查点逐项相等」。
+    //
+    // 后者是脆的：429/503 或瞬时网络错误都会让某个分段重试，
+    // 重试会再发一次相同 Range，于是请求数比检查点多一项。
+    // 这个用例曾因此在 CI 上偶发失败（同一提交重跑就过）——
+    // 偶发红叉会训练人忽略 CI，比没有检查更糟。
+    const expectedOffsets = [...new Set(
+      saved.segments.filter(segment => segment.offset < segment.end).map(segment => segment.offset),
+    )].sort((a, b) => a - b)
+    const actualOffsets = [...new Set(resumed.map(item => item.start))].sort((a, b) => a - b)
+    assert.deepEqual(actualOffsets, expectedOffsets)
+    // 允许多余的请求，但它们必须只是「同一分段的重复续传」，不能是别的位置
+    assert.ok(resumed.every(item => expectedOffsets.includes(item.start)),
+      `出现了预期之外的续传位置：${resumed.map(i => i.start).filter(s => !expectedOffsets.includes(s))}`)
+    assert.ok(resumed.length >= expectedOffsets.length, '每个未完成分段都应至少被续传一次')
     assert.ok(resumed.every(item => item.ifRange === '"v1"'))
     console.log('通过：多段暂停保留进度、Range 续传、文件逐字节校验与临时文件清理')
 
