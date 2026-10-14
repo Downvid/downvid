@@ -26,6 +26,7 @@ downvid/
 │   ├── types/              # 共享类型
 │   └── style.css           # Tailwind v4 主题（@theme 定义语义色）
 ├── shared/app.ts           # 仓库坐标与外部链接的唯一来源
+├── website/                # 产品落地页（GitHub Pages，单文件无构建）
 ├── tests/                  # Vitest 纯逻辑单测
 ├── scripts/                # 见下
 ├── docs/                   # 文档

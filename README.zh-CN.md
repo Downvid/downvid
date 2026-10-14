@@ -15,17 +15,17 @@
 </table>
 
 <p>
-  <a href="https://github.com/yxxbc/downvid/releases"><img src="https://img.shields.io/github/downloads/yxxbc/downvid/total?style=flat-square&label=Downloads&color=64748b" alt="Downloads" /></a>
-  <a href="https://github.com/yxxbc/downvid/releases/latest"><img src="https://img.shields.io/github/v/release/yxxbc/downvid?style=flat-square&label=Release&color=0ea5e9" alt="Latest Release" /></a>
-  <a href="https://github.com/yxxbc/downvid/stargazers"><img src="https://img.shields.io/github/stars/yxxbc/downvid?style=flat-square&label=Stars&color=64748b" alt="GitHub Stars" /></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-64748b?style=flat-square" alt="MIT License" /></a>
+  <a href="https://github.com/yxxbc/downvid/releases"><img src="https://img.shields.io/github/downloads/yxxbc/downvid/total?style=flat&label=Downloads&logo=github&logoColor=white&color=2563eb" alt="Downloads" /></a>
+  <a href="https://github.com/yxxbc/downvid/releases/latest"><img src="https://img.shields.io/github/v/release/yxxbc/downvid?style=flat&label=Release&logo=github&logoColor=white&color=0284c7" alt="Latest Release" /></a>
+  <a href="https://github.com/yxxbc/downvid/stargazers"><img src="https://img.shields.io/github/stars/yxxbc/downvid?style=flat&label=Stars&logo=github&logoColor=white&color=eab308" alt="GitHub Stars" /></a>
+  <a href="https://alternativeto.net/software/downvid/"><img src="https://img.shields.io/badge/AlternativeTo-DownVid-0289d5?style=flat&logo=alternativeto&logoColor=white" alt="AlternativeTo" /></a>
+  <a href="https://github.com/yxxbc/downvid/actions/workflows/codeql.yml"><img src="https://img.shields.io/github/actions/workflow/status/yxxbc/downvid/codeql.yml?branch=main&label=CodeQL&logo=github-actions&logoColor=white&color=16a34a" alt="CodeQL" /></a>
+  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-7c3aed?style=flat&logo=open-source-initiative&logoColor=white" alt="MIT License" /></a>
 </p>
 
 <p>
-  <a href="https://www.producthunt.com/products/github-460eee39-2e5c-447d-b207-531e944feebd?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-github-48115ca5-a95c-4dad-9887-1c9e47f4a589" target="_blank" rel="noopener noreferrer"><img alt="GitHub - Download the video | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1280091&amp;theme=light&amp;t=1791972383042"></a>
-</p>
-
-<p>
+  <a href="https://yxxbc.github.io/downvid/">官网</a>
+  ·
   <a href="https://github.com/yxxbc/downvid/releases">下载 DownVid</a>
   ·
   <a href="https://github.com/yxxbc/downvid/issues">反馈问题</a>
@@ -216,6 +216,14 @@ pnpm lint:ipc
 ```
 
 更多流程请查看 [贡献指南](./CONTRIBUTING.md) 和 [仓库规范](./docs/standards.md)。
+
+### 贡献者
+
+感谢所有为 DownVid 做出贡献的人：
+
+<a href="https://github.com/yxxbc/downvid/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=yxxbc/downvid" alt="Contributors" />
+</a>
 
 ## Star History
 

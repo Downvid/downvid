@@ -34,6 +34,7 @@
   用户既看不到也关不掉
 - **关于页贡献者改为固定名单 + 格子布局**：不再显示提交次数（那是个会变的数字），
   也不再需要缓存与失败态
+- **产品官方落地页（GitHub Pages）**：新增 `website/` 单文件落地页（无第三方打包依赖、响应式、纯前端双语），并配置 `.github/workflows/pages.yml` 自动化部署，提供直观的跨平台下载与功能介绍
 
 ### 改进
 
@@ -43,6 +44,11 @@
   会被当成硬换行，一段话被切成好几行）
 - 关于页区块顺序调整为「贡献者 → 开源组件 → 技术栈 → 开源协议 → 支持」，顶部描述精简
 - 真人贡献者此前**没有任何身份标**（只有 DEV / BOT / AI），现补上 `CONTRIBUTOR`
+- **README 徽章与视觉全面升级**：
+  - 徽章栏全线升级为带品牌官方矢量 Logo 与专属配色（Downloads、Release、Stars、AlternativeTo、CodeQL、License）
+  - 新增 `### 贡献者` 动态头像网格（contrib.rocks），展示社区贡献者
+  - 新增 AlternativeTo 软件条目收录链接与 CodeQL 自动化安全扫描状态
+  - 补充 OpenGraph 社交预览卡片与生成脚本（`scripts/gen-social-preview.mjs`）
 
 ### 工程
 

@@ -1,0 +1,68 @@
+name: Deploy website
+
+# 把 website/ 发布到 GitHub Pages。
+#
+# 首次启用需要在仓库设置里选一次源：Settings → Pages → Source 选 "GitHub Actions"。
+# 之后推送 main（且改动命中 website/**）就会自动更新。
+#
+# 用官方的 Pages 流程而不是往 gh-pages 分支推：前者只需要 contents: read，
+# 不会在仓库里多出一条长期存在的分支。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'website/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时间只允许一个部署；新的推送取消进行中的旧部署
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/configure-pages@v5
+      - name: 校验站点（单文件、无外部依赖，只做基本检查）
+        shell: bash
+        run: |
+          set -e
+          test -f website/index.html
+          # 页面引用的仓库资源必须存在，否则线上会出现裂图
+          for asset in src/assets/logo.png src/assets/screen.png .github/assets/social-preview.png; do
+            if grep -q "$asset" website/index.html; then
+              test -f "$asset" || { echo "::error::website 引用了不存在的文件：$asset"; exit 1; }
+            fi
+          done
+          # 中英文案表必须成对：缺 key 会静默显示另一种语言
+          zh=$(grep -c "data-i18n=" website/index.html)
+          en=$(grep -cE "^\s+'[a-z0-9.]+':" website/index.html)
+          echo "  中文占位 $zh 处，英文词条 $en 条"
+          if [ "$en" -lt "$zh" ]; then
+            echo "::error::英文文案少于中文占位（$en < $zh），可能有漏翻"
+            exit 1
+          fi
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

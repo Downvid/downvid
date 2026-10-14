@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DownVid — 把喜欢的视频，轻松保存到本地</title>
+<meta name="description" content="DownVid 是一款面向 macOS、Windows 和 Linux 的开源桌面视频下载工具。支持 1000+ 网站，界面简洁，不内置任何破解代码。">
+<meta name="theme-color" content="#fff8f4">
+
+<!-- 社交分享卡片：复用仓库的社交预览图，避免同一份东西维护两处 -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="DownVid — 开源桌面视频下载工具">
+<meta property="og:description" content="支持 1000+ 网站，界面简洁，跨 macOS / Windows / Linux。">
+<meta property="og:image" content="https://raw.githubusercontent.com/yxxbc/downvid/main/.github/assets/social-preview.png">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="icon" href="https://raw.githubusercontent.com/yxxbc/downvid/main/src/assets/logo.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+
+<style>
+/* 配色取自应用本身的 src/style.css @theme，两边保持一致 */
+:root{
+  --primary:#8c5100;
+  --primary-dim:#7b4700;
+  --accent:#ff9800;
+  --accent-soft:#ffb347;
+  --on-primary:#fff7f4;
+  --surface:#fff8f4;
+  --surface-container:#fbebdd;
+  --surface-container-high:#f5e6d6;
+  --surface-container-highest:#f1e0ce;
+  --on-surface:#3b3125;
+  --on-surface-variant:#695d50;
+  --outline-variant:rgba(134,120,106,.28);
+  --radius:16px;
+  --maxw:1080px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--surface);color:var(--on-surface);
+  font-family:Inter,'Noto Sans SC',system-ui,-apple-system,sans-serif;
+  line-height:1.7;-webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,.headline{font-family:'Plus Jakarta Sans','Noto Sans SC',sans-serif;letter-spacing:-.02em;line-height:1.25}
+a{color:var(--primary);text-decoration:none}
+a:hover{text-decoration:underline}
+img{max-width:100%;display:block}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+.grad{background:linear-gradient(135deg,var(--accent-soft) 0%,var(--accent) 100%);color:#271300}
+
+/* ===== 顶栏 ===== */
+header{position:sticky;top:0;z-index:20;background:rgba(255,248,244,.86);backdrop-filter:blur(12px);border-bottom:1px solid var(--outline-variant)}
+.nav{display:flex;align-items:center;gap:16px;height:64px}
+.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;color:var(--on-surface);font-family:'Plus Jakarta Sans','Noto Sans SC',sans-serif}
+.brand img{width:28px;height:28px;border-radius:8px}
+.nav .spacer{flex:1}
+.nav a.link{color:var(--on-surface-variant);font-size:14px;font-weight:500}
+.nav a.link:hover{color:var(--on-surface);text-decoration:none}
+.lang{border:1px solid var(--outline-variant);background:transparent;color:var(--on-surface-variant);border-radius:999px;padding:4px 12px;font-size:13px;cursor:pointer;font-family:inherit}
+.lang:hover{background:var(--surface-container-highest)}
+
+/* ===== Hero ===== */
+.hero{padding:72px 0 56px;display:grid;grid-template-columns:1fr;gap:44px;align-items:center}
+@media(min-width:900px){.hero{grid-template-columns:1fr 1.15fr;gap:56px;padding:88px 0 64px}}
+.hero h1{font-size:clamp(32px,5vw,52px);font-weight:800;margin:0 0 16px}
+.hero .lede{font-size:clamp(15px,1.6vw,18px);color:var(--on-surface-variant);margin:0 0 28px;max-width:44ch}
+.cta{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:13px 26px;border-radius:12px;font-weight:700;font-size:15px;border:1px solid transparent;cursor:pointer;font-family:inherit}
+.btn-primary{background:linear-gradient(135deg,var(--accent-soft) 0%,var(--accent) 100%);color:#271300}
+.btn-primary:hover{background:linear-gradient(135deg,rgb(255,167,46) 0%,rgb(230,137,0) 100%);text-decoration:none}
+.btn-ghost{background:var(--surface-container-high);color:var(--on-surface);border-color:var(--outline-variant)}
+.btn-ghost:hover{background:var(--surface-container-highest);text-decoration:none}
+.platforms{display:flex;gap:18px;flex-wrap:wrap;margin-top:26px;font-size:13px;color:var(--on-surface-variant)}
+.platforms span{display:inline-flex;align-items:center;gap:6px}
+.shot{border-radius:var(--radius);overflow:hidden;border:1px solid var(--outline-variant);box-shadow:0 24px 60px -20px rgba(59,49,37,.28)}
+.shot img{width:100%}
+
+/* ===== 通用区块 ===== */
+section{padding:64px 0}
+section.alt{background:var(--surface-container)}
+.sec-title{font-size:clamp(22px,3vw,30px);font-weight:800;margin:0 0 8px}
+.sec-sub{color:var(--on-surface-variant);margin:0 0 36px;max-width:60ch}
+
+/* ===== 特性 ===== */
+.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
+.card{background:var(--surface);border:1px solid var(--outline-variant);border-radius:var(--radius);padding:22px}
+section.alt .card{background:var(--surface-container-high);border-color:transparent}
+.card h3{font-size:15px;font-weight:700;margin:0 0 8px}
+.card p{margin:0;font-size:14px;color:var(--on-surface-variant)}
+.card .ico{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:14px;background:var(--surface-container-highest)}
+.card .ico svg{width:19px;height:19px;fill:var(--primary)}
+
+/* ===== 步骤 ===== */
+.steps{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));counter-reset:s}
+.step{background:var(--surface);border:1px solid var(--outline-variant);border-radius:var(--radius);padding:22px}
+.step .n{width:28px;height:28px;border-radius:999px;background:var(--primary);color:var(--on-primary);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;margin-bottom:12px}
+.step h3{font-size:15px;margin:0 0 6px}
+.step p{margin:0;font-size:14px;color:var(--on-surface-variant)}
+
+/* ===== FAQ ===== */
+details{background:var(--surface);border:1px solid var(--outline-variant);border-radius:12px;padding:16px 20px;margin-bottom:10px}
+section.alt details{background:var(--surface-container-high);border-color:transparent}
+details summary{cursor:pointer;font-weight:600;font-size:15px;list-style:none}
+details summary::-webkit-details-marker{display:none}
+details summary::before{content:'＋';color:var(--primary);margin-right:10px;font-weight:700}
+details[open] summary::before{content:'－'}
+details p{margin:12px 0 0;font-size:14px;color:var(--on-surface-variant)}
+
+/* ===== 页脚 ===== */
+footer{border-top:1px solid var(--outline-variant);padding:40px 0;font-size:13px;color:var(--on-surface-variant)}
+.foot{display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between}
+.foot nav{display:flex;gap:18px;flex-wrap:wrap}
+
+/* 未选中语言时先隐藏，避免中英同时闪现（脚本会立刻显示） */
+[data-i18n]{visibility:hidden}
+html.ready [data-i18n]{visibility:visible}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="#top">
+      <img src="https://raw.githubusercontent.com/yxxbc/downvid/main/src/assets/logo.png" alt="DownVid">
+      DownVid
+    </a>
+    <span class="spacer"></span>
+    <a class="link" href="#features" data-i18n="nav.features">功能</a>
+    <a class="link" href="#install" data-i18n="nav.install">下载</a>
+    <a class="link" href="#faq" data-i18n="nav.faq">常见问题</a>
+    <a class="link" href="https://github.com/yxxbc/downvid" data-i18n="nav.github">GitHub</a>
+    <button class="lang" id="langBtn" type="button">English</button>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- Hero -->
+  <div class="wrap hero">
+    <div>
+      <h1 data-i18n="hero.title">把喜欢的视频，<br>轻松保存到本地。</h1>
+      <p class="lede" data-i18n="hero.lede">
+        面向 macOS、Windows 与 Linux 的开源桌面工具。基于 yt-dlp，支持 1000+ 网站，
+        界面简洁，不需要记任何命令行参数。
+      </p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/yxxbc/downvid/releases/latest" data-i18n="hero.download">下载最新版</a>
+        <a class="btn btn-ghost" href="https://github.com/yxxbc/downvid" data-i18n="hero.source">查看源码</a>
+      </div>
+      <div class="platforms">
+        <span>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M11.2 1.3c.1.8-.3 1.6-.7 2.1-.5.6-1.3 1-2.1 1-.1-.8.3-1.6.7-2.1.5-.6 1.4-1 2.1-1zM14.6 11.4c-.4.9-.6 1.3-1.1 2.1-.7 1.1-1.7 2.4-3 2.4-1.1 0-1.4-.7-2.9-.7s-1.8.7-2.9.7c-1.2 0-2.2-1.2-2.9-2.3C-.2 10.5-.5 6.6 1.1 4.6c.8-1 1.9-1.5 3-1.5 1.2 0 2 .7 3 .7.9 0 1.5-.7 3-.7 1 0 2.1.5 2.9 1.5-2.6 1.4-2.2 5 .6 6.3z"/></svg>
+          <span data-i18n="plat.macos">macOS</span>
+        </span>
+        <span>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M0 2.6l6.5-.9v6.2H0V2.6zm7.3-1l8.7-1.2v7.5H7.3V1.6zM0 8.8h6.5v6.2L0 14V8.8zm7.3 0H16v7.5l-8.7-1.2V8.8z"/></svg>
+          <span data-i18n="plat.windows">Windows</span>
+        </span>
+        <span>
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 100 16A8 8 0 008 0zM2.2 6.3c.9-.3 2-.3 3 .2.1-.7.5-1.4 1-1.9-.4-.4-1-.7-1.7-.7-1 0-1.8.6-2.3 1.4v1zm2 6.3c-.4-.4-.7-1-.7-1.6 0-1.3 1-2.3 2.2-2.3.7 0 1.3.3 1.7.8.3-.5.8-.9 1.4-1.1a3.4 3.4 0 00-3.2-2.5c-.9 0-1.8.4-2.4 1A4.6 4.6 0 004.2 12.6zm8.4-.9a2.7 2.7 0 00-2.3-2.6 1.5 1.5 0 01-1.4 2.2c-.3 0-.5 0-.7-.1.1.9.8 1.6 1.7 1.6.9 0 1.7-.6 2-1.4.5.1 1.1.4 1.4.9.2-.6.3-1.2.2-1.9-.2.4-.5.7-.9.9z"/></svg>
+          <span data-i18n="plat.linux">Linux</span>
+        </span>
+      </div>
+    </div>
+    <div class="shot">
+      <img src="https://raw.githubusercontent.com/yxxbc/downvid/main/src/assets/screen.png" alt="DownVid 界面" loading="eager">
+    </div>
+  </div>
+
+  <!-- 特性 -->
+  <section class="alt" id="features">
+    <div class="wrap">
+      <h2 class="sec-title" data-i18n="feat.title">能做什么</h2>
+      <p class="sec-sub" data-i18n="feat.sub">该有的都有，不该有的（破解、绕过）一个都没有。</p>
+      <div class="grid">
+        <div class="card">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zM11 7h2v6h-2zm0 8h2v2h-2z"/></svg></div>
+          <h3 data-i18n="feat.sites.t">1000+ 网站</h3>
+          <p data-i18n="feat.sites.d">基于 yt-dlp；抖音、快手另有专属解析器，能拿到无水印直链。</p>
+        </div>
+        <div class="card">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M3 17h18v2H3zm3-6h4v4H6zm8 0h4v4h-4zM6 5h12v4H6z"/></svg></div>
+          <h3 data-i18n="feat.quality.t">画质与格式</h3>
+          <p data-i18n="feat.quality.d">360P 到 4K；支持仅音频（MP3）、仅字幕（SRT）与 YouTube 多音轨。</p>
+        </div>
+        <div class="card">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M13 3l-2 7h6l-9 11 2-7H4z"/></svg></div>
+          <h3 data-i18n="feat.speed.t">下载加速</h3>
+          <p data-i18n="feat.speed.d">直链使用小块工作队列（默认 8 路、最多 16 路），可选 aria2 多连接。</p>
+        </div>
+        <div class="card">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 100-8 4 4 0 000 8zm0 2c-4 0-8 2-8 4v2h16v-2c0-2-4-4-8-4z"/></svg></div>
+          <h3 data-i18n="feat.cookie.t">登录内容</h3>
+          <p data-i18n="feat.cookie.d">自动读取已安装浏览器的登录状态，也可以手动导入 cookies.txt。</p>
+        </div>
+        <div class="card">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 3v10l3-3 1.4 1.4L12 15.8 7.6 11.4 9 10l3 3V3zM5 19h14v2H5z"/></svg></div>
+          <h3 data-i18n="feat.deps.t">依赖自动识别</h3>
+          <p data-i18n="feat.deps.d">安装包不内置 yt-dlp / FFmpeg，启动时自动复用系统已有的版本，缺失可一键下载。</p>
+        </div>
+        <div class="card">
+          <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 15h-2v-2h2zm1.8-6.2l-.9.9c-.7.7-1.1 1.3-1.1 2.3h-2c0-1.4.6-2.2 1.5-3.1l1.2-1.3c.4-.3.6-.8.6-1.3a2 2 0 10-4 0H8a4 4 0 118 0c0 .9-.4 1.7-1.2 2.5z"/></svg></div>
+          <h3 data-i18n="feat.update.t">自动更新</h3>
+          <p data-i18n="feat.update.d">通过 GitHub Releases 更新；macOS 未签名，改用自带校验与替换流程。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 安装 -->
+  <section id="install">
+    <div class="wrap">
+      <h2 class="sec-title" data-i18n="ins.title">三步开始</h2>
+      <p class="sec-sub" data-i18n="ins.sub">不需要预先安装任何命令行工具。</p>
+      <div class="steps">
+        <div class="step">
+          <div class="n">1</div>
+          <h3 data-i18n="ins.s1.t">下载安装包</h3>
+          <p data-i18n="ins.s1.d">按系统选择 .dmg / .exe / .AppImage，全部产物见 Releases 页面。</p>
+        </div>
+        <div class="step">
+          <div class="n">2</div>
+          <h3 data-i18n="ins.s2.t">粘贴链接</h3>
+          <p data-i18n="ins.s2.d">在应用里粘贴视频链接，选好画质或格式。</p>
+        </div>
+        <div class="step">
+          <div class="n">3</div>
+          <h3 data-i18n="ins.s3.t">开始下载</h3>
+          <p data-i18n="ins.s3.d">首次使用若缺少运行依赖，应用会提示并可以一键装好。</p>
+        </div>
+      </div>
+      <div class="cta" style="margin-top:28px">
+        <a class="btn btn-primary" href="https://github.com/yxxbc/downvid/releases/latest" data-i18n="ins.cta">前往下载</a>
+        <a class="btn btn-ghost" href="https://github.com/yxxbc/downvid/blob/main/docs/installation.md" data-i18n="ins.guide">安装指南</a>
+      </div>
+      <p style="margin-top:22px;font-size:13px;color:var(--on-surface-variant);max-width:64ch" data-i18n="ins.note">
+        提示：macOS 上应用未做代码签名，首次打开需要在「系统设置 → 隐私与安全性」中允许。
+      </p>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="alt" id="faq">
+    <div class="wrap">
+      <h2 class="sec-title" data-i18n="faq.title">常见问题</h2>
+      <p class="sec-sub" data-i18n="faq.sub">更多问题见仓库文档。</p>
+
+      <details>
+        <summary data-i18n="faq.q1">提示缺少 yt-dlp 或 FFmpeg？</summary>
+        <p data-i18n="faq.a1">安装包不内置这两个工具。应用会先找系统里已有的版本；找不到时按提示下载，或到「设置 → 运行依赖」里管理。</p>
+      </details>
+      <details>
+        <summary data-i18n="faq.q2">macOS 提示无法验证开发者？</summary>
+        <p data-i18n="faq.a2">首次打开时右键点击应用选择「打开」，或到「系统设置 → 隐私与安全性」中允许。应用没有付费开发者证书，这是已知取舍。</p>
+      </details>
+      <details>
+        <summary data-i18n="faq.q3">有些视频下载失败？</summary>
+        <p data-i18n="faq.a3">多数情况是该网站需要登录。请确认你有权访问该内容，然后在设置里读取浏览器登录状态或导入 cookies.txt。网站改版也会影响解析成功率。</p>
+      </details>
+      <details>
+        <summary data-i18n="faq.q4">会下载版权内容吗？</summary>
+        <p data-i18n="faq.a4">DownVid 只是 yt-dlp 的图形界面，不含任何破解或绕过技术保护措施的代码。请遵守当地法律、平台规则与内容版权，使用后果由使用者承担。</p>
+      </details>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <div>
+      <strong>DownVid</strong> · <span data-i18n="foot.license">MIT 协议开源</span>
+    </div>
+    <nav>
+      <a href="https://github.com/yxxbc/downvid" data-i18n="foot.repo">源码</a>
+      <a href="https://github.com/yxxbc/downvid/releases" data-i18n="foot.releases">发布版本</a>
+      <a href="https://github.com/yxxbc/downvid/issues" data-i18n="foot.issues">问题反馈</a>
+      <a href="https://github.com/yxxbc/downvid/blob/main/CHANGELOG.md" data-i18n="foot.changelog">更新日志</a>
+      <a href="https://github.com/yxxbc/downvid/blob/main/SECURITY.md" data-i18n="foot.security">安全政策</a>
+    </nav>
+  </div>
+</footer>
+
+<script>
+// 中英双语：文案表 + 切换。纯前端实现，无后端、无构建步骤。
+// 新增文案时两处都要补；缺 key 会保留 HTML 里的默认中文。
+const I18N = {
+  zh: {},   // 中文就是 HTML 里的原文，无需重复
+  en: {
+    'nav.features': 'Features',
+    'nav.install': 'Download',
+    'nav.faq': 'FAQ',
+    'nav.github': 'GitHub',
+    'hero.title': 'Save the videos<br>you like, locally.',
+    'hero.lede': 'An open-source desktop app for macOS, Windows and Linux. Powered by yt-dlp, supporting 1000+ sites, with a clean interface and no command-line flags to remember.',
+    'hero.download': 'Download latest',
+    'hero.source': 'View source',
+    'plat.macos': 'macOS',
+    'plat.windows': 'Windows',
+    'plat.linux': 'Linux',
+    'feat.title': 'What it does',
+    'feat.sub': 'Everything you need, and none of the things you should not have.',
+    'feat.sites.t': '1000+ sites',
+    'feat.sites.d': 'Powered by yt-dlp. Douyin and Kuaishou have dedicated parsers that return the watermark-free URL.',
+    'feat.quality.t': 'Quality and formats',
+    'feat.quality.d': '360P to 4K, audio-only (MP3), subtitles-only (SRT) and YouTube multi-audio-track.',
+    'feat.speed.t': 'Download acceleration',
+    'feat.speed.d': 'Direct links use a small-chunk worker queue (8 by default, up to 16); optional aria2 multi-connection.',
+    'feat.cookie.t': 'Logged-in content',
+    'feat.cookie.d': 'Reads cookies from your installed browsers, or import a cookies.txt manually.',
+    'feat.deps.t': 'Automatic dependencies',
+    'feat.deps.d': 'The installer does not bundle yt-dlp / FFmpeg. It reuses what is already on your machine and can download them when missing.',
+    'feat.update.t': 'Auto update',
+    'feat.update.d': 'Updates through GitHub Releases. macOS is unsigned, so it verifies and swaps the app bundle itself.',
+    'ins.title': 'Three steps',
+    'ins.sub': 'No command-line tools to install beforehand.',
+    'ins.s1.t': 'Download the package',
+    'ins.s1.d': 'Pick .dmg / .exe / .AppImage for your OS; all artifacts are on the Releases page.',
+    'ins.s2.t': 'Paste a link',
+    'ins.s2.d': 'Paste the video URL and choose a quality or format.',
+    'ins.s3.t': 'Start downloading',
+    'ins.s3.d': 'If runtime dependencies are missing on first use, the app offers a one-click install.',
+    'ins.cta': 'Go to downloads',
+    'ins.guide': 'Installation guide',
+    'ins.note': 'Note: the macOS build is not code-signed, so the first launch needs to be allowed under System Settings → Privacy & Security.',
+    'faq.title': 'FAQ',
+    'faq.sub': 'More in the repository docs.',
+    'faq.q1': 'It says yt-dlp or FFmpeg is missing?',
+    'faq.a1': 'The installer does not bundle them. The app looks for a usable copy already on your system first; if it cannot find one, download it from the prompt or manage it under Settings → Runtime dependencies.',
+    'faq.q2': 'macOS says the developer cannot be verified?',
+    'faq.a2': 'The first time, right-click the app and choose Open, or allow it under System Settings → Privacy & Security. The project has no paid developer certificate; this is a known trade-off.',
+    'faq.q3': 'Some videos fail to download?',
+    'faq.a3': 'Usually the site requires you to be signed in. Make sure you are allowed to access the content, then let the app read your browser session or import a cookies.txt. Site changes can also affect extraction.',
+    'faq.q4': 'Does it download copyrighted content?',
+    'faq.a4': 'DownVid is only a graphical front end for yt-dlp and contains no code for cracking or circumventing protection measures. Follow your local laws, platform terms and copyright; you are responsible for how you use it.',
+    'foot.license': 'MIT licensed',
+    'foot.repo': 'Source',
+    'foot.releases': 'Releases',
+    'foot.issues': 'Issues',
+    'foot.changelog': 'Changelog',
+    'foot.security': 'Security',
+  },
+};
+
+const btn = document.getElementById('langBtn');
+
+function apply(lang) {
+  const dict = I18N[lang] || {};
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    // 中文直接回填原始 HTML（首次切换时缓存下来）
+    if (!el.dataset.zh) el.dataset.zh = el.innerHTML;
+    const value = lang === 'zh' ? el.dataset.zh : (dict[key] || el.dataset.zh);
+    if (value) el.innerHTML = value;
+  });
+  document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+  document.documentElement.classList.add('ready');
+  btn.textContent = lang === 'zh' ? 'English' : '简体中文';
+  // 便于分享带语言的链接
+  const url = new URL(location.href);
+  if (lang === 'zh') url.searchParams.delete('lang'); else url.searchParams.set('lang', lang);
+  history.replaceState(null, '', url);
+}
+
+function initialLang() {
+  const q = new URLSearchParams(location.search).get('lang');
+  if (q === 'en' || q === 'zh') return q;
+  // 默认跟随浏览器；中文环境给中文，其余给英文
+  return /^zh\b/i.test(navigator.language || '') ? 'zh' : 'en';
+}
+
+let current = initialLang();
+apply(current);
+btn.addEventListener('click', () => {
+  current = current === 'zh' ? 'en' : 'zh';
+  apply(current);
+});
+</script>
+</body>
+</html>

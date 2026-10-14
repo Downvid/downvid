@@ -33,7 +33,8 @@
     "deps:manifest": "node scripts/gen-deps-manifest.mjs",
     "deps:manifest:check": "node scripts/gen-deps-manifest.mjs --check",
     "lint:ipc": "node scripts/lint-ipc.mjs",
-    "lint:icons": "node scripts/lint-icons.mjs"
+    "lint:icons": "node scripts/lint-icons.mjs",
+    "preview:social": "node scripts/gen-social-preview.mjs"
   },
   "dependencies": {
     "@material-symbols/font-400": "^0.48.0",
