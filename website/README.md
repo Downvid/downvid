@@ -1,6 +1,8 @@
-# 产品官网（GitHub Pages）
+# 产品官网（GitHub Pages / Vercel）
 
-单文件静态落地页，发布在 <https://yxxbc.github.io/downvid/>。
+单文件静态落地页，双平台发布：
+- **Vercel**：<https://downvid-coral.vercel.app>（由 `vercel.json` 托管静态目录，全球 Edge CDN 加速）
+- **GitHub Pages**：<https://yxxbc.github.io/downvid/>（由 `.github/workflows/pages.yml` 自动发布）
 
 ## 为什么是单文件
 

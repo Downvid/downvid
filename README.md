@@ -24,7 +24,7 @@
 </p>
 
 <p>
-  <a href="https://yxxbc.github.io/downvid/">Website</a>
+  <a href="https://downvid-coral.vercel.app">Website</a>
   ·
   <a href="https://github.com/yxxbc/downvid/releases">Download</a>
   ·
@@ -63,9 +63,17 @@
 
 ## About
 
-**DownVid** is an open-source desktop video downloader for macOS, Windows and Linux. It uses
-[yt-dlp](https://github.com/yt-dlp/yt-dlp) as its download engine and puts a clean graphical interface on top,
-so you don't have to remember command-line flags.
+**DownVid** is a modern, high-performance, open-source desktop video downloader for **macOS**, **Windows**, and **Linux**.
+
+Built as a graphical frontend for [yt-dlp](https://github.com/yt-dlp/yt-dlp) and [FFmpeg](https://ffmpeg.org/), it removes the complexity of command-line tools and provides a clean, native, and ad-free experience.
+
+### Why DownVid?
+
+- 🌐 **1000+ Platforms Supported**: Seamlessly extracts high-quality video and audio across YouTube, Bilibili, Douyin, TikTok, Xiaohongshu, Kuaishou, Twitter/X, Instagram, and more.
+- ⚡ **Built-in Acceleration**: Optimized multi-part chunk worker queues (up to 16 threads) and optional aria2 integration ensure lightning-fast downloads.
+- 🔒 **Zero Ads & Privacy-first**: No bundled third-party junk, no background telemetry, no forced watermarks. 100% open-source under the MIT license.
+- 📦 **Zero-Config Sidecar**: Automatically detects existing system tools, or downloads and manages standalone yt-dlp & FFmpeg binaries in isolated user storage.
+- 🎨 **Modern Design**: Designed with Material 3 design tokens, clean typography, responsive layout, and full cross-platform dark mode compatibility.
 
 The project is under active development. If you hit a problem or have a suggestion, please
 [open an issue](https://github.com/yxxbc/downvid/issues).

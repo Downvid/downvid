@@ -1,0 +1,9 @@
+backend/
+electron/
+src/
+tests/
+docs/
+dist/
+dist-electron/
+.git/
+node_modules/

@@ -24,7 +24,7 @@
 </p>
 
 <p>
-  <a href="https://yxxbc.github.io/downvid/">官网</a>
+  <a href="https://downvid-coral.vercel.app">官网</a>
   ·
   <a href="https://github.com/yxxbc/downvid/releases">下载 DownVid</a>
   ·
@@ -61,9 +61,19 @@
 
 ## 项目简介
 
-**DownVid** 是一款面向 macOS、Windows 和 Linux 的开源桌面视频下载工具。它使用 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 作为下载引擎，并通过简洁的图形界面降低使用门槛。
+**DownVid** 是一款现代化、高性能、完全开源的跨平台桌面视频下载工具，原生支持 **macOS**、**Windows** 和 **Linux**。
 
-项目仍在积极开发中。遇到问题或有功能建议，欢迎提交 [Issue](https://github.com/yxxbc/downvid/issues)。
+本项目作为 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 与 [FFmpeg](https://ffmpeg.org/) 的图形界面前端，抹平了复杂的命令行参数门槛，带来开箱即用、简洁无干扰的下载体验。
+
+### 核心亮点
+
+- 🌐 **全网 1000+ 站点支持**：深度覆盖主流短视频与长视频平台（抖音、快手、小红书、哔哩哔哩、YouTube、TikTok、X/Twitter、Instagram 等），支持无水印原画质提取。
+- ⚡ **多路并发与下载加速**：直链采用智能分块并发队列调度（最高 16 路），支持断点续传；可选集成 aria2 多连接加速引擎。
+- 🔒 **纯粹开源与注重隐私**：无任何弹窗广告、无捆绑插件、不添加平台强制水印、不收集用户隐私。基于 MIT 协议完全开源。
+- 📦 **开箱即用依赖管理**：内置 Go 依赖边车，自动探测并使用系统已有工具；缺失时支持一键自动下载配置，无需折腾环境变量。
+- 🎨 **精致现代视觉交互**：基于 Material 3 设计语言，界面纯粹干练，全平台提供流畅统一的视觉与操作体验。
+
+项目仍在积极持续演进中。遇到问题或有功能建议，欢迎提交 [Issue](https://github.com/yxxbc/downvid/issues)。
 
 ## 功能特性
 

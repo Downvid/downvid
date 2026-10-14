@@ -7,7 +7,26 @@
     "node": ">=22",
     "pnpm": ">=8"
   },
-  "description": "现代化的视频下载工具",
+  "description": "现代化的开源跨平台视频下载工具 — 一键保存全网无水印高清视频 / A modern, cross-platform open-source video downloader GUI",
+  "keywords": [
+    "video-downloader",
+    "yt-dlp",
+    "video-download",
+    "media-downloader",
+    "youtube-downloader",
+    "bilibili-downloader",
+    "douyin-downloader",
+    "kuaishou-downloader",
+    "electron",
+    "vue3",
+    "desktop-app",
+    "cross-platform",
+    "ffmpeg",
+    "aria2",
+    "download-manager",
+    "视频下载器",
+    "无水印下载"
+  ],
   "author": "DownVid <downvid@example.com>",
   "scripts": {
     "dev": "vite",

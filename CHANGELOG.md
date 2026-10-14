@@ -34,7 +34,7 @@
   用户既看不到也关不掉
 - **关于页贡献者改为固定名单 + 格子布局**：不再显示提交次数（那是个会变的数字），
   也不再需要缓存与失败态
-- **产品官方落地页（GitHub Pages）**：新增 `website/` 单文件落地页（无第三方打包依赖、响应式、纯前端双语），并配置 `.github/workflows/pages.yml` 自动化部署，提供直观的跨平台下载与功能介绍
+- **产品官方落地页（GitHub Pages & Vercel）**：新增 `website/` 单文件落地页（无第三方打包依赖、响应式、纯前端双语），同时接入 Vercel 静态托管（`vercel.json`）与 GitHub Pages 自动化部署，提供直观的跨平台下载与功能介绍
 
 ### 改进
 
@@ -46,9 +46,11 @@
 - 真人贡献者此前**没有任何身份标**（只有 DEV / BOT / AI），现补上 `CONTRIBUTOR`
 - **README 徽章与视觉全面升级**：
   - 徽章栏全线升级为带品牌官方矢量 Logo 与专属配色（Downloads、Release、Stars、AlternativeTo、CodeQL、License）
+  - 中英文 README 项目简介（About）大幅充实扩展，结构化呈现跨平台与无水印下载亮点
   - 新增 `### 贡献者` 动态头像网格（contrib.rocks），展示社区贡献者
   - 新增 AlternativeTo 软件条目收录链接与 CodeQL 自动化安全扫描状态
   - 补充 OpenGraph 社交预览卡片与生成脚本（`scripts/gen-social-preview.mjs`）
+- `package.json` 补齐中英双语详细描述与搜索关键词标签（keywords）
 
 ### 工程
 
