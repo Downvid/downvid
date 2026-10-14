@@ -142,6 +142,9 @@ jobs:
       - name: 官网校验
         run: pnpm lint:website
 
+      - name: 文档一致性校验（AGENTS.md ↔ CLAUDE.md）
+        run: pnpm lint:docs
+
       - name: 纯逻辑单测（Vitest）
         run: pnpm test
 

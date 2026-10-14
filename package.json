@@ -58,6 +58,7 @@
     "lint:ipc": "node scripts/lint-ipc.mjs",
     "lint:icons": "node scripts/lint-icons.mjs",
     "lint:website": "node scripts/lint-website.mjs",
+    "lint:docs": "node scripts/lint-docs.mjs",
     "website:stats": "node scripts/gen-website-stats.mjs",
     "preview:social": "node scripts/gen-social-preview.mjs"
   },

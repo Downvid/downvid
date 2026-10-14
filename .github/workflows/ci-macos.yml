@@ -101,6 +101,9 @@ jobs:
       - name: 官网校验
         run: pnpm lint:website
 
+      - name: 文档一致性校验（AGENTS.md ↔ CLAUDE.md）
+        run: pnpm lint:docs
+
       - name: 纯逻辑单测（Vitest）
         run: pnpm test
 
@@ -180,6 +183,11 @@ jobs:
         shell: bash
         run: |
           APP=$(find release -maxdepth 3 -name 'DownVid.app' -type d | sort -V | tail -1)
+          if [ -z "$APP" ]; then
+            echo "::error::在 release 下找不到 DownVid.app"
+            find release -maxdepth 3 | head -20
+            exit 1
+          fi
           echo "检查 $APP"
           if codesign -dv "$APP" 2>&1 | grep -q 'Authority=Developer ID'; then
             echo "::error::产物带了 Developer ID 签名，但 electron-builder.json5 里 identity 为 null"
@@ -192,7 +200,14 @@ jobs:
       - name: 边车可执行且架构正确
         shell: bash
         run: |
-          SIDECAR=$(find release -maxdepth 5 -name downvid-deps -type f | sort -V | tail -1)
+          # 路径形如 release/<版本>/<arch>/DownVid.app/Contents/Resources/downvid-deps，
+          # 深度 7 层，maxdepth 必须够
+          SIDECAR=$(find release -maxdepth 8 -name downvid-deps -type f | sort -V | tail -1)
+          if [ -z "$SIDECAR" ]; then
+            echo "::error::在 release 下找不到 downvid-deps 边车"
+            find release -maxdepth 3 -type d | head -20
+            exit 1
+          fi
           echo "检查 $SIDECAR"
           file "$SIDECAR"
           "$SIDECAR" version
@@ -205,6 +220,10 @@ jobs:
         shell: bash
         run: |
           APP=$(find release -maxdepth 3 -name 'DownVid.app' -type d | sort -V | tail -1)
+          if [ -z "$APP" ]; then
+            echo "::error::在 release 下找不到 DownVid.app"
+            exit 1
+          fi
           PLIST_VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP/Contents/Info.plist")
           PKG_VERSION=$(node -p "require('./package.json').version")
           echo "Info.plist=$PLIST_VERSION package.json=$PKG_VERSION"

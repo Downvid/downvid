@@ -230,10 +230,23 @@ suite.case('版本号与 package.json 一致', async (t) => {
 suite.case('Linux 的 package-type 决定能否自动更新', async (t) => {
   if (!unpacked) return t.fail('没有产物目录')
   if (!platform.isLinux) return
+
   // updater 的 unsupportedReason() 依赖它：deb/rpm 走自动更新，
-  // 缺了这个文件就会被判成 tar.gz → 只能手动下载
+  // 缺了这个文件就会被判成 tar.gz → 只能手动下载。
+  //
+  // 但 `--dir` 产物里**不含**它：electron-builder 只在 deb/rpm 安装包里写入。
+  // 所以要校验它得对真实安装包跑（发布流程里用 --require-package-type）。
   const pkgType = path.join(resourcesDir(), 'package-type')
-  t.ok(fs.existsSync(pkgType), 'resources/package-type 必须存在（否则 deb/rpm 会被误判为 tar.gz）')
+  if (!fs.existsSync(pkgType)) {
+    if (!process.argv.includes('--require-package-type')) {
+      t.note('package-type', '解包目录不含（仅 deb/rpm 安装包携带），跳过；发布流程用 --require-package-type 校验')
+      return
+    }
+    t.fail('deb/rpm 安装包里必须有 resources/package-type（缺失会让自动更新被判成 tar.gz）')
+    return
+  }
+  const type = fs.readFileSync(pkgType, 'utf8').trim()
+  t.ok(['deb', 'rpm', 'AppImage'].includes(type), `package-type 应为已知格式，实际 ${type}`)
 })
 
 suite.case('打包配置里声明了边车与产物名契约', async (t) => {

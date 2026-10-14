@@ -69,7 +69,8 @@ pnpm build                                     # 端到端：vue-tsc + vite buil
 
 **新增测试脚本必须挂到对应平台的三个工作流上** —— 曾经 `test:acceleration` 加了脚本却没接进 CI，
 加速逻辑长期没有自动化验证。同理，**新增工作流文件时必须先 `git add`**：曾有一次把单一的测试
-工作流拆成 `ci-linux.yml` / `ci-macos.yml` / `ci-windows.yml`，旧文件的删除已 staged 而三个新文件
+工作流拆成 `.github/workflows/ci-linux.yml` / `.github/workflows/ci-macos.yml` /
+`.github/workflows/ci-windows.yml`，旧文件的删除已 staged 而三个新文件
 还是 untracked，一次 `git commit -a` 就会让 main 上不再有任何 CI
 （`scripts/lint-docs.mjs` 会校验文档提到的 workflow 真实存在）。
 

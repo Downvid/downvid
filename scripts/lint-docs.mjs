@@ -41,7 +41,8 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8')
 const exists = (p) => fs.existsSync(path.join(ROOT, p))
 
 // 文档里以 `code` 包裹的文件名。要求带扩展名，且不含空格/通配符。
-const FILE_REF = /`([A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:ts|vue|go|mjs|js|json5|json|yml|yaml|sh|md|html|txt))`/g
+// 允许以点开头（`.github/workflows/ci-linux.yml`、`.gitattributes`）。
+const FILE_REF = /`(\.?[A-Za-z0-9_][A-Za-z0-9_./-]*\.(?:ts|vue|go|mjs|js|json5|json|yml|yaml|sh|md|html|txt))`/g
 
 /**
  * 仓库里真实存在的「文件名 → 完整路径」索引。
@@ -88,6 +89,15 @@ function fileRefs(text) {
 const RUNTIME_PATH = /^(userData|resources|\.downvid-aria2)\//
 const isRuntimePath = (ref) => RUNTIME_PATH.test(ref)
 
+/**
+ * 是否是「运行时产物」而非仓库文件。
+ *
+ * `.part.json` / `.part` 这类是下载过程中的临时文件，只在用户机器上出现；
+ * 仓库里真实存在的点文件（`.gitattributes`、`.gitignore`）走存在性判定，
+ * 所以「点开头且不存在」＝运行时产物。
+ */
+const isRuntimeArtifact = (ref) => ref.startsWith('.') && !exists(ref)
+
 /** 该引用在文档里是否只是「历史 / 反面」提及（存在性本就不该成立） */
 function isNegatedMention(text, ref) {
   for (const line of text.split('\n')) {
@@ -113,6 +123,7 @@ function pathExists(ref) {
 for (const [doc, text] of Object.entries(docs)) {
   for (const ref of fileRefs(text)) {
     if (isRuntimePath(ref)) continue
+    if (isRuntimeArtifact(ref)) continue
     if (isNegatedMention(text, ref)) continue
     if (ref.includes('/')) {
       if (!pathExists(ref)) problems.push(`${doc} 引用了不存在的路径：${ref}`)
