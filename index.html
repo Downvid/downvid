@@ -7,7 +7,23 @@
     <title>DownVid - 全平台视频下载</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!--
+      字体样式表必须异步加载。
+
+      它是跨域且 render-blocking 的：当 fonts.googleapis.com 的请求一直 pending
+      （国内直连基本必挂），Chromium 会连带阻塞后面的 <script type="module">，
+      Vue 于是永远不挂载 —— 窗口停在纯白，主进程日志里连 [WINDOW] did-finish-load
+      都不会出现，renderer 的 document.readyState 卡在 "interactive"。
+
+      改成 media="print" + onload 切回 all 之后：能连上就照常生效；
+      连不上或超时只是回退到 style.css 里已有的系统字体栈，不再阻塞首屏。
+    -->
+    <link rel="stylesheet" media="print" onload="this.media='all'"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap">
+    <noscript>
+      <link rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;600;700&display=swap">
+    </noscript>
   </head>
   <body>
     <div id="app"></div>
