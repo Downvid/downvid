@@ -5,6 +5,23 @@ import { useDepsStore, readMissingKinds, stripDepMarkers } from './deps'
 import { shouldIgnoreProgress, statusAfterResult, shouldRecordHistory } from './download-rules'
 
 /**
+ * 把任意值转成"可被 structured clone"的普通数据。
+ *
+ * Vue 的 reactive/ref 会被包成 Proxy，而 Electron 的 IPC 用 structured clone
+ * 传参，Proxy 会直接抛 `An object could not be cloned`。这里用 JSON 往返做深拷贝：
+ * 下载参数都是字符串/数字/布尔/数组，没有 Date、Map 等需要保留类型的值。
+ *
+ * 之所以整体做而不是逐字段展开：逐字段太容易漏（subtitles 就漏过一次）。
+ */
+export function toPlainData<T>(value: T): T {
+  try {
+    return JSON.parse(JSON.stringify(value)) as T
+  } catch {
+    return value
+  }
+}
+
+/**
  * 把 yt-dlp / 网络层的原始错误翻译成用户能看懂、且能据此行动的一句话。
  *
  * 此前只处理了磁盘/权限/网络/ffmpeg 四类，**403 完全没有归类**，
@@ -166,11 +183,14 @@ export const useDownloadStore = defineStore('download', () => {
 
   function resumeTask(task: DownloadTask) {
     const idx = downloadTasks.value.findIndex(t => t.id === task.id)
-    if (idx !== -1) {
-      downloadTasks.value[idx].status = 'downloading'
-      pausedTasks.delete(task.id)
-      processDownload(downloadTasks.value[idx])
-    }
+    if (idx === -1) return
+
+    // 必须先脱离 'downloading'：processDownload 开头的守卫会拒绝状态已是
+    // downloading/merging 的任务，否则"继续下载"会被自己挡回去——任务被标成
+    // 下载中却什么都没发生，既不再推进也无法再次继续。
+    pausedTasks.delete(task.id)
+    downloadTasks.value[idx].status = 'pending'
+    processDownload(downloadTasks.value[idx])
   }
 
   async function processDownload(task: DownloadTask) {
@@ -243,9 +263,17 @@ export const useDownloadStore = defineStore('download', () => {
       if ((task as any).downloadMode === 'audio') downloadOptions.downloadMode = 'audio'
       if ((task as any).downloadMode === 'subtitle') downloadOptions.downloadMode = 'subtitle'
       if ((task as any).selectedAudioTrack) downloadOptions.audioTrack = { ...(task as any).selectedAudioTrack }
-      if ((task as any).selectedSubtitles?.length > 0) downloadOptions.subtitles = (task as any).selectedSubtitles
+      if ((task as any).selectedSubtitles?.length > 0) {
+        downloadOptions.subtitles = [...(task as any).selectedSubtitles]
+      }
 
-      const result = (await window.electronAPI.ytdlp.download(downloadOptions)) as any
+      // 统一拍平后再交给 IPC。
+      //
+      // 逐字段展开容易漏（subtitles 就漏过一次），而 resume 时 task 来自
+      // downloadTasks，是 Vue 的 Proxy —— Proxy **无法被 structured clone**，
+      // 漏掉任何一个字段都会报 `An object could not be cloned`。
+      // 这里做一次整体深拷贝，把这类问题一次性挡掉。
+      const result = (await window.electronAPI.ytdlp.download(toPlainData(downloadOptions))) as any
 
       // 暂停时主进程会返回 { paused: true }。此时**不能**标成完成，
       // 否则界面显示"已完成"、进度 100%，用户没法继续，只能重新下载。

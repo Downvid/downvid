@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Windows 的候选目录必须能在 **macOS 上** 被验证。
@@ -141,5 +142,51 @@ func TestWindowsInstallDirsExpandsFakeWingetTree(t *testing.T) {
 
 	if !strings.Contains(joined, "win64-gpl/bin") {
 		t.Errorf("windowsInstallDirs 未把 WinGet\\Packages 展开进来（忘了调用展开？）。实际：\n%s", joined)
+	}
+}
+
+// winget 的机器级落点（--scope machine）与用户级是两套路径，都要覆盖。
+//
+// 只覆盖用户级会让"用管理员安装"的用户被判为缺失。
+func TestWindowsInstallDirsCoverMachineScope(t *testing.T) {
+	home := `C:\Users\tester`
+	dirs := windowsInstallDirs(home)
+	joined := strings.ReplaceAll(strings.Join(dirs, "\n"), "\\", "/")
+
+	if !strings.Contains(joined, "Program Files/WinGet/Links") {
+		t.Error("缺少机器级 winget 的 Links（winget install --scope machine）")
+	}
+	// 用户级也要还在
+	if !strings.Contains(joined, "AppData/Local/Microsoft/WinGet/Links") {
+		t.Error("缺少用户级 winget 的 Links")
+	}
+}
+
+// 扫描必须有 wall-clock 上限：目录数预算约束不了"每个目录都很慢"的情况
+// （Windows 上叠加杀软扫描，单次 ReadDir 可能数百毫秒）。
+// 没有上限时，"保底扫描"会变成用户看到的"依赖检测超时"。
+func TestScanRespectsDeadline(t *testing.T) {
+	root := t.TempDir()
+	deep := filepath.Join(root, "a", "b", "c")
+	if err := os.MkdirAll(deep, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(deep, BinaryName(KindFFmpeg)), []byte("x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	scanDirsLeft = 3000
+	scanDeadline = time.Now().Add(-1 * time.Second) // 已过期
+	if got := scanDir(root, BinaryName(KindFFmpeg), 0); got != "" {
+		t.Errorf("超过时限仍继续扫描：%s", got)
+	}
+}
+
+// findOne 必须重置时限，否则第一个依赖超时后其余都扫不了
+func TestFindOneResetsScanDeadline(t *testing.T) {
+	scanDeadline = time.Now().Add(-1 * time.Second)
+	_ = FindOne(KindFFprobe, Options{ManagedDir: t.TempDir()})
+	if time.Now().After(scanDeadline) {
+		t.Error("FindOne 未重置扫描时限")
 	}
 }

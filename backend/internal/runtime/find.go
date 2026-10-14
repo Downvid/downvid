@@ -85,8 +85,9 @@ func FindOne(kind Kind, opts Options) Result { return findOne(kind, opts) }
 
 func findOne(kind Kind, opts Options) Result {
 	res := Result{Kind: string(kind), Optional: Optional[kind]}
-	// 重置扫描预算：每个依赖独立计算，避免前一个把预算用光
+	// 重置扫描预算与时限：每个依赖独立计算，避免前一个把额度用光
 	scanDirsLeft = 3000
+	scanDeadline = time.Now().Add(scanTimeLimit)
 
 	var lastErr error
 	for _, c := range candidatesFor(kind, opts) {
@@ -170,7 +171,11 @@ func scanForBinary(kind Kind, opts Options) *probe.Info {
 //     而不是单个目录里有多少文件
 //   - 跳过明显无关的目录（node_modules、缓存、系统目录）
 func scanDir(dir string, name string, depth int) string {
-	if depth > scanMaxDepth || scanDirsLeft <= 0 {
+	// 三道闸：深度、目录数预算、以及 wall-clock 上限。
+	// 加时间上限是因为目录数预算无法约束"每个目录都很慢"的情况
+	// （Windows 上 Program Files 叠加杀软扫描，单次 ReadDir 可能数百毫秒）。
+	// 没有它，"保底扫描"可能反而让用户看到"依赖检测超时"。
+	if depth > scanMaxDepth || scanDirsLeft <= 0 || time.Now().After(scanDeadline) {
 		return ""
 	}
 	scanDirsLeft--
@@ -216,6 +221,13 @@ const scanMaxDepth = 4
 //
 // 每探测一个依赖都会重置。
 var scanDirsLeft = 3000
+
+// scanDeadline 是单次扫描的 wall-clock 上限。
+// 由 findOne 在每次探测前设置。
+var scanDeadline time.Time
+
+// scanTimeLimit 单次扫描最多占用多久。宁可漏扫也不要把检测拖成超时。
+const scanTimeLimit = 3 * time.Second
 
 // shouldSkipDir 跳过明显不可能放可执行文件、或体量过大的目录
 func shouldSkipDir(name string) bool {
@@ -426,6 +438,10 @@ func windowsInstallDirs(home string) []string {
 	//   - DenoLand.Deno 提供 JS 运行时（yt-dlp 的清单把它列为依赖）
 	wingetBase := filepath.Join(home, "AppData", "Local", "Microsoft", "WinGet")
 
+	// winget 有**两套**落点：用户级与机器级（`--scope machine`）。
+	// 只覆盖用户级会让"用管理员装"的用户被判为缺失。
+	machineBase := filepath.Join(`C:\Program Files`, "WinGet")
+
 	dirs := []string{
 		`C:\ProgramData\chocolatey\bin`,
 		`C:\Program Files\yt-dlp`,
@@ -435,12 +451,16 @@ func windowsInstallDirs(home string) []string {
 		filepath.Join(home, "scoop", "shims"),
 		filepath.Join(home, "scoop", "apps", "yt-dlp", "current"),
 		filepath.Join(home, "scoop", "apps", "ffmpeg", "current", "bin"),
+		// 用户级 winget
 		filepath.Join(wingetBase, "Links"),
+		// 机器级 winget（--scope machine）
+		filepath.Join(machineBase, "Links"),
 		filepath.Join(home, "AppData", "Local", "Microsoft", "WindowsApps"),
 	}
 
-	// Packages 下的目录名含随机哈希，只能展开通配
+	// Packages 下的目录名含随机哈希，只能展开通配；用户级与机器级都要展开
 	dirs = append(dirs, expandWindowsGlobs(wingetBase, WindowsPackagePatterns)...)
+	dirs = append(dirs, expandWindowsGlobs(machineBase, WindowsPackagePatterns)...)
 
 	return dirs
 }

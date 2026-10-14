@@ -2,7 +2,31 @@
 
 本文件记录 DownVid 的所有版本更新。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
-## [Unreleased]
+## [1.3.2] - 2026-10-14
+
+### 修复
+
+- **Windows（及所有 x64 平台）无法下载运行依赖**：平台键用的是 Go 命名
+  （`windows/amd64`）而资产表是 electron-builder 命名（`win32/x64`），查表必然失败，
+  点「下载」报「暂不支持 windows/amd64 平台的 yt-dlp 下载」。三个 x64 平台都受影响，
+  arm64 只因两种命名恰好一致而正常
+- **「继续下载」点了没反应、任务卡在「下载中」**：`resumeTask` 先把状态置为
+  `downloading`，而 `processDownload` 开头的守卫正是拒绝该状态，于是把自己挡了回去
+- **字幕任务「继续下载」报 `An object could not be cloned`**：`subtitles` 在恢复时
+  来自响应式对象（Vue Proxy），而 Proxy 无法被 structured clone。现统一在交给 IPC
+  前做一次拍平（`toPlainData`），不再逐字段展开——逐字段太容易漏
+- **在设置里点「保存」会丢失依赖的手动指定路径**：设置面板与依赖面板各写各的整个
+  `settings` 对象，前者字段里没有 `depPaths`，整体覆盖时把它抹掉。现改为**合并写入**
+  （新增 `src/stores/settings.ts`），并统一了全部 6 个写入点
+- **winget 装的依赖检测不到**：候选目录只覆盖用户级的 `WinGet\Links`，漏掉了
+  `WinGet\Packages`（zip + nested portable 真正解压的位置）与机器级
+  （`--scope machine`）的整套路径
+
+### 新增
+
+- **依赖的保底扫描**：已知位置都没命中时，在常见目录做一次有界扫描，
+  避免"明明装了却提示缺失"。结果标记为「扫描发现」并以不同颜色显示。
+  三道闸限制耗时：深度 4 层、目录数 3000、wall-clock 3 秒
 
 ### 修复
 
