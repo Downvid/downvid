@@ -264,6 +264,15 @@ DownVid 由三个进程/组件构成：**渲染进程**（Vue 3 界面）、**�
 
 ## 🙏 致谢
 
+### 社区贡献者
+
+感谢提交过修复的贡献者，他们的问题定位与验证质量都很高：
+
+- [@jwfstars](https://github.com/jwfstars) — 修复国内网络下字体样式表阻塞首屏导致应用打不开
+- [@hailaij](https://github.com/hailaij) — 修复 Windows 依赖探测与时限、暂停未终止完整进程树，并补充原生 Windows 集成回归
+
+### 依赖与工具
+
 - [Videdown](https://github.com/cshuangyy/videdown) — 原始项目
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) — 强大的视频下载引擎
 - [FFmpeg](https://ffmpeg.org/) — 音视频处理解决方案

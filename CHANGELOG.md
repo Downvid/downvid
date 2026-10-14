@@ -81,6 +81,23 @@
   从 109 秒（0.16 MB/s）降到约 3 秒（5 MB/s 量级），**快 30 倍以上**。
   对不支持分块的服务器会自动退化为普通下载
 
+### 致谢
+
+这一版有三位社区贡献者提交了高质量的修复，质量与自证程度都值得记录：
+
+- **[@jwfstars](https://github.com/jwfstars)**（[#41](https://github.com/yxxbc/downvid/pull/41)）
+  修掉了**国内网络下应用完全打不开**的问题。报告里用 headless Chrome 做了对照实验，
+  用一个「accept 之后永不响应」的本地服务冒充被墙的字体域名——比 connection refused
+  更贴近真实情况——并给出 `readyState` / `#app` 的前后对比。这种复现方式比我自己的
+  第一版尝试更准确。
+- **[@hailaij](https://github.com/hailaij)**（[#42](https://github.com/yxxbc/downvid/pull/42)、[#44](https://github.com/yxxbc/downvid/pull/44)）
+  连续提交了三处 Windows 相关的修复（依赖探测与时限、损坏副本不再遮蔽正常版本、
+  暂停时终止完整进程树），并**实际安装构建产物做真机验收**：下载 30 MB 文件核对
+  暂停/续传后的 SHA-256 一致、确认 yt-dlp 父子进程确实退出。同时给 Windows CI 加了
+  原生 exe 集成回归，还如实标注了未覆盖范围（仅公开 MP4 / Generic 路径）。
+
+他们都在 PR 里做了变异验证（破坏被测逻辑确认用例会失败），这与本仓库的约定一致。
+
 ---
 
 ## [1.3.1] - 2026-10-12
