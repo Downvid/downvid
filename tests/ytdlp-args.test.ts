@@ -133,6 +133,25 @@ describe('buildYtdlpArgs', () => {
       .toBe('http://127.0.0.1:7890')
   })
 
+  it('aria2 只接管 HTTP，保留原生 HLS/DASH 并隔离续传片段', () => {
+    const args = buildYtdlpArgs({ ...base, acceleration: { enabled: true, maxConnections: 12, aria2Path: '' } }, OUT_DIR, { ...ctx, aria2Path: 'C:\\tools with spaces\\aria2c.exe' })
+    expect(args).toContain('http:C:\\tools with spaces\\aria2c.exe')
+    expect(args).toContain('dash,m3u8:native')
+    expect(valueAfter(args, '--downloader-args')).toContain('--max-connection-per-server=12 --split=12')
+    expect(valueAfter(args, '--downloader-args')).toContain('--check-certificate=true')
+    expect(valueAfter(args, '--concurrent-fragments')).toBe('12')
+    expect(valueAfter(args, '-o')).toBe('%(title)s.%(ext)s')
+    expect(args).toContain(`temp:${path.join(OUT_DIR, '.downvid-aria2')}`)
+  })
+
+  it('关闭加速、未发现 aria2 或字幕模式不调用外部引擎', () => {
+    const disabled = buildYtdlpArgs({ ...base, acceleration: { enabled: false, maxConnections: 16, aria2Path: '' } }, OUT_DIR, { ...ctx, aria2Path: '/bin/aria2c' })
+    expect(disabled).not.toContain('--downloader')
+    expect(valueAfter(disabled, '--concurrent-fragments')).toBe('1')
+    expect(buildYtdlpArgs(base, OUT_DIR, ctx)).not.toContain('--downloader')
+    expect(buildYtdlpArgs({ ...base, downloadMode: 'subtitle' }, OUT_DIR, { ...ctx, aria2Path: '/bin/aria2c' })).not.toContain('--downloader')
+  })
+
   it('YouTube 带 JS 运行时参数；node 与 deno 用不同前缀', () => {
     const yt: DownloadOptions = { ...base, url: 'https://www.youtube.com/watch?v=x' }
     const withNode = buildYtdlpArgs(yt, OUT_DIR, { ...ctx, jsRuntime: { path: '/usr/bin/node', kind: 'node', name: 'Node.js' } })

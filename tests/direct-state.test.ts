@@ -7,11 +7,12 @@ const checkpoint = () => ({ ...resource, segments: createDirectSegments(resource
 describe('直链续传检查点', () => {
   it('分段无重叠且覆盖完整文件，小文件只用一段', () => {
     const segments = createDirectSegments(resource.total)
-    expect(segments).toHaveLength(4)
+    expect(segments).toHaveLength(9)
     expect(segments[0].start).toBe(0)
     expect(segments.at(-1)?.end).toBe(resource.total)
     segments.slice(1).forEach((segment, i) => expect(segment.start).toBe(segments[i].end))
     expect(createDirectSegments(1024)).toEqual([{ start: 0, end: 1024, offset: 0 }])
+    expect(createDirectSegments(resource.total, 1)).toHaveLength(1)
   })
 
   it('只接受已写入的逐段偏移，不把预分配文件当作下载完成', () => {

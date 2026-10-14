@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import { isKuaishouUrl } from '../utils/platform'
 import { formatBytes, formatEta } from './progress'
 import { canResumeDirect, createDirectSegments, matchesDirectRange, type DirectCheckpoint, type DirectResource } from './direct-state'
+import { accelerationConnections, type AccelerationSettings } from '../../shared/acceleration'
 
 const DIRECT_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 const DIRECT_RETRIES = 3
@@ -33,12 +34,14 @@ export interface DirectDownloadParams {
   pageUrl: string
   outputPath: string
   signal: AbortSignal
+  acceleration?: AccelerationSettings
   report: (data: { percent: number; totalSize: string; speed: string; eta: string }) => void
 }
 
 /** 抖音/快手直链：暂停保留分段检查点，恢复只请求尚未写入的范围。 */
 export async function downloadDirectFile(params: DirectDownloadParams): Promise<void> {
   const { url, pageUrl, outputPath, signal, report } = params
+  const connections = accelerationConnections(params.acceleration)
   const startTime = Date.now()
   let downloaded = 0
   let resumed = 0
@@ -76,7 +79,7 @@ export async function downloadDirectFile(params: DirectDownloadParams): Promise<
   }
 
   async function segmented() {
-    let state: DirectCheckpoint = { ...probe.resource, segments: createDirectSegments(total) }
+    let state: DirectCheckpoint = { ...probe.resource, segments: createDirectSegments(total, connections) }
     let resume = false
     try {
       const saved: unknown = JSON.parse(fs.readFileSync(checkpointPath, 'utf8'))
@@ -92,34 +95,64 @@ export async function downloadDirectFile(params: DirectDownloadParams): Promise<
       downloaded = resumed = state.segments.reduce((sum, segment) => sum + segment.offset - segment.start, 0)
       emit()
       // 等待所有分段结束后才关闭文件、保存进度，避免暂停确认时还有写入。
-      const results = await Promise.allSettled(state.segments.map(async segment => {
-        for (let attempt = 0; segment.offset < segment.end; attempt++) {
-          try {
-            const extra: Record<string, string> = { Range: `bytes=${segment.offset}-${segment.end - 1}` }
-            const validator = state.etag && !state.etag.startsWith('W/') ? state.etag : state.lastModified
-            if (validator) extra['If-Range'] = validator
-            const res = await fetch(url, { headers: directHeaders(pageUrl, extra), signal: controller.signal })
-            if (res.status !== 206 || !res.body || !matchesDirectRange(res.headers.get('content-range'), segment.offset, segment.end, total)) {
-              await res.body?.cancel()
-              throw new Error('服务器未返回请求的下载范围')
+      let next = 0
+      let active = 0
+      let limit = connections
+      const waiters = new Set<() => void>()
+      const wake = () => { for (const resolve of waiters) resolve(); waiters.clear() }
+      controller.signal.addEventListener('abort', wake, { once: true })
+      const acquire = async () => {
+        while (active >= limit && !controller.signal.aborted) await new Promise<void>(resolve => waiters.add(resolve))
+        controller.signal.throwIfAborted()
+        active++
+        return () => { active--; wake() }
+      }
+      const worker = async () => {
+        while (next < state.segments.length && !controller.signal.aborted) {
+          const segment = state.segments[next++]
+          for (let attempt = 0; segment.offset < segment.end; attempt++) {
+            let release: (() => void) | undefined
+            let retryAfter = 0
+            try {
+              release = await acquire()
+              const extra: Record<string, string> = { Range: `bytes=${segment.offset}-${segment.end - 1}` }
+              const validator = state.etag && !state.etag.startsWith('W/') ? state.etag : state.lastModified
+              if (validator) extra['If-Range'] = validator
+              const res = await fetch(url, { headers: directHeaders(pageUrl, extra), signal: controller.signal })
+              if (res.status === 429 || res.status === 503) {
+                limit = Math.max(1, Math.floor(limit / 2))
+                const raw = res.headers.get('retry-after') || '0'
+                const seconds = Number(raw)
+                retryAfter = Math.min(30, Math.max(0, Number.isFinite(seconds) ? seconds : (Date.parse(raw) - Date.now()) / 1000)) || 0
+              }
+              if (res.status !== 206 || !res.body || !matchesDirectRange(res.headers.get('content-range'), segment.offset, segment.end, total)) {
+                await res.body?.cancel()
+                throw new Error(`下载范围不可用（HTTP ${res.status}）`)
+              }
+              for await (const value of streamChunks(res.body)) {
+                if (segment.offset + value.length > segment.end) throw new Error('分段数据超出请求范围')
+                await writeAll(handle, value, segment.offset)
+                segment.offset += value.length
+                downloaded += value.length
+                emit()
+              }
+              if (segment.offset !== segment.end) throw new Error('分段数据不完整')
+            } catch (e) {
+              release?.(); release = undefined
+              if (controller.signal.aborted || attempt >= DIRECT_RETRIES) {
+                controller.abort(e)
+                throw e
+              }
+              await waitRetry(Math.max(retryAfter, attempt + 1) * 1000, controller.signal)
+            } finally {
+              release?.()
             }
-            for await (const value of streamChunks(res.body)) {
-              if (segment.offset + value.length > segment.end) throw new Error('分段数据超出请求范围')
-              await writeAll(handle, value, segment.offset)
-              segment.offset += value.length
-              downloaded += value.length
-              emit()
-            }
-            if (segment.offset !== segment.end) throw new Error('分段数据不完整')
-          } catch (e) {
-            if (controller.signal.aborted || attempt >= DIRECT_RETRIES) {
-              controller.abort()
-              throw e
-            }
-            await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)))
           }
         }
-      }))
+        controller.signal.throwIfAborted()
+      }
+      const results = await Promise.allSettled(Array.from({ length: Math.min(connections, state.segments.length) }, worker))
+      controller.signal.removeEventListener('abort', wake)
       const failed = results.find(result => result.status === 'rejected')
       if (failed?.status === 'rejected') throw failed.reason
       signal.throwIfAborted()
@@ -152,7 +185,11 @@ async function* streamChunks(body: ReadableStream<Uint8Array>) {
   const reader = body.getReader()
   try {
     while (true) {
-      const { done, value } = await reader.read()
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const result = await Promise.race([reader.read(), new Promise<never>((_resolve, reject) => {
+        timer = setTimeout(() => reject(new Error('下载连接读取超时')), 30000)
+      })]).finally(() => { if (timer) clearTimeout(timer) })
+      const { done, value } = result
       if (done) return
       yield value
     }
@@ -160,4 +197,13 @@ async function* streamChunks(body: ReadableStream<Uint8Array>) {
     await reader.cancel().catch(() => {})
     reader.releaseLock()
   }
+}
+
+function waitRetry(milliseconds: number, signal: AbortSignal): Promise<void> {
+  signal.throwIfAborted()
+  return new Promise((resolve, reject) => {
+    const abort = () => { clearTimeout(timer); reject(signal.reason) }
+    const timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolve() }, milliseconds)
+    signal.addEventListener('abort', abort, { once: true })
+  })
 }

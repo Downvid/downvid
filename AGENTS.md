@@ -28,6 +28,8 @@ yt-dlp / ffmpeg **不需要**预先安装（见「运行依赖」一节）。
 pnpm vue-tsc --noEmit                          # 前端类型检查（strict + noUnusedLocals + noUnusedParameters）
 pnpm test                                      # 纯逻辑单测（Vitest，tests/*.test.ts）
 pnpm test:runtime:windows                       # Windows 原生 exe 集成回归（需 Go）
+pnpm test:download:integration                  # 本地 HTTP / 文件 / Store 下载集成回归
+pnpm test:acceleration                          # 加速基准；外部引擎见 docs/download-acceleration.md
 pnpm lint:ipc                                  # IPC 契约静态校验（三处同步 + 产物命名 + 仓库坐标一致）
 pnpm deps:manifest:check                       # 依赖清单是否落后上游
 cd backend && gofmt -l . && go vet ./... && go test ./...   # Go 侧车
@@ -129,7 +131,7 @@ Go 边车由同文件的 `goBackend()` 插件构建。`vitest.config.ts` 与 `vi
 设置存在 `localStorage['settings']`（**不在** Pinia 中），多个组件直接读。
 
 字段：`downloadDir`、`filenameTemplate`、`preferredQuality`、`cookieMode`、`cookiesFile`、
-`proxy`、`depPaths`（运行依赖的手动路径）。
+`proxy`、`depPaths`（运行依赖的手动路径）、`acceleration`（开关、并发上限、可选 aria2c 路径）。
 
 - 改动前先 `grep -rn "localStorage.getItem('settings')"`，逐个确认读取处有默认值兜底
 - 读取时用 `{ ...默认值, ...JSON.parse(saved) }` 让旧数据能被补齐
@@ -228,7 +230,8 @@ libmp3lame / aac / libx264。**代价**：上游不公布校验值，`deps:manif
 实现已拆到 `electron/download/`，`electron/ipc/download.ts` 只做分发：
 
 - **`direct.ts`**：`directUrl` 存在（仅抖音/快手——解析器返回 CDN URL）→ 纯 `fetch` + write stream。
-  Range 可用时 4 段并行（CDN 常对单连接限速），分段失败从已写入位置重试。
+  Range 可用时按小块队列调度，默认 8 路、最多 16 路；429/503 降低并发，分段失败从已写入位置重试。
+  `.part.json` 保存逐段进度，兼容旧四段布局；更换并发设置不丢失暂停进度。
   暂停通过 `activeDownloads` 里的 `AbortController`。
   这条路径存在的理由是那些 CDN 地址有效期很短，走 yt-dlp 会二次请求平台接口、拿不到同一份地址。
 - **`ytdlp.ts`**：`spawn(yt-dlp)`。解析结果 20 分钟内用 `--load-info-json` 跳过二次提取
@@ -239,6 +242,10 @@ libmp3lame / aac / libx264。**代价**：上游不公布校验值，`deps:manif
 
 `buildYtdlpArgs` 是**纯函数**：依赖路径与 JS 运行时由调用方解析后传入（`BuildArgsContext`），
 因此可以不起进程直接断言参数列表（`tests/ytdlp-args.test.ts`）。
+
+可选 aria2c（>=1.36）由 `electron/download/aria2.ts` 探测手动路径、PATH、Scoop/WinGet 等位置，
+不自动安装、不加入必需依赖清单。仅接管 yt-dlp 的 HTTP 下载；HLS/DASH 保持原生。
+aria2 临时片段隔离在输出目录 `.downvid-aria2` 中，同一暂停任务固定引擎，避免稀疏片段被顺序下载器误用。
 
 - **`progress.ts`**：两条路径共用的进度广播与节流（每 taskId 最多 200ms 一次 IPC）。
   进度格式化只在这里定义，不要再各写一份。

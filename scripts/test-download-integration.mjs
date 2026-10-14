@@ -3,49 +3,35 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import http from 'node:http'
-import vm from 'node:vm'
 import { createRequire } from 'node:module'
-import ts from 'typescript'
+import { loader } from './lib/load-source.mjs'
 
 // 与纯逻辑单测分开：实际网络/文件 IO，Electron IPC 在边界处替换。
 const require = createRequire(import.meta.url)
-const root = path.resolve(import.meta.dirname, '..')
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'downvid-download-'))
 const tick = () => new Promise(resolve => setImmediate(resolve))
-function loader(mocks = {}, globals = {}) {
-  const cache = new Map()
-  function load(file) {
-    const absolute = path.resolve(root, file)
-    if (Object.hasOwn(mocks, file)) return mocks[file]
-    if (cache.has(absolute)) return cache.get(absolute).exports
-    const module = { exports: {} }
-    cache.set(absolute, module)
-    const code = ts.transpileModule(fs.readFileSync(absolute, 'utf8'), {
-      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
-    }).outputText
-    vm.runInNewContext(code, {
-      module, exports: module.exports, console, process, Buffer, fetch, setTimeout, clearTimeout, AbortController,
-      require: name => Object.hasOwn(mocks, name) ? mocks[name]
-        : name.startsWith('.') ? load(path.relative(root, path.resolve(path.dirname(absolute), `${name}.ts`)).replaceAll('\\', '/'))
-          : require(name),
-      ...globals,
-    }, { filename: absolute })
-    return module.exports
-  }
-  return load
-}
 
 async function directChecks() {
   const requests = []
   let etag = '"v1"'
   let supportRange = true
+  let rateLimits = 0
+  let rateLimitedRange = ''
+  let retryAfter = '0'
+  let onRateLimit = () => {}
   let data = Buffer.alloc(8 * 1024 * 1024 + 1)
   for (let i = 0; i < data.length; i++) data[i] = i % 251
   const server = http.createServer((req, res) => {
     const match = /^bytes=(\d+)-(\d+)$/.exec(req.headers.range || '')
     const start = supportRange && match ? Number(match[1]) : 0
     const end = supportRange && match ? Number(match[2]) + 1 : data.length
-    requests.push({ range: req.headers.range || 'FULL', start, end, ifRange: req.headers['if-range'] })
+    const request = { range: req.headers.range || 'FULL', start, end, ifRange: req.headers['if-range'] }
+    requests.push(request)
+    if (rateLimits && req.headers.range !== 'bytes=0-0') {
+      rateLimits--
+      rateLimitedRange = request.range
+      res.writeHead(429, { 'Retry-After': retryAfter }); res.end(); onRateLimit(); return
+    }
     res.writeHead(supportRange && match ? 206 : 200, {
       'Content-Length': end - start, ETag: etag,
       ...(supportRange && match ? { 'Content-Range': `bytes ${start}-${end - 1}/${data.length}` } : {}),
@@ -61,6 +47,7 @@ async function directChecks() {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
   const load = loader({ electron: { BrowserWindow: { getAllWindows: () => [] } } })
   const { downloadDirectFile } = load('electron/download/direct.ts')
+  const { createDirectSegments } = load('electron/download/direct-state.ts')
   const url = `http://127.0.0.1:${server.address().port}/video`
   const outputPath = path.join(temp, 'direct.mp4')
   const params = { url, pageUrl: 'https://douyin.com/test', outputPath }
@@ -76,6 +63,13 @@ async function directChecks() {
     assert.deepEqual(fs.readFileSync(outputPath), data)
     assert.equal(fs.existsSync(`${outputPath}.part`), false)
     assert.equal(fs.existsSync(`${outputPath}.part.json`), false)
+  }
+  const assertFreshSegments = () => {
+    const actual = requests.filter(item => item.range !== 'bytes=0-0')
+      .map(item => ({ start: item.start, end: item.end }))
+      .sort((a, b) => a.start - b.start)
+    const expected = Array.from(createDirectSegments(data.length), ({ start, end }) => ({ start, end }))
+    assert.deepEqual(actual, expected)
   }
   try {
     await pause()
@@ -93,15 +87,33 @@ async function directChecks() {
     etag = '"v2"'
     requests.length = 0
     await complete()
-    assert.equal(requests[1].start, 0)
+    assertFreshSegments()
+    assert.ok(requests.filter(item => item.range !== 'bytes=0-0').every(item => item.ifRange === etag))
     console.log('通过：同 URL 的资源版本变化后从头下载')
 
     await pause()
     fs.writeFileSync(`${outputPath}.part.json`, '{broken')
     requests.length = 0
     await complete()
-    assert.equal(requests[1].start, 0)
+    assertFreshSegments()
     console.log('通过：损坏检查点不续传')
+
+    rateLimits = 1
+    requests.length = 0
+    await complete()
+    assert.equal(rateLimits, 0)
+    assert.ok(rateLimitedRange && requests.filter(item => item.range === rateLimitedRange).length >= 2)
+    console.log('通过：429 降低并发并重试，最终文件保持完整')
+
+    rateLimits = 1; retryAfter = '30'
+    const backoff = new AbortController()
+    onRateLimit = () => setTimeout(() => backoff.abort(), 50)
+    const pauseStart = Date.now()
+    await assert.rejects(downloadDirectFile({ ...params, signal: backoff.signal, report: () => {} }), error => error.name === 'AbortError')
+    assert.ok(Date.now() - pauseStart < 2000, '重试等待期间暂停必须及时生效')
+    retryAfter = '0'; onRateLimit = () => {}
+    await complete()
+    console.log('通过：长 Retry-After 等待期间可立即暂停并继续')
 
     supportRange = false
     await pause()
@@ -209,8 +221,28 @@ async function ipcChecks() {
   console.log('通过：直链暂停 IPC 等待文件下载完整收尾')
 }
 
+async function preparingChecks() {
+  let resolveDependency
+  const activeDownloads = new Map()
+  const load = loader({
+    electron: { BrowserWindow: { getAllWindows: () => [] } },
+    'electron/store.ts': { activeDownloads },
+    'electron/utils/binary.ts': { resolveDependency: () => new Promise(resolve => { resolveDependency = resolve }) },
+    'electron/utils/cookies.ts': {}, 'electron/parsers/ytdlp.ts': {},
+  })
+  const runtime = load('electron/download/ytdlp.ts')
+  const running = runtime.runYtdlpDownload({ taskId: 'preparing', url: 'https://example.com/video' }, temp)
+  const paused = runtime.pauseDownload('preparing')
+  resolveDependency('not-executed')
+  assert.equal(await paused, true)
+  assert.equal((await running).paused, true)
+  assert.equal(activeDownloads.size, 0)
+  console.log('通过：探测/准备期间暂停不会事后启动下载进程')
+}
+
 try {
   await directChecks()
   await storeChecks()
   await ipcChecks()
+  await preparingChecks()
 } finally { fs.rmSync(temp, { recursive: true, force: true }) }

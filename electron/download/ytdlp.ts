@@ -6,6 +6,9 @@ import { getCookieAttempts, runWithCookies, cookieFailureHint } from '../utils/c
 import { getExtractorArgs, promptNodeDownload } from '../parsers/ytdlp'
 import { activeDownloads } from '../store'
 import { sendDownloadProgress, throttledProgress, clearProgressThrottle, formatBytes, formatEta } from './progress'
+import { accelerationConnections, normalizeAcceleration, type AccelerationSettings } from '../../shared/acceleration'
+import { detectAria2 } from './aria2'
+import { parseAria2Progress } from './aria2-progress'
 
 /**
  * yt-dlp 下载路径。
@@ -45,6 +48,7 @@ export interface DownloadOptions {
   directUrl?: string; cookiesFile?: string; downloadMode?: 'video' | 'audio' | 'subtitle'
   audioTrack?: any; subtitles?: string[]; filenameTemplate?: string; proxy?: string
   cacheFile?: string; hasAudio?: boolean
+  acceleration?: AccelerationSettings
 }
 
 /**
@@ -99,6 +103,7 @@ export interface JsRuntime {
  * buildYtdlpArgs 保持纯函数，便于直接断言参数列表，不必真的起进程。
  */
 export interface BuildArgsContext {
+  aria2Path?: string | null
   /** yt-dlp 的 --ffmpeg-location，空字符串表示不需要（字幕模式或未解析到） */
   ffmpegLocation: string
   /** YouTube 需要的 JS 运行时；null 表示非 YouTube 或无需指定 */
@@ -109,8 +114,11 @@ export function buildYtdlpArgs(options: DownloadOptions, outputDir: string, ctx:
   const isSubtitleOnly = options.downloadMode === 'subtitle'
   const isAudioOnly = options.downloadMode === 'audio'
   const isYoutube = options.url.includes('youtube.com') || options.url.includes('youtu.be')
+  const connections = accelerationConnections(options.acceleration)
   const userTemplate = options.filenameTemplate || '%(title)s'
-  const outputTemplate = path.join(outputDir, userTemplate.includes('%(ext)') ? userTemplate : `${userTemplate}.%(ext)s`)
+  const completeTemplate = userTemplate.includes('%(ext)') ? userTemplate : `${userTemplate}.%(ext)s`
+  const useAria2 = !isSubtitleOnly && connections > 1 && !!ctx.aria2Path
+  const outputTemplate = useAria2 ? completeTemplate : path.join(outputDir, completeTemplate)
 
   const args: string[] = [
     '-o', outputTemplate, '--no-playlist', '--playlist-items', '1', '--encoding', 'utf-8',
@@ -119,7 +127,7 @@ export function buildYtdlpArgs(options: DownloadOptions, outputDir: string, ctx:
     // 字幕模式没有视频文件，改为输出字幕信息（语言代码可能含 '-'，不能直接写进字段路径）
     '--print', isSubtitleOnly ? `after_move:${SUBS_PREFIX}%(requested_subtitles)j` : `after_move:${FILE_PREFIX}%(filepath)s`,
     // HLS/DASH 分片并发下载（仅对分片流生效，对单个 mp4 直链无效）
-    '--concurrent-fragments', '8',
+    '--concurrent-fragments', String(connections),
     // 分块请求：规避"单连接被限速"。
     //
     // 这一步是下载速度的关键。YouTube 等站点的 CDN 会对长连接限速，同一个
@@ -152,6 +160,14 @@ export function buildYtdlpArgs(options: DownloadOptions, outputDir: string, ctx:
 
   if (options.proxy) args.push('--proxy', options.proxy)
 
+  if (useAria2) {
+    // 仅 HTTP 使用 aria2；直播/HLS/DASH 仍由 yt-dlp 处理鉴权、分片和合并。
+    args.push('--downloader', `http:${ctx.aria2Path}`, '--downloader', 'dash,m3u8:native',
+      '--downloader-args', `aria2c:--no-conf=true --max-connection-per-server=${connections} --split=${connections} --min-split-size=1M --file-allocation=none --max-tries=3 --retry-wait=2 --connect-timeout=15 --timeout=30 --auto-save-interval=1 --check-certificate=true --enable-color=false --human-readable=false --truncate-console-readout=false --summary-interval=1`)
+    // 隔离 aria2 稀疏片段；更换引擎时不能被原生顺序下载器误认为连续数据。
+    args.push('--paths', `home:${outputDir}`, '--paths', `temp:${path.join(outputDir, '.downvid-aria2')}`)
+  }
+
   if (isYoutube && ctx.jsRuntime) {
     // 用显式的 kind 而不是从路径猜：Electron 的路径里没有 "node"，
     // 靠 includes('node') 会把它误标成 deno（实测会拉起一整个应用）
@@ -164,7 +180,14 @@ export function buildYtdlpArgs(options: DownloadOptions, outputDir: string, ctx:
 
 /** 从 yt-dlp 的一行输出里解析进度/事件，喂给 UI */
 function handleLine(line: string, options: DownloadOptions, state: { downloadedFile: string; hasStarted: boolean }) {
-  if (line.startsWith(PROGRESS_PREFIX)) {
+  const aria2 = parseAria2Progress(line)
+  if (aria2) {
+    state.hasStarted = true
+    throttledProgress({ taskId: options.taskId, url: options.url, status: 'downloading',
+      percent: aria2.total > 0 ? Math.min(99, aria2.downloaded / aria2.total * 100) : 0,
+      totalSize: formatBytes(aria2.total), speed: aria2.speed > 0 ? `${formatBytes(aria2.speed)}/s` : '',
+      eta: aria2.speed > 0 ? formatEta((aria2.total - aria2.downloaded) / aria2.speed) : '' })
+  } else if (line.startsWith(PROGRESS_PREFIX)) {
     const [downloadedStr, totalStr, estimateStr, speedStr, etaStr, fragIdxStr, fragCountStr] = line.slice(PROGRESS_PREFIX.length).split('|')
     const done = num(downloadedStr)
     const total = num(totalStr) || num(estimateStr)
@@ -213,8 +236,31 @@ export interface YtdlpRunResult {
  * 优先用解析阶段缓存下来的 info JSON 跳过二次提取；若在尚未开始下载时失败
  * （如直链过期），回退为按 URL 重新提取。
  */
+const taskAria2Paths = new Map<string, string | null>()
+
 export async function runYtdlpDownload(options: DownloadOptions, outputDir: string): Promise<YtdlpRunResult> {
+  let paused = false
+  let finish!: () => void
+  const preparing = { options, status: 'pending', abort: () => { paused = true }, stopped: new Promise<void>(resolve => { finish = resolve }) }
+  activeDownloads.set(options.taskId, preparing)
+  try {
+    return await executeYtdlpDownload(options, outputDir, () => paused)
+  } catch (e) {
+    if (paused) return pausedYtdlpResult()
+    throw e
+  } finally {
+    if (activeDownloads.get(options.taskId) === preparing) activeDownloads.delete(options.taskId)
+    finish()
+  }
+}
+
+function pausedYtdlpResult(): YtdlpRunResult {
+  return { code: null, stderr: '', failedBrowsers: [], filePath: '', paused: true }
+}
+
+async function executeYtdlpDownload(options: DownloadOptions, outputDir: string, preparationPaused: () => boolean): Promise<YtdlpRunResult> {
   const ytdlpPath = await resolveDependency('yt-dlp')
+  if (preparationPaused()) return pausedYtdlpResult()
   if (!ytdlpPath) throw new Error('未找到可用的 yt-dlp')
 
   const isSubtitleOnly = options.downloadMode === 'subtitle'
@@ -232,14 +278,27 @@ export async function runYtdlpDownload(options: DownloadOptions, outputDir: stri
     if (runtime.path && runtime.kind) jsRuntime = { path: runtime.path, kind: runtime.kind, name: runtime.name }
   }
 
+  const acceleration = normalizeAcceleration(options.acceleration)
+  if (!taskAria2Paths.has(options.taskId)) {
+    const status = acceleration.enabled && acceleration.maxConnections > 1 && !isSubtitleOnly
+      ? await detectAria2(acceleration.aria2Path) : null
+    taskAria2Paths.set(options.taskId, status?.path || null)
+  }
+  const aria2Path = taskAria2Paths.get(options.taskId)
+  if (preparationPaused()) return pausedYtdlpResult()
+  // 同一任务暂停期间不切换引擎：aria2 的稀疏 .part 不能交给顺序下载器续传。
+  if (aria2Path && !fs.existsSync(aria2Path)) throw new Error('续传需要原 aria2c，请恢复该程序后重试')
+
   const args = buildYtdlpArgs(options, outputDir, {
     ffmpegLocation: isSubtitleOnly ? '' : getFfmpegLocation(),
     jsRuntime,
+    aria2Path,
   })
   const state = { downloadedFile: '', hasStarted: false }
   let isPaused = false
 
   const runOnce = (source: string[], cookieArgs: string[]) => new Promise<{ code: number | null; stderr: string }>((resolve, reject) => {
+    if (preparationPaused() || isPaused) { isPaused = true; resolve({ code: null, stderr: '' }); return }
     const child = spawn(ytdlpPath, [...args, ...cookieArgs, ...source], { cwd: path.dirname(ytdlpPath) })
     let stderr = ''
 
@@ -249,9 +308,10 @@ export async function runYtdlpDownload(options: DownloadOptions, outputDir: stri
       let pending = ''
       return {
         push: (text: string) => {
-          const lines = (pending + text).split(/\r?\n/)
+          const lines = (pending + text).split(/\r\n|\r|\n/)
           pending = lines.pop() || ''
           lines.forEach(l => handleLine(l, options, state))
+          if (parseAria2Progress(pending)) { handleLine(pending, options, state); pending = '' }
         },
         flush: () => { if (pending) handleLine(pending, options, state); pending = '' },
       }
@@ -293,6 +353,7 @@ export async function runYtdlpDownload(options: DownloadOptions, outputDir: stri
   } finally {
     activeDownloads.delete(options.taskId)
     clearProgressThrottle(options.taskId)
+    if (!isPaused) taskAria2Paths.delete(options.taskId)
   }
 
   const { code, stderr, failedBrowsers } = result

@@ -66,6 +66,7 @@ interface Window {
       openExternal: (url: string) => Promise<void>
     }
     ytdlp: {
+      accelerationStatus: (manual?: string) => Promise<import('../shared/acceleration').AccelerationStatus>
       parse: (url: string, cookiesFile?: string, proxy?: string) => Promise<any>
       download: (options: {
         url: string
@@ -81,6 +82,7 @@ interface Window {
         cacheFile?: string
         hasAudio?: boolean
         filenameTemplate?: string
+        acceleration?: import('../shared/acceleration').AccelerationSettings
         downloadMode?: 'video' | 'audio' | 'subtitle'
       }) => Promise<any>
       pauseDownload: (taskId: string) => Promise<boolean>
