@@ -124,7 +124,7 @@ const platformNote = [
 
 const body = `<!-- 此正文由 scripts/gen-release-notes.mjs 生成，请勿手动编辑 -->
 <div align="center">
-如果你在更新页面开到这个开头，请往下滑看详细的更新日志
+
 ### ⬇️ 点击徽章直接下载
 
 ${primaryBadges.join('\n')}
@@ -151,6 +151,8 @@ ${platformNote}
 ---
 
 ## 📝 更新内容
+
+> 在应用内的更新弹窗里，只会显示这一节的内容；上面的下载引导区只在发布页有用。
 
 ${changelogBody || `DownVid v${version} 发布。详见 [CHANGELOG.md](https://github.com/${OWNER}/${REPO}/blob/main/CHANGELOG.md)。`}
 

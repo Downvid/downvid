@@ -130,14 +130,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     }
   },
 
-  onContributorsUpdated: (callback: (data: any) => void) => {
-    const handler = (_: any, data: any) => callback(data)
-    ipcRenderer.on('contributors:updated', handler)
-    return () => {
-      ipcRenderer.off('contributors:updated', handler)
-    }
-  },
-
   onMenuShowAbout: (callback: () => void) => {
     const handler = () => callback()
     ipcRenderer.on('menu:showAbout', handler)

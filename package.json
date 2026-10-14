@@ -31,6 +31,8 @@
     "deps:build": "bash scripts/build-backend.sh",
     "deps:manifest": "node scripts/gen-deps-manifest.mjs",
     "deps:manifest:check": "node scripts/gen-deps-manifest.mjs --check",
+    "contributors:sync": "node scripts/gen-contributors.mjs",
+    "contributors:check": "node scripts/gen-contributors.mjs --check",
     "lint:ipc": "node scripts/lint-ipc.mjs",
     "lint:icons": "node scripts/lint-icons.mjs"
   },

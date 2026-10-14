@@ -65,14 +65,6 @@ function changeTab(tab: TabType) {
 }
 
 // 监听跳转设置页事件
-// 设置里的「立即检查更新」→ 切到关于页并打开更新弹窗
-window.addEventListener('navigate-to-about-update', () => {
-  currentTab.value = 'about'
-  window.dispatchEvent(new CustomEvent('tab-changed', { detail: 'about' }))
-  // 等视图切换后再让 AboutView 打开弹窗（它用 v-show 切换，事件监听已就绪）
-  setTimeout(() => window.dispatchEvent(new CustomEvent('about-open-update')), 0)
-})
-
 window.addEventListener('navigate-to-settings', () => {
   showSettings.value = true
 })

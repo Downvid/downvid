@@ -206,16 +206,9 @@
                   </label>
                 </div>
 
-                <div class="flex items-center gap-2 pt-1">
-                  <button
-                    class="flex items-center gap-1.5 px-3 py-2 bg-surface-container-highest text-on-surface rounded-md text-sm font-medium hover:bg-surface-variant transition-colors border border-outline-variant/20"
-                    @click="checkNow"
-                  >
-                    <MaterialIcon name="refresh" :size="14" />
-                    立即检查更新
-                  </button>
-                  <span class="text-[11px] text-on-surface-variant">手动检查不受上面的开关限制</span>
-                </div>
+                <p class="text-[11px] text-on-surface-variant leading-relaxed">
+                  手动检查更新在「关于软件」页 —— 那里已有入口，不在此重复。
+                </p>
               </div>
 
               <!-- 运行依赖 -->
@@ -334,19 +327,6 @@ async function selectCookiesFile() {
 function clearCookiesFile() {
   settings.value.cookiesFile = ''
   updateSettings({ cookiesFile: '' })
-}
-
-/** 手动检查更新：打开关于页的更新弹窗（不受自动检查开关限制） */
-async function checkNow() {
-  try {
-    const result = await window.electronAPI?.checkForUpdates?.()
-    if (result?.error) { showError('检查更新失败', undefined, result.error); return }
-    // 无论有没有新版本，都跳到关于页的更新弹窗展示结果
-    close()
-    window.dispatchEvent(new CustomEvent('navigate-to-about-update'))
-  } catch (e) {
-    showError(`检查更新失败：${e instanceof Error ? e.message : '未知错误'}`)
-  }
 }
 
 function saveSettings() {

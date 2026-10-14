@@ -319,40 +319,17 @@ async function loadContributors() {
   }
 }
 
-// 主进程会在后台静默刷新贡献者（首次返回的是本地缓存），
-// 刷新成功后通过广播推过来——不订阅的话，界面会一直停留在旧列表，
-// 用户得重启应用才能看到新贡献者。
-let unsubscribeContributors: (() => void) | null = null
-
-/** 设置里的「立即检查更新」会广播这个事件，让本页打开更新弹窗 */
-function openUpdateDrawer() {
-  showUpdateDrawer.value = true
-}
-
 onMounted(async () => {
-  window.addEventListener('about-open-update', openUpdateDrawer)
   try {
     const version = await window.electronAPI?.app?.getVersion?.()
     if (version) appVersion.value = version
   } catch {}
-
-  if (window.electronAPI?.onContributorsUpdated) {
-    unsubscribeContributors = window.electronAPI.onContributorsUpdated((data) => {
-      if (Array.isArray(data) && data.length) {
-        contributors.value = data as Contributor[]
-        contributorsWarning.value = ''
-      }
-    })
-  }
 
   // 加载贡献者
   loadContributors()
 })
 
 onUnmounted(() => {
-  window.removeEventListener('about-open-update', openUpdateDrawer)
-  unsubscribeContributors?.()
-  unsubscribeContributors = null
 })
 
 async function openExternal(url: string) {
