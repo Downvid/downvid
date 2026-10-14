@@ -20,6 +20,7 @@ pnpm test:download:integration # local HTTP/file/store integration regression
 pnpm test:acceleration      # acceleration benchmark; see docs/download-acceleration.md
 pnpm lint:ipc               # static check of the hand-maintained IPC wiring
 pnpm lint:icons             # icon names must be valid (a typo renders as literal text)
+pnpm lint:website           # landing page: single file, assets, i18n pairs, theme colors
 pnpm deps:manifest:check    # is the dependency manifest behind upstream?
 pnpm build                  # vue-tsc && vite build && electron-builder (current platform)
 pnpm build:mac:arm64        # also :mac:x64 :win :linux:x64 :linux:arm64
@@ -83,7 +84,8 @@ and a **Go sidecar** (detects and installs yt-dlp / ffmpeg). They talk over IPC 
 | `src/` | Vue 3 renderer (`<script setup>`, Tailwind v4, Pinia) | `dist/` |
 | `shared/app.ts` | **single source** of repo coordinates and external links | imported by all three |
 | `tests/` | Vitest pure-logic tests | — |
-| `scripts/` | manifest generation, sidecar build, IPC lint, release notes | — |
+| `website/` | landing page (single file, no build; published by Vercel's Git integration) | — |
+| `scripts/` | manifest generation, sidecar build, IPC / website lint, release notes | — |
 
 Both Electron processes are built by `vite-plugin-electron/simple` from one `vite.config.ts`;
 the Go sidecar comes from the `goBackend()` plugin in that same file.
@@ -147,6 +149,30 @@ Names are referenced by older clients' `latest*.yml`. Renaming `DownVid-Setup-*`
 `electron/constants.ts`). `electron-builder.json5`'s `publish` is build-time config that runtime
 can't read — `lint:ipc` cross-checks it. Moving repos means editing `shared/app.ts` + `publish` +
 workflow references, all three.
+
+### 7. Landing page (`website/`)
+
+One file, `website/index.html`, **no build step**, published straight from `main` by the Git
+integration of the Vercel project `downvid` (`vercel.json` sets `outputDirectory: "website"`,
+site at <https://downvid-coral.vercel.app>). GitHub Pages is **no longer used**: the repo never
+had Pages enabled in Settings, so `actions/configure-pages` only ever failed with
+`Get Pages site failed` — that workflow is gone, and `pnpm lint:website` (test.yml, frontend job)
+does the checks instead.
+
+Four silent-failure traps, all covered by `lint:website`:
+
+- **Referenced repo assets** (og:image, favicon, screenshots) use absolute
+  `raw.githubusercontent.com/<owner>/<repo>/main/...` URLs — rename or delete a file and the
+  live page shows a broken image with no local signal
+- **i18n keys must pair both ways**: `data-i18n` placeholders ↔ `I18N.en` entries; a missing
+  English entry silently keeps showing Chinese
+- **Colors are copied by hand**: `--primary` etc. in the page's `:root` must match the
+  `@theme` block in `src/style.css`
+- **Zero dependencies**: nothing but Google Fonts may be linked (`.vercelignore` excludes source
+  dirs only — it validates nothing)
+- **The download count is a static number**: "Downloaded N times" in the hero is refreshed by
+  `pnpm website:stats` — no shields.io badge, no client-side fetch (rationale in
+  `website/README.md`). Run it after a release.
 
 ---
 

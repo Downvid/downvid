@@ -155,6 +155,12 @@ refactor(download): 拆分直链与 yt-dlp 两条路径
 
 见 [发布流程 · 产物命名契约](./release.md#产物命名契约)。**产物名一旦发布即不可更改**，改名会让存量用户无法自动更新。
 
+### 改产品官网
+
+`website/index.html` 是**单文件**，由 Vercel 的 Git 集成从 `main` 直接发布，中间没有构建步骤。
+引用的仓库资源、中英词条、配色都是手抄/硬写的，改完必须跑 `pnpm lint:website`。
+详见 [`website/README.md`](../website/README.md)。**不要**恢复 `pages.yml`（仓库未启用 Pages）。
+
 ### 触碰更新逻辑
 
 `electron/updater.ts`、`electron/constants.ts`、`electron-builder.json5` 的 `publish`、`scripts/gen-update-manifests.mjs` 都受 CODEOWNERS 保护。改动前请确认：
@@ -223,6 +229,7 @@ Windows runner 与 macOS/Linux 的默认环境差异很大，以下三点都已�
 | Go 侧车纯逻辑 | `backend/internal/*/**_test.go`，`go test ./...` |
 | 前端/主进程纯逻辑 | `tests/*.test.ts`（Vitest），`pnpm test` |
 | IPC 三处同步 | `pnpm lint:ipc` 静态校验 |
+| 官网静态约束 | `pnpm lint:website` 静态校验（引用资源、中英词条、配色） |
 | 跨模块类型一致 | `pnpm vue-tsc --noEmit` |
 | 真实行为 | 手工验证（下载、更新、依赖安装） |
 

@@ -26,7 +26,7 @@ downvid/
 │   ├── types/              # 共享类型
 │   └── style.css           # Tailwind v4 主题（@theme 定义语义色）
 ├── shared/app.ts           # 仓库坐标与外部链接的唯一来源
-├── website/                # 产品落地页（GitHub Pages，单文件无构建）
+├── website/                # 产品落地页（单文件无构建，由 Vercel 的 Git 集成发布）
 ├── tests/                  # Vitest 纯逻辑单测
 ├── scripts/                # 见下
 ├── docs/                   # 文档
@@ -44,6 +44,8 @@ downvid/
 | `gen-update-manifests.mjs` | 按最终产物重新生成 `latest*.yml` | 发布流程内自动 |
 | `gen-release-notes.mjs` | 生成 Release 正文（下载徽章 + 对照表） | 发布流程内自动 |
 | `lint-ipc.mjs` | 校验 IPC 三处同步、env.d.ts 约束、产物命名契约 | `pnpm lint:ipc`，CI 必跑 |
+| `lint-website.mjs` | 校验官网单文件、引用资源、中英词条成对、配色与应用一致 | `pnpm lint:website`，CI 必跑 |
+| `gen-website-stats.mjs` | 汇总 Releases 下载量写回官网 hero | `pnpm website:stats`，发布后手动跑 |
 
 ## 手动维护点（改代码前请先看）
 
@@ -53,3 +55,5 @@ downvid/
 2. **新增广播事件**：主进程 emit 点、preload 的 `on`、订阅方的 unsubscribe
 3. **改设置形状**：设置存在 `localStorage['settings']`，删改字段会让老用户设置失效
 4. **改产物名**：会切断存量用户的自动更新，见[发布流程](./release.md#产物命名契约)
+5. **改官网**：`website/index.html` 是单文件、由 Vercel 直接发布，改完跑 `pnpm lint:website`
+   （引错图、漏翻译、配色漂移都只会在线上暴露，见 `website/README.md`）

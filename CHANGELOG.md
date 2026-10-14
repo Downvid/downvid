@@ -34,7 +34,10 @@
   用户既看不到也关不掉
 - **关于页贡献者改为固定名单 + 格子布局**：不再显示提交次数（那是个会变的数字），
   也不再需要缓存与失败态
-- **产品官方落地页（GitHub Pages & Vercel）**：新增 `website/` 单文件落地页（无第三方打包依赖、响应式、纯前端双语），同时接入 Vercel 静态托管（`vercel.json`）与 GitHub Pages 自动化部署，提供直观的跨平台下载与功能介绍
+- **产品官方落地页（Vercel 静态托管）**：新增 `website/` 单文件落地页（无第三方打包依赖、响应式、纯前端双语），由 `vercel.json` 托管静态目录并以 Vercel 的 Git 集成自动发布，提供直观的跨平台下载与功能介绍
+- **官网展示累计下载量**：hero 增加「已被下载 N 次」，数字取 GitHub Releases 全部产物的 `download_count` 之和。
+  刻意不做实时拉取（官网零第三方依赖，且未认证 API 限额按出口 IP 共享，见上一节），
+  改为 `pnpm website:stats` 一条命令刷新
 
 ### 改进
 
@@ -57,6 +60,11 @@
 - `Dependency Review` 在仓库未开启 Dependency graph 时不再报错，改为给出明确提示并跳过
   （该开关只能手动在网页设置里打开，GitHub API 不提供）。此前多位贡献者被这个红叉误导
 - 删除已无用的 `electron/utils/contributors.ts`（163 行）与相关 IPC、缓存、脚本
+- **删除 `Deploy website` 工作流（`pages.yml`）**：仓库从未在 Settings → Pages 里选过发布源，
+  `actions/configure-pages` 因此每次都稳定报 `Get Pages site failed`，却没有任何东西依赖它。
+  官网改由 Vercel 的 Git 集成发布，原先那套站点自检（引用资源存在、中英词条成对）
+  重写成可本地运行的 `pnpm lint:website`，挂到 `test.yml` 的 frontend job——
+  官网的坑是「改完不报错、线上才裂」，值得留在 CI 里而不是随工作流一起删掉
 
 ## [1.3.2] - 2026-10-14
 

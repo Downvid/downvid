@@ -32,6 +32,7 @@ pnpm test:download:integration                  # 本地 HTTP / 文件 / Store �
 pnpm test:acceleration                          # 加速基准；外部引擎见 docs/download-acceleration.md
 pnpm lint:ipc                                  # IPC 契约静态校验（三处同步 + 产物命名 + 仓库坐标一致）
 pnpm lint:icons                                # 图标名是否有效（写错会静默渲染成文字）
+pnpm lint:website                              # 官网单文件 / 引用资源 / 中英词条 / 配色一致性
 pnpm deps:manifest:check                       # 依赖清单是否落后上游
 cd backend && gofmt -l . && go vet ./... && go test -shuffle=on ./...   # Go 侧车
 pnpm build                                     # 端到端：vue-tsc + vite build + electron-builder
@@ -54,7 +55,7 @@ pnpm build                                     # 端到端：vue-tsc + vite buil
 | job | 内容 |
 | --- | --- |
 | `backend` | gofmt / vet / `go test -shuffle=on` / **5 平台交叉编译** |
-| `frontend` | 类型检查 / IPC 契约 / 图标名 / 纯逻辑单测 |
+| `frontend` | 类型检查 / IPC 契约 / 图标名 / 官网校验 / 纯逻辑单测 |
 | `integration` | 下载集成回归 / 加速基准（三平台）/ Windows 原生运行依赖回归 |
 | `build` | 依赖清单校验 / 构建 / 打包校验 / 清单与 Release 正文脚本自检 |
 
@@ -101,7 +102,8 @@ Dependabot 已忽略其大版本升级。
 | `src/` | Vue 3 渲染进程（`<script setup>`、Tailwind v4、Pinia） | `dist/` |
 | `shared/app.ts` | 仓库坐标与外部链接的**唯一来源** | 被三方共同引用 |
 | `tests/` | Vitest 纯逻辑单测 | — |
-| `scripts/` | 清单生成、构建边车、IPC 校验、Release 正文 | — |
+| `website/` | 产品落地页（单文件、无构建，由 Vercel 的 Git 集成发布） | — |
+| `scripts/` | 清单生成、构建边车、IPC / 官网校验、Release 正文 | — |
 
 两个 Electron 进程由 `vite-plugin-electron/simple` 从**同一个** `vite.config.ts` 构建；
 Go 边车由同文件的 `goBackend()` 插件构建。`vitest.config.ts` 与 `vite.config.ts` **分开**，
@@ -179,6 +181,23 @@ Linux 用 `amd64`/`x86_64` 而不是 `x64`（与 electron-builder 的 `${arch}` 
 
 **换仓库时**：改 `shared/app.ts` + `electron-builder.json5` 的 `publish` + 各 workflow 里的仓库引用，
 三处必须一致，否则用户收不到更新。
+
+### 7. 改产品官网（`website/`）
+
+单文件 `website/index.html`，**无构建步骤**，由 Vercel 项目 `downvid` 的 Git 集成在推送 main 后
+直接发布（`vercel.json` 指定 `outputDirectory: "website"`，域名 <https://downvid-coral.vercel.app>）。
+GitHub Pages **不再使用**：仓库从未在 Settings 里选过 Pages 源，`actions/configure-pages` 只会稳定报
+`Get Pages site failed`，那个工作流已删除。校验改由 `pnpm lint:website` 在 test.yml 的 frontend job 跑。
+
+容易静默失败的四点（`lint:website` 全部覆盖）：
+
+- **引用的仓库资源**（og:image、favicon、截图）走 `raw.githubusercontent.com/<owner>/<repo>/main/...`
+  绝对地址，文件改名/删除后线上裂图，本地无提示
+- **中英词条双向成对**：`data-i18n` 占位 ↔ `I18N.en` 词条，缺英文会永远显示中文
+- **配色是手抄的**：官网 `:root` 的 `--primary` 等必须与 `src/style.css` 的 `@theme` 一致
+- **零依赖**：除 Google Fonts 外不得外链脚本/样式（`.vercelignore` 只排除源码目录，不做校验）
+- **下载量是静态数字**：hero 的「已被下载 N 次」由 `pnpm website:stats` 刷新，
+  不接 shields.io / 不前端 fetch（理由见 `website/README.md`）；发布新版后顺手跑一次
 
 ---
 

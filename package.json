@@ -53,6 +53,8 @@
     "deps:manifest:check": "node scripts/gen-deps-manifest.mjs --check",
     "lint:ipc": "node scripts/lint-ipc.mjs",
     "lint:icons": "node scripts/lint-icons.mjs",
+    "lint:website": "node scripts/lint-website.mjs",
+    "website:stats": "node scripts/gen-website-stats.mjs",
     "preview:social": "node scripts/gen-social-preview.mjs"
   },
   "dependencies": {

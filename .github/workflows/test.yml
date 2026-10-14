@@ -13,6 +13,10 @@ on:
   pull_request:
   workflow_dispatch:
 
+# 这里刻意不做 paths 过滤：官网（website/**）的校验也挂在这个工作流上，
+# 过滤会让「只改官网」的提交跳过校验。此前 website/** 由单独的 pages.yml 触发，
+# 而它在仓库从未启用 Pages（Settings → Pages 未选源）时必然报错。
+
 concurrency:
   group: test-${{ github.ref }}
   cancel-in-progress: true
@@ -84,6 +88,10 @@ jobs:
       # 图标名写错时字体会静默渲染成文字或空白，界面上很难发现
       - name: 图标名校验
         run: pnpm lint:icons
+      # 官网是单文件、直接由 Vercel 从 main 发布，中间没有构建步骤：
+      # 引错图、漏翻译、配色漂移都只会在线上静默出现，所以在这里拦
+      - name: 官网校验
+        run: pnpm lint:website
       - name: 纯逻辑单测
         run: pnpm test
 

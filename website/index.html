@@ -75,6 +75,10 @@ header{position:sticky;top:0;z-index:20;background:rgba(255,248,244,.86);backdro
 .btn-ghost:hover{background:var(--surface-container-highest);text-decoration:none}
 .platforms{display:flex;gap:18px;flex-wrap:wrap;margin-top:26px;font-size:13px;color:var(--on-surface-variant)}
 .platforms span{display:inline-flex;align-items:center;gap:6px}
+/* 下载量：数字由 scripts/gen-website-stats.mjs 从 GitHub Releases 汇总后写死。
+   放在 hero 里是为了给「要不要装」一个社会认同，所以只用数字，不做图表。 */
+.stats{margin-top:22px;font-size:13px;color:var(--on-surface-variant)}
+.stats b{font-size:15px;color:var(--on-surface);font-variant-numeric:tabular-nums}
 .shot{border-radius:var(--radius);overflow:hidden;border:1px solid var(--outline-variant);box-shadow:0 24px 60px -20px rgba(59,49,37,.28)}
 .shot img{width:100%}
 
@@ -164,6 +168,14 @@ html.ready [data-i18n]{visibility:visible}
           <span data-i18n="plat.linux">Linux</span>
         </span>
       </div>
+      <!-- 下载量：静态数字，由 pnpm website:stats 从 GitHub Releases 汇总刷新。
+           刻意不用 shields.io 或前端 fetch —— 官网约定零第三方依赖，
+           且未认证 API 限额按出口 IP 共享（60 次/小时），失败态不值得写。 -->
+      <p class="stats">
+        <span data-i18n="hero.downloads">已被下载</span>
+        <b data-download-count>4,650</b>
+        <span data-i18n="hero.times">次</span>
+      </p>
     </div>
     <div class="shot">
       <img src="https://raw.githubusercontent.com/yxxbc/downvid/main/src/assets/screen.png" alt="DownVid 界面" loading="eager">
@@ -301,6 +313,8 @@ const I18N = {
     'plat.macos': 'macOS',
     'plat.windows': 'Windows',
     'plat.linux': 'Linux',
+    'hero.downloads': 'Downloaded',
+    'hero.times': 'times',
     'feat.title': 'What it does',
     'feat.sub': 'Everything you need, and none of the things you should not have.',
     'feat.sites.t': '1000+ sites',
