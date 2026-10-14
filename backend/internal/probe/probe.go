@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// CandidateTimeout 是执行**单个候选**可执行文件的时限。
+// CandidateTimeout 是执行**托管副本**（DownVid 自己下载的那份）的时限。
 //
 // 为什么是 15 秒而不是曾经的 3 秒：yt-dlp 的 macOS 官方构建是 PyInstaller
 // 打包的（约 37MB），本机实测 `--version` 稳定要 8～10 秒，而**刚下载完的
@@ -20,10 +20,18 @@ import (
 // 校验与页面缓存都还没热）。3 秒预算下探测必然超时，报「执行超时，文件可能
 // 损坏」，于是**刚下载好的托管副本会被判为不可用**：用户点「下载」看着进度
 // 条跑完，界面却仍然显示「下载」，反复点也没用。
-//
-// 系统里那些 yt-dlp 只需 0.2 秒（Homebrew / uv 装的是 Python zipapp），
-// 所以这个问题只在「没有可用的系统副本、必须走托管副本」的机器上暴露。
 const CandidateTimeout = 15 * time.Second
+
+// SystemCandidateTimeout 是执行**系统里那份**（PATH / 常见安装目录）的时限。
+//
+// 刻意比托管副本短得多，两个原因：
+//   - 系统副本通常是 Python zipapp（Homebrew / uv / pipx），`--version` 只要
+//     0.2 秒；慢到 5 秒还答不上来的，基本就是坏文件或卡死的进程
+//   - **每个卡死的候选都要吃掉一整个时限**。候选表里可能有十几个路径
+//     （PATH + 各平台常见安装目录），若每个都给 15 秒，最坏情况能把一次检测
+//     拖到几分钟。Windows 回归用例（两个卡死候选之后才轮到正常副本）
+//     正是这样暴露出来的
+const SystemCandidateTimeout = 5 * time.Second
 
 // Args 各工具的版本探测参数
 var Args = map[string][]string{
@@ -62,13 +70,22 @@ func Run(tool, path string) (Info, error) {
 
 // RunContext 同时受调用方总预算与单个候选时限约束。
 func RunContext(ctx context.Context, tool, path string) (Info, error) {
+	return RunWithTimeout(ctx, tool, path, CandidateTimeout)
+}
+
+// RunWithTimeout 与 RunContext 相同，但由调用方指定单个候选的执行时限。
+//
+// 需要它是因为**不同来源的候选该给不同的预算**：托管副本是我们自己下载的
+// 官方 PyInstaller 构建（8～12 秒），系统副本通常是 0.2 秒的 zipapp。
+// 一律按长预算给，会让卡死的系统副本把检测拖垮（见 SystemCandidateTimeout）。
+func RunWithTimeout(ctx context.Context, tool, path string, timeout time.Duration) (Info, error) {
 	args, ok := Args[tool]
 	if !ok {
 		args = []string{"--version"}
 	}
 
 	info := Info{Path: path}
-	out, err := run(ctx, path, args, CandidateTimeout)
+	out, err := run(ctx, path, args, timeout)
 	if err != nil {
 		return info, describeRunError(err, out)
 	}
@@ -169,6 +186,19 @@ func run(parent context.Context, path string, args []string, timeout time.Durati
 	sink := &limitedBuffer{limit: 64 << 10}
 	cmd.Stdout = sink
 	cmd.Stderr = sink
+
+	// **必须设 WaitDelay**：超时后 exec.CommandContext 只杀**直接子进程**。
+	// 我们的候选是 shell 脚本或 PyInstaller 启动器，它们会再拉起子进程，
+	// 而那个孙进程继承了 stdout 管道。子进程被杀了，孙进程还在，
+	// 管道不关闭 → `cmd.Run()` 一直等 I/O → **探测远超预算**。
+	//
+	// 实测：一个 `sleep 300` 的假二进制把 5 秒预算的探测拖成了 300 秒
+	// （单元测试里真实复现）。用户侧的表现是界面卡住几十秒到几分钟，
+	// 最后报「依赖检测达到时限」——而真正的原因是这个孙进程。
+	//
+	// WaitDelay 让 Wait 在进程退出后再等这么久就强制关闭管道并返回。
+	cmd.WaitDelay = 2 * time.Second
+
 	err := cmd.Run()
 	if ctx.Err() != nil {
 		err = ctx.Err()

@@ -50,17 +50,22 @@ pnpm build                                     # 端到端：vue-tsc + vite buil
 
 ### CI 工作流分工
 
-测试按职责拆成独立 job（`.github/workflows/test.yml`），失败时一眼能看出是哪一层：
+测试按**平台**拆成三个工作流（`.github/workflows/ci-linux.yml`、`ci-macos.yml`、`ci-windows.yml`），
+每个工作流内部再按职责拆 job，失败时一眼能看出是哪一层：
 
 | job | 内容 |
 | --- | --- |
-| `backend` | gofmt / vet / `go test -shuffle=on` / **5 平台交叉编译** |
-| `frontend` | 类型检查 / IPC 契约 / 图标名 / 官网校验 / 纯逻辑单测 |
-| `integration` | 下载集成回归 / 加速基准（三平台）/ Windows 原生运行依赖回归 |
-| `build` | 依赖清单校验 / 构建 / 打包校验 / 清单与 Release 正文脚本自检 |
+| `backend` | gofmt / vet / `go test -shuffle=on` / 交叉编译（Linux 跑全 5 平台，macOS/Windows 跑本平台） |
+| `frontend` | 类型检查 / IPC 契约 / 图标名 / 官网校验 / 纯逻辑单测 / 更新流程回归 / 设置迁移 |
+| `main-process` | 仅 Linux：更新流程回归 / 设置迁移 / 依赖清单校验 |
+| `integration` | 下载集成回归 / 加速基准 / 解析集成回归 |
+| `native-runtime` | 仅 Windows：原生 exe 运行依赖回归 |
+| `package` / `packaging` | 构建 / 打包到目录 / 产物内容校验 / 清单与 Release 正文脚本自检 |
 
-**新增测试脚本必须挂到对应 job 上** —— 曾经 `test:acceleration` 加了脚本却没接进 CI，
-加速逻辑长期没有自动化验证。
+**新增测试脚本必须挂到对应平台的三个工作流上** —— 曾经 `test:acceleration` 加了脚本却没接进 CI，
+加速逻辑长期没有自动化验证。同理，**新增工作流文件时必须先 `git add`**：曾有一次把
+`test.yml` 拆成 `ci-*.yml`，删除已 staged 而新文件还是 untracked，一次 `git commit -a`
+就会让 main 上不再有任何 CI（见 `scripts/lint-docs.mjs` 的 workflow 一致性校验）。
 
 ### 关于格式化
 
@@ -195,7 +200,7 @@ Linux 用 `amd64`/`x86_64` 而不是 `x64`（与 electron-builder 的 `${arch}` 
 单文件 `website/index.html`，**无构建步骤**，由 Vercel 项目 `downvid` 的 Git 集成在推送 main 后
 直接发布（`vercel.json` 指定 `outputDirectory: "website"`，域名 <https://downvid-coral.vercel.app>）。
 GitHub Pages **不再使用**：仓库从未在 Settings 里选过 Pages 源，`actions/configure-pages` 只会稳定报
-`Get Pages site failed`，那个工作流已删除。校验改由 `pnpm lint:website` 在 test.yml 的 frontend job 跑。
+`Get Pages site failed`，那个工作流已删除。校验改由 `pnpm lint:website` 在三个 `ci-*.yml` 的 frontend job 跑。
 
 容易静默失败的四点（`lint:website` 全部覆盖）：
 
@@ -238,12 +243,18 @@ GitHub Pages **不再使用**：仓库从未在 Settings 里选过 Pages 源，`
 
 - `electron/utils/runtime.ts`：定位边车（打包后在 `resources/downvid-deps/`）、执行、
   缓存探测结果 60 秒、广播 `deps:progress`。下载在主进程里完成，界面关闭不中断。
-- 检测总时限 70 秒（Electron 侧 90 秒），每个依赖 30 秒，每个候选执行 10 秒；扫描另有 12 秒预算，
-  同时受剩余检测时限约束。Windows 目录优先读取实际环境变量，找不到有效副本才下载。
+- 检测总时限 80 秒（Electron 侧 90 秒），每个依赖 45 秒；
+  候选执行预算**按来源区分**：托管副本 15 秒、系统副本 5 秒；扫描另有 18 秒预算。
+  Windows 目录优先读取实际环境变量，找不到有效副本才下载。
   **这几个数字不能随手调小**：yt-dlp 官方 macOS 构建（PyInstaller，约 37MB）`--version`
-  本机实测要 8～10 秒，而 Homebrew / uv 装的是 Python zipapp、只要 0.2 秒——
-  候选预算一旦低于 10 秒，**刚下载好的托管副本会被判为「执行超时，文件可能损坏」**，
-  用户点完「下载」界面仍显示「下载」，反复点也没用（曾真实发生）。
+  本机实测要 8～10 秒、首次执行最慢 12.4 秒，而 Homebrew / uv 装的是 Python zipapp、
+  只要 0.2 秒——托管副本预算一旦低于 15 秒，**刚下载好的副本会被判为
+  「执行超时，文件可能损坏」**，用户点完「下载」界面仍显示「下载」（曾真实发生）。
+  反过来系统副本**不能给长预算**：候选表里可能有十几个路径，每个卡死的都给 15 秒
+  会把一次检测拖到几分钟（CI 的 windows job 就是这样抓到的）。
+- `probe.run` 的 `cmd.WaitDelay` **不能删**：超时只杀直接子进程，而候选可能是
+  shell 脚本或 PyInstaller 启动器，孙进程仍持有 stdout 管道，`cmd.Run()` 会一直等 I/O。
+  实测一个 `sleep 300` 的假二进制把 5 秒预算的探测拖成 300 秒。
 - `electron/ipc/deps.ts`：`deps:status / check / download / cancel / openDir / diagnostics`。
 - `electron/utils/binary.ts` 的 `resolveDependency()` 是**唯一入口**：
   解析失败抛 `MissingDependencyError`，消息带 `[[deps-missing:<kind>]]` 标记，

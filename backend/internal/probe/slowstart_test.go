@@ -89,3 +89,43 @@ func TestTimeoutMessageNotAbsolute(t *testing.T) {
 		t.Errorf("不应把超时断言成「文件损坏」：下载好的文件也会超时，实际：%s", msg)
 	}
 }
+
+// TestRunDoesNotWaitForOrphanedChild 回归「子进程被杀、孙进程还在」的挂起。
+//
+// 我们的候选不是简单进程：可能是 shell 脚本、也可能是 PyInstaller 启动器，
+// 它们都会再拉起子进程。exec.CommandContext 超时后只杀**直接子进程**，
+// 孙进程仍持有 stdout 管道 → `cmd.Run()` 一直等 I/O，**探测远超预算**。
+//
+// 实测：一个 `sleep 300` 的假二进制把 5 秒预算的探测拖成 300 秒；
+// 用户侧表现是界面卡住几十秒到几分钟，最后报「依赖检测达到时限」。
+// 修复手段是 cmd.WaitDelay（见 probe.run 的注释）。
+//
+// 这里用「自己立刻退出、但留一个持有管道的后台孙进程」精确复现该形状，
+// 并把等待控制在秒级，免得用例本身要跑几分钟。
+func TestRunDoesNotWaitForOrphanedChild(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows 上无法用 shell 脚本模拟")
+	}
+	if testing.Short() {
+		t.Skip("需要真实等待，short 模式跳过")
+	}
+	dir := t.TempDir()
+	script := "#!/bin/sh\n" +
+		// 后台孙进程继承 stdout 与 stderr，然后父脚本立刻退出
+		"sleep 30 &\n" +
+		"exit 0\n"
+	path := filepath.Join(dir, "yt-dlp")
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	start := time.Now()
+	_, _ = RunWithTimeout(context.Background(), "yt-dlp", path, 3*time.Second)
+	elapsed := time.Since(start)
+
+	// 没有 WaitDelay 时这里会等到孙进程自然结束（30 秒）
+	if elapsed > 10*time.Second {
+		t.Fatalf("耗时 %s：WaitDelay 没有生效，孤儿孙进程把探测挂住了", elapsed)
+	}
+	t.Logf("耗时 %s（孙进程仍在后台，但未阻塞探测）", elapsed)
+}

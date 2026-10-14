@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -230,29 +231,36 @@ func TestScanTimeLimitOutlastsOneCandidate(t *testing.T) {
 	}
 }
 
-// TestHangingCandidatesDoNotStarveManagedCopy 回归 Windows 回归用例暴露的设计缺陷。
+// TestHangingSystemCandidatesDoNotStarveGoodCopy 回归 Windows 回归用例暴露的设计缺陷。
 //
 // 曾用「超时后重试一次」对付慢启动，结果每个**卡死**的候选要 30 秒
-// （15 秒 × 2），两个卡死候选就把一个依赖的 30 秒预算吃光，排在后面的
-// 正常副本永远轮不到。正确解法是给「一个依赖内执行候选的总时间」设闸，
-// 而不是给单个候选重试。
-//
-// 这里让两个候选彻底卡死（远超预算），断言后面的正常副本仍被采用。
-func TestHangingCandidatesDoNotStarveManagedCopy(t *testing.T) {
+// （15 秒 × 2），两个卡死候选就把一个依赖的预算吃光，排在后面的正常副本
+// 永远轮不到 —— CI 的 windows job 正是这样失败的（两个卡死候选之后才轮到
+// 正常副本）。正确解法是**按来源给不同预算**：托管副本给足，系统副本
+// 用短预算，卡死的尽早放弃。
+func TestHangingSystemCandidatesDoNotStarveGoodCopy(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows 上无法用 shell 脚本模拟慢启动")
 	}
 	if testing.Short() {
 		t.Skip("需要真实等待，short 模式跳过")
 	}
+	// 构造：托管目录为空 → 两个卡死在 PATH 里的候选 → 第三个正常
 	managed := t.TempDir()
-	// 托管副本卡死（模拟损坏/被杀死的进程），PATH 里的副本正常
-	hang := filepath.Join(managed, BinaryName(KindYtDlp))
-	if err := os.WriteFile(hang, []byte("#!/bin/sh\nsleep 300\n"), 0o755); err != nil {
-		t.Fatal(err)
+	dirs := []string{t.TempDir(), t.TempDir(), t.TempDir()}
+	for _, dir := range dirs[:2] {
+		hang := filepath.Join(dir, BinaryName(KindYtDlp))
+		if err := os.WriteFile(hang, []byte("#!/bin/sh\nsleep 300\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
-	good := fakeBinary(t, filepath.Join(t.TempDir(), "path-a"), BinaryName(KindYtDlp), "2026.10.10.233141")
-	t.Setenv("PATH", filepath.Dir(good))
+	_ = fakeBinary(t, dirs[2], BinaryName(KindYtDlp), "2026.10.10.233141")
+
+	// **必须保留原有的 PATH**：把 PATH 整体替换成临时目录后，假二进制里的
+	// `sleep` 就找不到了，脚本会立刻报「command not found」并退出——
+	// 于是这个用例变成空转（实测总耗时 0.67s，根本没等到超时），
+	// 而它要验证的正是「卡死候选会被短预算放弃」。
+	t.Setenv("PATH", strings.Join(append(dirs, os.Getenv("PATH")), string(os.PathListSeparator)))
 
 	start := time.Now()
 	res := FindOne(KindYtDlp, Options{ManagedDir: managed})
@@ -264,10 +272,12 @@ func TestHangingCandidatesDoNotStarveManagedCopy(t *testing.T) {
 	if res.Version != "2026.10.10.233141" {
 		t.Errorf("版本 = %q，期望 2026.10.10.233141", res.Version)
 	}
-	// 单个依赖的探测不应被卡死候选拖成「不可接受的等待」
-	if elapsed > 40*time.Second {
-		t.Errorf("探测耗时 %s，超出预期（候选执行预算 %s 未生效）", elapsed, probeTimeLimit)
+	// 两个卡死候选各 5 秒预算 + 各自 2 秒 WaitDelay + 正常副本，
+	// 上限按 20 秒断言；若系统候选误用 15 秒预算，这里会变成 30 秒以上。
+	if elapsed > 20*time.Second {
+		t.Errorf("探测耗时 %s，系统候选的短预算没有生效", elapsed)
 	}
+	t.Logf("两个卡死候选 + 正常副本耗时 %s", elapsed)
 }
 
 // TestProbeBudgetResets 候选执行预算必须每次探测前重置。

@@ -108,7 +108,7 @@ func findOne(kind Kind, opts Options) Result {
 }
 
 func findOneContext(parent context.Context, kind Kind, opts Options) Result {
-	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
+	ctx, cancel := context.WithTimeout(parent, probeTimeLimit)
 	defer cancel()
 	res := Result{Kind: string(kind), Optional: Optional[kind]}
 	// 重置扫描预算与时限：每个依赖独立计算，避免前一个把额度用光
@@ -132,7 +132,7 @@ func findOneContext(parent context.Context, kind Kind, opts Options) Result {
 		if probeBudgetExhausted() {
 			break
 		}
-		info, err := probeToolContext(ctx, kind, c.Path)
+		info, err := probeToolCandidate(ctx, kind, c)
 		if err != nil {
 			if _, statErr := os.Stat(c.Path); statErr == nil {
 				probeErr = err // 文件存在但跑不起来，值得展示
@@ -222,14 +222,12 @@ func isProbeTimeout(err error) bool {
 
 // probeTimeLimit 是**一个依赖内**执行候选文件的总预算。
 //
-// 为什么需要这道闸：卡死的候选会各自吃掉一个候选预算（15 秒），而候选表里
-// 可能有十几个路径（PATH + 各平台常见安装目录），最坏情况能把一个依赖拖上
-// 几分钟。曾经用「超时后重试一次」来对付慢启动，结果每个卡死候选要 30 秒，
-// Windows 回归用例（两个卡死候选后才轮到正常副本）直接失败——重试是错的解法。
+// 为什么需要这道闸：卡死的候选会各自吃掉一个候选预算，而候选表里可能有
+// 十几个路径（PATH + 各平台常见安装目录），最坏情况能把一个依赖拖上几分钟。
 //
-// 取值权衡：要能容下「托管副本 + 一两个慢候选」。托管副本是用户唯一会主动
-// 装的那个，必须给它留足（15 秒）；再留一点给慢候选。
-const probeTimeLimit = 35 * time.Second
+// 取值：托管副本 15 秒（首次执行最慢实测 12.4 秒）＋ 若干个 5 秒的系统候选。
+// 这个数字是**上界**而不是典型值：正常情况下托管副本命中就结束了。
+const probeTimeLimit = 45 * time.Second
 
 // probeDeadline 单次探测候选的 wall-clock 上限，由 findOne 在每次探测前设置。
 var probeDeadline time.Time
@@ -507,10 +505,23 @@ func probeTool(kind Kind, path string) (probe.Info, error) {
 }
 
 func probeToolContext(ctx context.Context, kind Kind, path string) (probe.Info, error) {
-	if _, err := os.Stat(path); err != nil {
-		return probe.Info{Path: path}, err
+	return probeToolCandidate(ctx, kind, candidate{Path: path, Source: SourceSystem})
+}
+
+// probeToolCandidate 按候选来源决定执行时限。
+//
+// 托管副本是我们自己下载的官方构建（PyInstaller，首次执行最慢实测 12.4 秒），
+// 必须给足；系统副本通常是 0.2 秒的 zipapp，卡死时要尽快放弃——
+// 候选表里可能有十几个路径，每个都等 15 秒会把一次检测拖到几分钟。
+func probeToolCandidate(ctx context.Context, kind Kind, c candidate) (probe.Info, error) {
+	if _, err := os.Stat(c.Path); err != nil {
+		return probe.Info{Path: c.Path}, err
 	}
-	return probe.RunContext(ctx, string(kind), path)
+	timeout := probe.SystemCandidateTimeout
+	if c.Source == SourceManaged {
+		timeout = probe.CandidateTimeout
+	}
+	return probe.RunWithTimeout(ctx, string(kind), c.Path, timeout)
 }
 
 // ===== PATH 解析 =====

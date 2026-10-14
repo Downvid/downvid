@@ -2,6 +2,36 @@
 
 本文件记录 DownVid 的所有版本更新。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [1.3.6] - 2026-10-14
+
+### 修复
+
+- **依赖探测可能挂住几十秒到几分钟**：超时后只杀**直接子进程**，而候选可能是
+  shell 脚本或 PyInstaller 启动器，其孙进程仍持有 stdout 管道，`cmd.Run()`
+  会一直等 I/O。实测一个 `sleep 300` 的假二进制把 5 秒预算的探测拖成 300 秒；
+  用户侧表现是界面卡住、最后报「依赖检测达到时限」。现在用 `cmd.WaitDelay`
+  兜住管道（单元测试里真实复现并回归）
+- **卡死的系统副本会拖垮整次检测**：候选执行预算改为**按来源区分**——
+  托管副本 15 秒（官方 macOS 构建首次执行最慢实测 12.4 秒），系统副本 5 秒
+  （通常是 0.2 秒的 zipapp）。此前一律 15 秒，候选表里十几个路径时最坏能把
+  一次检测拖到几分钟。这个问题由 CI 的 Windows 原生回归抓出
+
+### 工程
+
+- **CI 按平台拆成三个工作流**（`ci-linux` / `ci-windows` / `ci-macos`）：
+  失败时一眼看出是哪个平台哪一层，Windows/macOS 排队也不再拖住 Linux 的结论。
+  macOS 侧新增三项只有那里能验的检查：产物确实未签名、边车在本机能执行且架构正确、
+  Info.plist 版本与 package.json 一致（不一致会让用户永远看到「有新版本」）。
+- **新增三层回归脚本**（此前完全没有自动化覆盖）：`test:updater`（14 例，
+  更新流程）、`test:settings:migration`（15 例，设置兼容）、
+  `test:package`（9 例，真实打包产物内容）。含公共骨架 `scripts/lib/harness.mjs`。
+- 发布流程新增 **gate** job：全量测试通过才允许构建；新增 `prerelease` 选项，
+  让测试版本不进稳定用户的更新通道。
+- 设置读取统一到 `readSettings()`：此前 `deps.ts` / `download.ts` /
+  `DownloadView.vue` 各复制了一份读法，`filenameTemplate` 因此出现过两个不同的默认值。
+- `scripts/test-parse-integration.mjs` 此前**从未接进任何工作流**（能通过但没人跑），
+  现已挂上。
+
 ## [1.3.5] - 2026-10-14
 
 ### 修复
