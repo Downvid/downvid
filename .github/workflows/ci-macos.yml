@@ -108,6 +108,11 @@ jobs:
       - name: i18n 词条校验
         run: pnpm lint:i18n
 
+      # 工作流的错误本地跑什么都发现不了，只能等 CI 变红。
+      # 这条静态校验把「用了某工具但没装」变成提交前就能看到的问题。
+      - name: 工作流健全性校验
+        run: pnpm lint:workflows
+
       - name: 纯逻辑单测（Vitest）
         run: pnpm test
 

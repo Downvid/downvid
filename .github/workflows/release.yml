@@ -29,6 +29,11 @@ jobs:
       prerelease: ${{ steps.v.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v7
+      # 这里用 node 读 package.json 的版本号，必须显式装 Node：
+      # runner 自带的版本随镜像变化，而版本号解析错了会直接发错版本
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
       - id: v
         name: Resolve version
         run: |
