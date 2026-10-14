@@ -99,7 +99,10 @@ export function getManagedDir(): string {
 // ===== 探测 =====
 
 function detectArgs(options: DetectOptions): string[] {
-  const args = ['detect', '--managed-dir', getManagedDir(), '--json', '--timeout', '45']
+  // 70 秒：单候选 10 秒（见 probe.CandidateTimeout——yt-dlp 官方 macOS 构建
+  // 本机实测 8～10 秒），最坏情况「托管副本缺失 + 几个系统副本都很慢」
+  // 还要再加上保底扫描。留足余量，别让总时限把刚下载好的副本掐掉。
+  const args = ['detect', '--managed-dir', getManagedDir(), '--json', '--timeout', '70']
   for (const [kind, file] of Object.entries(options.manualPaths || {})) {
     if (file) args.push('--manual', `${kind}=${file}`)
   }
@@ -112,7 +115,7 @@ interface SidecarRun {
   stderr: string
 }
 
-function runSidecar(args: string[], timeoutMs = 60_000): Promise<SidecarRun> {
+function runSidecar(args: string[], timeoutMs = 90_000): Promise<SidecarRun> {
   return new Promise((resolve, reject) => {
     const bin = getSidecarPath()
     if (!bin) {

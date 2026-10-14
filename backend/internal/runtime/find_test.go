@@ -1,10 +1,13 @@
 package runtime
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/yxxbc/downvid/backend/internal/probe"
 )
 
 // 写一个可执行的假二进制，输出指定的版本号
@@ -175,5 +178,111 @@ func TestSystemDirsExcludesAsar(t *testing.T) {
 		if filepath.Base(dir) == "app.asar" || len(dir) > 0 && filepath.Base(filepath.Dir(dir)) == "app.asar" {
 			t.Errorf("常见目录不应包含 app.asar：%q", dir)
 		}
+	}
+}
+
+// TestSlowManagedBinaryIsStillAdopted 回归 issue：下载完成后仍显示「下载」。
+//
+// 用户点「下载」→ 进度跑完 → 界面**还是显示「下载」**，反复点无效。
+// 根因不在下载，而在下载后的回读：yt-dlp 官方 macOS 构建（PyInstaller，
+// 约 37MB）`--version` 要 8～10 秒，而探测单候选曾只有 3 秒预算，
+// 于是刚装好的托管副本被判为「执行超时，文件可能损坏」而被跳过。
+//
+// 这里让托管副本「启动慢但正确」，断言它仍被采用——把预算改回 3 秒即失败。
+func TestSlowManagedBinaryIsStillAdopted(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows 上无法用 shell 脚本模拟慢启动")
+	}
+	if testing.Short() {
+		t.Skip("需要真实等待，short 模式跳过")
+	}
+	managed := t.TempDir()
+	slow := filepath.Join(managed, BinaryName(KindYtDlp))
+	script := "#!/bin/sh\nsleep 6\necho '2026.10.10.233141'\n"
+	if err := os.WriteFile(slow, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	res := FindOne(KindYtDlp, Options{ManagedDir: managed})
+	if !res.Found {
+		t.Fatalf("启动慢但正常的托管副本应被采用，实际未找到：%s", res.Reason)
+	}
+	if filepath.Clean(res.Path) != filepath.Clean(slow) {
+		t.Errorf("应采用托管副本 %q，实际 %q", slow, res.Path)
+	}
+	if res.Source != string(SourceManaged) || !res.Managed {
+		t.Errorf("来源应为 managed 且 Managed=true，实际 source=%q managed=%v", res.Source, res.Managed)
+	}
+	if res.Version != "2026.10.10.233141" {
+		t.Errorf("版本 = %q，期望 2026.10.10.233141", res.Version)
+	}
+}
+
+// TestScanTimeLimitOutlastsOneCandidate 扫描时限必须容得下一个慢候选。
+//
+// 否则保底扫描会在命中第一个文件（可能正是刚下载好的托管副本）时被时限掐断，
+// 「明明装了却说找不到」的旧问题会换个地方复现。
+func TestScanTimeLimitOutlastsOneCandidate(t *testing.T) {
+	if scanTimeLimit <= probe.CandidateTimeout {
+		t.Fatalf("scanTimeLimit = %s 必须 > probe.CandidateTimeout = %s，"+
+			"否则扫描连一个慢候选都跑不完", scanTimeLimit, probe.CandidateTimeout)
+	}
+}
+
+// TestSlowFirstRunIsRetriedOnce 回归「第一次超时、第二次才好」的体验问题。
+//
+// 刚下载完的托管副本首次执行要暖机（ad-hoc 签名校验 + 页面缓存），实测最慢
+// 12.4 秒；探测在超时后会重试一次。没有重试时，用户点完「下载」看到的是
+// 「执行超时」——而手动再点一次就好了，这种「第二次才行」等于坏掉。
+func TestSlowFirstRunIsRetriedOnce(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows 上无法用 shell 脚本模拟慢启动")
+	}
+	if testing.Short() {
+		t.Skip("需要真实等待，short 模式跳过")
+	}
+	managed := t.TempDir()
+	// 首次 16 秒（超过 15 秒预算，必然触发第一次超时），之后立即返回
+	marker := filepath.Join(t.TempDir(), "warmed")
+	slow := filepath.Join(managed, BinaryName(KindYtDlp))
+	script := "#!/bin/sh\n" +
+		"if [ ! -f '" + marker + "' ]; then touch '" + marker + "'; sleep 16; fi\n" +
+		"echo '2026.10.10.233141'\n"
+	if err := os.WriteFile(slow, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	res := FindOne(KindYtDlp, Options{ManagedDir: managed})
+	if !res.Found {
+		t.Fatalf("首次超时后重试一次应能成功，实际：%s", res.Reason)
+	}
+	if res.Version != "2026.10.10.233141" {
+		t.Errorf("版本 = %q，期望 2026.10.10.233141", res.Version)
+	}
+}
+
+// TestProbeTimeoutDetection 只有超时才重试，其它错误不该白等一个候选预算
+func TestProbeTimeoutDetection(t *testing.T) {
+	cases := map[string]bool{
+		"执行超时（可执行文件响应过慢，可能已损坏，也可能是首次运行较慢）": true,
+		"执行超时": false, // 下面单独断言：只要含标记就算超时
+		"无法执行（macOS 可能已损坏或未签名，请重新下载）":     false,
+		"文件格式不正确（可能下载不完整或与当前架构不匹配），请重新下载": false,
+		"没有执行权限 (chmod +x)": false,
+	}
+	for msg, want := range cases {
+		got := isProbeTimeout(errors.New(msg))
+		if msg == "执行超时" {
+			if !got {
+				t.Errorf("%q 应判为超时", msg)
+			}
+			continue
+		}
+		if got != want {
+			t.Errorf("isProbeTimeout(%q) = %v，期望 %v", msg, got, want)
+		}
+	}
+	if isProbeTimeout(nil) {
+		t.Error("nil 不应判为超时")
 	}
 }

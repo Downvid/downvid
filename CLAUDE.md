@@ -201,9 +201,14 @@ A Go sidecar resolves them at startup, "prefer the machine's own, download only 
   caches detection 60 s, broadcasts `deps:progress`. Downloads run in main, so closing the window
   doesn't abort them. `electron/ipc/deps.ts` exposes
   `deps:status/check/download/cancel/openDir/diagnostics`.
-- Detection has a 45 s total budget, 15 s per dependency and 3 s per candidate execution.
-  Scanning has its own 3 s budget capped by the remaining detection time. Windows directories
-  honor actual environment variables; downloading is only needed when no usable copy is found.
+- Detection has a 70 s total budget (90 s on the Electron side), 30 s per dependency and 10 s per
+  candidate execution. Scanning has its own 12 s budget capped by the remaining detection time.
+  Windows directories honor actual environment variables; downloading is only needed when no usable
+  copy is found. **Do not shrink these numbers casually**: yt-dlp's official macOS build
+  (PyInstaller, ~37 MB) takes 8–10 s here for `--version`, while Homebrew / uv ship a Python zipapp
+  that answers in 0.2 s. With a candidate budget below 10 s the **freshly downloaded managed copy
+  is judged "execution timed out, file may be corrupt"**, so the UI keeps showing "Download" after a
+  successful download and clicking again never helps (this really happened).
 - `resolveDependency()` in `electron/utils/binary.ts` is the single entry point; on failure it throws
   `MissingDependencyError` carrying a `[[deps-missing:<kind>]]` marker the renderer turns into a
   one-click download prompt (same trick as the cookie hint's `\n\n提示：`).

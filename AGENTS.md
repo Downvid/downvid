@@ -230,8 +230,12 @@ GitHub Pages **不再使用**：仓库从未在 Settings 里选过 Pages 源，`
 
 - `electron/utils/runtime.ts`：定位边车（打包后在 `resources/downvid-deps/`）、执行、
   缓存探测结果 60 秒、广播 `deps:progress`。下载在主进程里完成，界面关闭不中断。
-- 检测总时限 45 秒，每个依赖 15 秒，每个候选执行 3 秒；扫描另有 3 秒预算，
+- 检测总时限 70 秒（Electron 侧 90 秒），每个依赖 30 秒，每个候选执行 10 秒；扫描另有 12 秒预算，
   同时受剩余检测时限约束。Windows 目录优先读取实际环境变量，找不到有效副本才下载。
+  **这几个数字不能随手调小**：yt-dlp 官方 macOS 构建（PyInstaller，约 37MB）`--version`
+  本机实测要 8～10 秒，而 Homebrew / uv 装的是 Python zipapp、只要 0.2 秒——
+  候选预算一旦低于 10 秒，**刚下载好的托管副本会被判为「执行超时，文件可能损坏」**，
+  用户点完「下载」界面仍显示「下载」，反复点也没用（曾真实发生）。
 - `electron/ipc/deps.ts`：`deps:status / check / download / cancel / openDir / diagnostics`。
 - `electron/utils/binary.ts` 的 `resolveDependency()` 是**唯一入口**：
   解析失败抛 `MissingDependencyError`，消息带 `[[deps-missing:<kind>]]` 标记，

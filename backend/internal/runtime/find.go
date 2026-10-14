@@ -79,8 +79,11 @@ func FindAll(opts Options) []Result {
 	return FindAllContext(ctx, opts)
 }
 
-// DetectTimeout 小于 Electron 的 60 秒超时，给 JSON 回传留出余量。
-const DetectTimeout = 45 * time.Second
+// DetectTimeout 小于 Electron 的 90 秒超时，给 JSON 回传留出余量。
+//
+// 总时限必须容得下「前两个候选都很慢」：单候选 15 秒（见 probe.CandidateTimeout，
+// yt-dlp 官方 macOS 构建首次执行最慢实测 12.4 秒），三个依赖各 30 秒。
+const DetectTimeout = 80 * time.Second
 
 func FindAllContext(ctx context.Context, opts Options) []Result {
 	results := make([]Result, 0, len(Kinds))
@@ -98,7 +101,7 @@ func findOne(kind Kind, opts Options) Result {
 }
 
 func findOneContext(parent context.Context, kind Kind, opts Options) Result {
-	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 	defer cancel()
 	res := Result{Kind: string(kind), Optional: Optional[kind]}
 	// 重置扫描预算与时限：每个依赖独立计算，避免前一个把额度用光
@@ -115,6 +118,16 @@ func findOneContext(parent context.Context, kind Kind, opts Options) Result {
 			break
 		}
 		info, err := probeToolContext(ctx, kind, c.Path)
+		if err != nil {
+			// 超时重试一次：刚下载完的托管副本首次执行要暖机
+			// （ad-hoc 签名校验 + 页面缓存，实测最慢 12.4 秒），
+			// 第二次就降到 8～10 秒。没有这一步时，用户点完「下载」
+			// 会看到「执行超时」——而再点一次（此时已暖机）就好了，
+			// 这种「第二次才行」的体验等于坏掉。
+			if isProbeTimeout(err) {
+				info, err = probeToolContext(ctx, kind, c.Path)
+			}
+		}
 		if err != nil {
 			if _, statErr := os.Stat(c.Path); statErr == nil {
 				probeErr = err // 文件存在但跑不起来，值得展示
@@ -177,6 +190,19 @@ func findOneContext(parent context.Context, kind Kind, opts Options) Result {
 // 展示出来只会把真正的原因（版本过旧、文件损坏）挤掉
 func isNotExist(err error) bool {
 	return errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "no such file or directory")
+}
+
+// probeTimeoutMarker 与 probe 包的超时文案约定一致（probe.describeRunError）。
+// 用字符串而不是错误类型，是因为超时可能由 probe 自己的子超时产生，
+// 也可能由上游 ctx 取消产生，两者都被包装成了 errors.New。
+const probeTimeoutMarker = "执行超时"
+
+// isProbeTimeout 判断错误是否为"执行超时"（而非损坏、无权限、格式不对）。
+//
+// 只有这一类值得重试：刚下载完的托管副本首次执行要暖机，而损坏或格式错误
+// 的文件重试多少次都一样，白等一个候选的预算。
+func isProbeTimeout(err error) bool {
+	return err != nil && strings.Contains(err.Error(), probeTimeoutMarker)
 }
 
 // scanForBinary 在常见根目录下有限度地搜索可执行文件。
@@ -282,7 +308,11 @@ const scanMaxDirs = 3000
 var scanDeadline time.Time
 
 // scanTimeLimit 单次扫描最多占用多久。宁可漏扫也不要把检测拖成超时。
-const scanTimeLimit = 3 * time.Second
+//
+// 必须**大于** probe.CandidateTimeout：否则扫描命中的第一个可执行文件
+// （比如正是刚下载好的托管副本，首次执行本机实测最慢 12.4 秒）必然被扫描
+// 时限掐断，保底扫描就永远发现不了它。CandidateTimeout + 一个候选的余量。
+const scanTimeLimit = 18 * time.Second
 
 // resetScanBudget 重置扫描的目录数预算与时限。
 //

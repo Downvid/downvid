@@ -12,6 +12,19 @@ import (
 	"time"
 )
 
+// CandidateTimeout 是执行**单个候选**可执行文件的时限。
+//
+// 为什么是 15 秒而不是曾经的 3 秒：yt-dlp 的 macOS 官方构建是 PyInstaller
+// 打包的（约 37MB），本机实测 `--version` 稳定要 8～10 秒，而**刚下载完的
+// 首次执行**还会更慢（实测三次首次执行：9.7s / 8.9s / 12.4s——ad-hoc 签名
+// 校验与页面缓存都还没热）。3 秒预算下探测必然超时，报「执行超时，文件可能
+// 损坏」，于是**刚下载好的托管副本会被判为不可用**：用户点「下载」看着进度
+// 条跑完，界面却仍然显示「下载」，反复点也没用。
+//
+// 系统里那些 yt-dlp 只需 0.2 秒（Homebrew / uv 装的是 Python zipapp），
+// 所以这个问题只在「没有可用的系统副本、必须走托管副本」的机器上暴露。
+const CandidateTimeout = 15 * time.Second
+
 // Args 各工具的版本探测参数
 var Args = map[string][]string{
 	"yt-dlp":  {"--version"},
@@ -55,7 +68,7 @@ func RunContext(ctx context.Context, tool, path string) (Info, error) {
 	}
 
 	info := Info{Path: path}
-	out, err := run(ctx, path, args, 3*time.Second)
+	out, err := run(ctx, path, args, CandidateTimeout)
 	if err != nil {
 		return info, describeRunError(err, out)
 	}
@@ -168,7 +181,9 @@ func describeRunError(err error, out string) error {
 	msg := err.Error()
 	switch {
 	case strings.Contains(msg, "context deadline exceeded"):
-		return errors.New("执行超时，文件可能损坏")
+		// 超时≠损坏：yt-dlp 的官方 macOS 构建冷启动就要 8～10 秒，
+		// 说得太绝对会把用户的耐心和排查方向一起带偏
+		return errors.New("执行超时（可执行文件响应过慢，可能已损坏，也可能是首次运行较慢）")
 	case reKilled.MatchString(msg) || reKilled.MatchString(out):
 		return errors.New("无法执行（macOS 可能已损坏或未签名，请重新下载）")
 	case strings.Contains(msg, "permission denied"):
