@@ -86,6 +86,15 @@ describe('buildYtdlpArgs', () => {
     expect(valueAfter(args, '-o')).toBe(path.join(OUT_DIR, '%(title)s-%(id)s.%(ext)s'))
   })
 
+  it('完整模板保留扩展名占位符，不重复追加', () => {
+    const args = buildYtdlpArgs({ ...base, filenameTemplate: '%(title)s.%(ext)s' }, OUT_DIR, ctx)
+    expect(valueAfter(args, '-o')).toBe(path.join(OUT_DIR, '%(title)s.%(ext)s'))
+  })
+
+  it('未设置模板时自动追加一次扩展名', () => {
+    expect(valueAfter(buildYtdlpArgs(base, OUT_DIR, ctx), '-o')).toBe(path.join(OUT_DIR, '%(title)s.%(ext)s'))
+  })
+
   it('字幕模式：跳过下载、写字幕、转 srt，且不需要 ffmpeg', () => {
     const args = buildYtdlpArgs({ ...base, downloadMode: 'subtitle', subtitles: ['zh-Hans', 'en'] }, OUT_DIR, { ...ctx, ffmpegLocation: '' })
     expect(args).toContain('--skip-download')

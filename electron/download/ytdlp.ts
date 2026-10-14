@@ -110,7 +110,7 @@ export function buildYtdlpArgs(options: DownloadOptions, outputDir: string, ctx:
   const isAudioOnly = options.downloadMode === 'audio'
   const isYoutube = options.url.includes('youtube.com') || options.url.includes('youtu.be')
   const userTemplate = options.filenameTemplate || '%(title)s'
-  const outputTemplate = path.join(outputDir, `${userTemplate}.%(ext)s`)
+  const outputTemplate = path.join(outputDir, userTemplate.includes('%(ext)') ? userTemplate : `${userTemplate}.%(ext)s`)
 
   const args: string[] = [
     '-o', outputTemplate, '--no-playlist', '--playlist-items', '1', '--encoding', 'utf-8',
@@ -328,6 +328,7 @@ export async function pauseDownload(taskId: string): Promise<boolean> {
   const download = activeDownloads.get(taskId)
   if (download?.abort) {
     download.abort()
+    await download.stopped
     return true
   }
   if (download?.child) {
