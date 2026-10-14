@@ -252,41 +252,74 @@ func commonInstallDirs() []string {
 			"/app/bin", // Flatpak 沙箱内
 		}
 	case "windows":
-		// winget 的几种落点（都是实测出来的，不是猜的）：
-		//   - WinGet\Links：portable 包（yt-dlp.yt-dlp）会把 exe 软链到这里，
-		//     因此目录里的 yt-dlp.exe 可能是符号链接，需按文件解析
-		//   - WinGet\Packages：真正解压出来的目录，层级带包名与哈希，用通配匹配
-		//   - yt-dlp.FFmpeg 是 zip+nested portable，解压后是
-		//     <hash>\ffmpeg-N-xxxx-win64-gpl\bin\{ffmpeg,ffprobe}.exe
-		//   - DenoLand.Deno 提供 JS 运行时（yt-dlp 现在依赖它）
-		wingetBase := filepath.Join(home, "AppData", "Local", "Microsoft", "WinGet")
-		dirs = []string{
-			`C:\ProgramData\chocolatey\bin`,
-			`C:\Program Files\yt-dlp`,
-			`C:\Program Files (x86)\yt-dlp`,
-			`C:\ffmpeg\bin`,
-			`C:\Program Files\ffmpeg\bin`,
-			filepath.Join(home, "scoop", "shims"),
-			filepath.Join(home, "scoop", "apps", "yt-dlp", "current"),
-			filepath.Join(home, "scoop", "apps", "ffmpeg", "current", "bin"),
-			filepath.Join(wingetBase, "Links"),
-			filepath.Join(home, "AppData", "Local", "Microsoft", "WindowsApps"),
-		}
-		// WinGet\Packages 下的实际解压目录（含包名与随机哈希），只能展开通配
-		dirs = append(dirs, expandWindowsGlobs(wingetBase, []string{
-			`Packages\yt-dlp.yt-dlp_*`,
-			`Packages\yt-dlp.FFmpeg_*`,
-			`Packages\yt-dlp.FFmpeg_*\*\bin`,
-			`Packages\DenoLand.Deno_*`,
-			`Packages\Gyan.FFmpeg_*`,
-			`Packages\Gyan.FFmpeg_*\*\bin`,
-		})...)
+		dirs = windowsInstallDirs(home)
+		return append(dirs, extraDirs(home)...)
 	}
 
 	if home != "" {
 		dirs = append(dirs, filepath.Join(home, "bin"), filepath.Join(home, ".local", "bin"))
 	}
 	return dirs
+}
+
+// windowsInstallDirs 返回 Windows 上的候选目录。
+//
+// 抽成接受 home 的纯函数，是为了能**在 macOS 上测试 Windows 的路径**——
+// 直接读 os.UserHomeDir 的话，本地跑只能看到 macOS 的路径，等于没测
+// （平台键那个 bug 就是这么漏过去的）。
+func windowsInstallDirs(home string) []string {
+	// winget 的几种落点（查 winget 清单 + 实际安装结果得出，不是猜的）：
+	//   - WinGet\Links：portable 包（yt-dlp.yt-dlp）把 exe 软链到这里
+	//   - WinGet\Packages：真正解压出来的目录，层级带包名与随机哈希
+	//   - yt-dlp.FFmpeg 是 zip + nested portable，解压后为
+	//     <hash>\ffmpeg-N-xxxx-win64-gpl\bin\{ffmpeg,ffprobe}.exe
+	//   - DenoLand.Deno 提供 JS 运行时（yt-dlp 的清单把它列为依赖）
+	wingetBase := filepath.Join(home, "AppData", "Local", "Microsoft", "WinGet")
+
+	dirs := []string{
+		`C:\ProgramData\chocolatey\bin`,
+		`C:\Program Files\yt-dlp`,
+		`C:\Program Files (x86)\yt-dlp`,
+		`C:\ffmpeg\bin`,
+		`C:\Program Files\ffmpeg\bin`,
+		filepath.Join(home, "scoop", "shims"),
+		filepath.Join(home, "scoop", "apps", "yt-dlp", "current"),
+		filepath.Join(home, "scoop", "apps", "ffmpeg", "current", "bin"),
+		filepath.Join(wingetBase, "Links"),
+		filepath.Join(home, "AppData", "Local", "Microsoft", "WindowsApps"),
+	}
+
+	// Packages 下的目录名含随机哈希，只能展开通配
+	dirs = append(dirs, expandWindowsGlobs(wingetBase, WindowsPackagePatterns)...)
+
+	return dirs
+}
+
+// WindowsPackagePatterns 是 WinGet\Packages 下需要展开的通配模式。
+//
+// 用 filepath.Join 拼接而不是写死反斜杠，有两个好处：
+//  1. 在 Windows 上得到正确的 `\` 分隔（filepath.Glob 用宿主分隔符匹配）
+//  2. 在 macOS 上得到 `/`，于是可以用一个仿造的目录树**真正验证展开逻辑**
+//     ——写死反斜杠时本地只能看到"展开结果为空"，等于没测
+var WindowsPackagePatterns = []string{
+	// yt-dlp.yt-dlp 是 portable 包，解压后的 exe 直接在包目录下
+	filepath.Join("Packages", "yt-dlp.yt-dlp_*"),
+	// yt-dlp.FFmpeg 是 zip + nested portable，多一层解压目录与 bin
+	filepath.Join("Packages", "yt-dlp.FFmpeg_*"),
+	filepath.Join("Packages", "yt-dlp.FFmpeg_*", "*", "bin"),
+	// DenoLand.Deno 提供 JS 运行时（yt-dlp 的清单把它列为依赖）
+	filepath.Join("Packages", "DenoLand.Deno_*"),
+	// 用户直接装 Gyan.FFmpeg 的情况
+	filepath.Join("Packages", "Gyan.FFmpeg_*"),
+	filepath.Join("Packages", "Gyan.FFmpeg_*", "*", "bin"),
+}
+
+// extraDirs 跨平台都适用的用户级目录
+func extraDirs(home string) []string {
+	if home == "" {
+		return nil
+	}
+	return []string{filepath.Join(home, "bin"), filepath.Join(home, ".local", "bin")}
 }
 
 func outputWithTimeout(cmd *exec.Cmd, timeout time.Duration) ([]byte, error) {
