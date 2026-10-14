@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620" fill="none">
+  <defs>
+    <linearGradient id="bg" x1="30" y1="12" x2="1160" y2="640" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#0A1020"/>
+      <stop offset="0.55" stop-color="#0B1324"/>
+      <stop offset="1" stop-color="#101027"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="72" y1="0" x2="560" y2="520" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#67E8F9"/>
+      <stop offset="0.52" stop-color="#60A5FA"/>
+      <stop offset="1" stop-color="#A78BFA"/>
+    </linearGradient>
+    <linearGradient id="button" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#67E8F9"/>
+      <stop offset="1" stop-color="#60A5FA"/>
+    </linearGradient>
+    <linearGradient id="thumb" x1="610" y1="330" x2="850" y2="460" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#182D50"/>
+      <stop offset="0.52" stop-color="#26305B"/>
+      <stop offset="1" stop-color="#3D2356"/>
+    </linearGradient>
+    <radialGradient id="glowA" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(915 260) rotate(90) scale(360 390)">
+      <stop stop-color="#2563EB" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#2563EB" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glowB" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(210 60) rotate(90) scale(230 300)">
+      <stop stop-color="#0E7490" stop-opacity="0.14"/>
+      <stop offset="1" stop-color="#0E7490" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="34" height="34" patternUnits="userSpaceOnUse">
+      <path d="M34 0H0V34" stroke="#A5B4FC" stroke-opacity="0.055" stroke-width="1"/>
+    </pattern>
+    <filter id="shadow" x="500" y="60" width="720" height="540" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="22"/>
+    </filter>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#020617" flood-opacity="0.42"/>
+    </filter>
+    <clipPath id="windowClip"><rect x="570" y="105" width="560" height="418" rx="22"/></clipPath>
+  </defs>
+  <rect width="1200" height="620" rx="28" fill="url(#bg)"/>
+  <rect width="1200" height="620" rx="28" fill="url(#grid)"/>
+  <rect width="1200" height="620" rx="28" fill="url(#glowA)"/>
+  <rect width="1200" height="620" rx="28" fill="url(#glowB)"/>
+  <ellipse cx="850" cy="490" rx="300" ry="100" fill="#6366F1" fill-opacity="0.14" filter="url(#shadow)"/>
+  <rect x="1" y="1" width="1198" height="618" rx="27" stroke="#FFFFFF" stroke-opacity="0.12"/>
+  <g transform="translate(72 58)">
+    <rect width="42" height="42" rx="13" fill="url(#accent)"/>
+    <path d="M17 12.5C17 11.65 17.93 11.13 18.65 11.59L30 18.84C30.66 19.26 30.66 20.23 30 20.65L18.65 27.9C17.93 28.36 17 27.84 17 26.99V12.5Z" fill="#07101D"/>
+    <path d="M10 31.5H30" stroke="#07101D" stroke-opacity="0.65" stroke-width="2.5" stroke-linecap="round"/>
+    <text x="56" y="17" fill="#F8FAFC" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="17" font-weight="750" letter-spacing="2.4">DOWNVID</text>
+    <text x="56" y="35" fill="#91A4C0" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10.5" font-weight="600" letter-spacing="2.15">VIDEO DOWNLOADER</text>
+    <rect x="270" y="6" width="95" height="26" rx="13" fill="#CFFAFE" fill-opacity="0.07" stroke="#67E8F9" stroke-opacity="0.27"/>
+    <circle cx="284" cy="19" r="3" fill="#67E8F9"/>
+    <text x="294" y="23" fill="#B9F6FC" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10.5" font-weight="650" letter-spacing="0.4">OPEN SOURCE</text>
+  </g>
+  <text x="72" y="191" fill="#F8FAFC" font-family="'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', sans-serif" font-size="44" font-weight="720" letter-spacing="-1.6">把喜欢的视频</text>
+  <text x="72" y="250" fill="url(#accent)" font-family="'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', sans-serif" font-size="52" font-weight="760" letter-spacing="-2">轻松保存到本地。</text>
+  <text x="74" y="293" fill="#A9B7CE" font-family="'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', sans-serif" font-size="16" font-weight="450">一款清爽、开源的跨平台视频下载工具</text>
+  <g font-family="'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', sans-serif" font-size="12.5" font-weight="600">
+    <rect x="72" y="330" width="138" height="37" rx="11" fill="#FFFFFF" fill-opacity="0.055" stroke="#FFFFFF" stroke-opacity="0.11"/>
+    <circle cx="91" cy="348.5" r="5" fill="#67E8F9"/>
+    <text x="104" y="353" fill="#D9E5F7">1000+ 网站</text>
+    <rect x="220" y="330" width="142" height="37" rx="11" fill="#FFFFFF" fill-opacity="0.055" stroke="#FFFFFF" stroke-opacity="0.11"/>
+    <path d="M237 343H247V354H237Z" stroke="#A5B4FC" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M240 346.5H244M240 350H244" stroke="#A5B4FC" stroke-width="1.3" stroke-linecap="round"/>
+    <text x="256" y="353" fill="#D9E5F7">视频 · 音频 · 字幕</text>
+    <rect x="72" y="378" width="248" height="37" rx="11" fill="#FFFFFF" fill-opacity="0.055" stroke="#FFFFFF" stroke-opacity="0.11"/>
+    <path d="M88 390H98L102 394V403H88Z" stroke="#86EFAC" stroke-width="1.5" stroke-linejoin="round"/>
+    <path d="M98 390V395H102" stroke="#86EFAC" stroke-width="1.5" stroke-linejoin="round"/>
+    <text x="112" y="401" fill="#D9E5F7">macOS</text>
+    <circle cx="174" cy="397" r="1.8" fill="#52647F"/>
+    <text x="184" y="401" fill="#D9E5F7">Windows</text>
+    <circle cx="258" cy="397" r="1.8" fill="#52647F"/>
+    <text x="268" y="401" fill="#D9E5F7">Linux</text>
+  </g>
+  <path d="M72 470H410" stroke="#FFFFFF" stroke-opacity="0.13"/>
+  <text x="72" y="500" fill="#8394AF" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" letter-spacing="0.2">Powered by yt-dlp</text>
+  <circle cx="193" cy="496" r="2" fill="#50617D"/>
+  <text x="207" y="500" fill="#8394AF" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" letter-spacing="0.2">Made for your desktop</text>
+  <text x="72" y="558" fill="#536680" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10.5" letter-spacing="1.9">SIMPLE UI  /  POWERFUL ENGINE</text>
+  <g filter="url(#softShadow)">
+    <rect x="570" y="105" width="560" height="418" rx="22" fill="#0D1525" stroke="#A7C5FF" stroke-opacity="0.22"/>
+    <g clip-path="url(#windowClip)">
+      <rect x="570" y="105" width="560" height="53" fill="#121E31"/>
+      <path d="M570 157.5H1130" stroke="#FFFFFF" stroke-opacity="0.08"/>
+      <circle cx="594" cy="131" r="4" fill="#F87171" fill-opacity="0.9"/>
+      <circle cx="608" cy="131" r="4" fill="#FBBF24" fill-opacity="0.9"/>
+      <circle cx="622" cy="131" r="4" fill="#4ADE80" fill-opacity="0.9"/>
+      <rect x="773" y="117" width="155" height="28" rx="9" fill="#FFFFFF" fill-opacity="0.045" stroke="#FFFFFF" stroke-opacity="0.06"/>
+      <rect x="784" y="125" width="12" height="12" rx="3" fill="url(#accent)"/>
+      <path d="M788 127.5L793 131L788 134.5Z" fill="#0B1324"/>
+      <text x="803" y="135" fill="#DBEAFE" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11.5" font-weight="650">DownVid</text>
+      <circle cx="1090" cy="131" r="2" fill="#8DA1BD"/>
+      <circle cx="1100" cy="131" r="2" fill="#8DA1BD"/>
+      <circle cx="1110" cy="131" r="2" fill="#8DA1BD"/>
+      <text x="597" y="188" fill="#F1F5F9" font-family="'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', sans-serif" font-size="15" font-weight="700">下载视频</text>
+      <text x="597" y="207" fill="#7588A6" font-family="'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', sans-serif" font-size="10.5">粘贴链接，剩下的交给 DownVid</text>
+      <rect x="596" y="225" width="508" height="48" rx="12" fill="#080F1D" stroke="#30425E" stroke-width="1"/>
+      <circle cx="614" cy="249" r="5" stroke="#7689A7" stroke-width="1.5"/>
+      <path d="M618 253L622 257" stroke="#7689A7" stroke-width="1.5" stroke-linecap="round"/>
+      <text x="632" y="253" fill="#8092AE" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11.5">Paste a video link here…</text>
+      <rect x="1013" y="232" width="82" height="34" rx="9" fill="url(#button)"/>
+      <text x="1054" y="253" text-anchor="middle" fill="#071321" font-family="'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', sans-serif" font-size="11.5" font-weight="750">解析链接</text>
+      <text x="597" y="307" fill="#C6D4E8" font-family="'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', sans-serif" font-size="11.5" font-weight="700">解析结果</text>
+      <text x="1103" y="307" text-anchor="end" fill="#7E91AE" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10.5">1 item</text>
+      <rect x="596" y="321" width="508" height="133" rx="14" fill="#131F32" stroke="#FFFFFF" stroke-opacity="0.07"/>
+      <rect x="610" y="335" width="135" height="88" rx="10" fill="url(#thumb)"/>
+      <circle cx="677.5" cy="379" r="20" fill="#FFFFFF" fill-opacity="0.12" stroke="#FFFFFF" stroke-opacity="0.25"/>
+      <path d="M672 369.5C672 368.5 673.1 367.9 674 368.5L686 376.3C686.8 376.8 686.8 378 686 378.5L674 386.3C673.1 386.9 672 386.3 672 385.3V369.5Z" fill="#E0F2FE"/>
+      <path d="M618 407C637 392 645 400 656 387C666 375 679 397 693 382C709 364 722 386 739 370V413H618Z" fill="#67E8F9" fill-opacity="0.13"/>
+      <text x="762" y="348" fill="#E6EDF8" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12.5" font-weight="700">Video title goes here</text>
+      <text x="762" y="368" fill="#8396B2" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10.5">Detected source · Video</text>
+      <rect x="762" y="380" width="45" height="20" rx="6" fill="#67E8F9" fill-opacity="0.12" stroke="#67E8F9" stroke-opacity="0.24"/>
+      <text x="784.5" y="393.5" text-anchor="middle" fill="#A5F3FC" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="9.5" font-weight="700">4K</text>
+      <rect x="814" y="380" width="49" height="20" rx="6" fill="#A78BFA" fill-opacity="0.12" stroke="#A78BFA" stroke-opacity="0.22"/>
+      <text x="838.5" y="393.5" text-anchor="middle" fill="#DDD6FE" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="9.5" font-weight="700">MP4</text>
+      <text x="762" y="418" fill="#6F839F" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="9.5">Choose quality · Download</text>
+      <circle cx="1072" cy="347" r="12" fill="#153E3A"/>
+      <path d="M1066.5 347L1070.5 351L1077.5 343.5" stroke="#6EE7B7" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M596 472H1104" stroke="#FFFFFF" stroke-opacity="0.07"/>
+      <circle cx="602" cy="495" r="3" fill="#6EE7B7"/>
+      <text x="613" y="499" fill="#8496B2" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10.5">Ready for your next download</text>
+      <text x="1103" y="499" text-anchor="end" fill="#6C7F9A" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10.5">00:00</text>
+    </g>
+  </g>
+  <g filter="url(#softShadow)">
+    <rect x="1005" y="73" width="132" height="48" rx="15" fill="#17243A" stroke="#A5B4FC" stroke-opacity="0.28"/>
+    <rect x="1017" y="84" width="26" height="26" rx="8" fill="#EF4444" fill-opacity="0.18"/>
+    <path d="M1026 91.5C1026 90.8 1026.8 90.4 1027.4 90.8L1035 95.3C1035.6 95.7 1035.6 96.5 1035 96.9L1027.4 101.4C1026.8 101.8 1026 101.4 1026 100.7V91.5Z" fill="#FCA5A5"/>
+    <text x="1051" y="102" fill="#E7EEFA" font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11.5" font-weight="650">YouTube</text>
+  </g>
+  <g filter="url(#softShadow)">
+    <rect x="532" y="435" width="125" height="48" rx="15" fill="#17243A" stroke="#67E8F9" stroke-opacity="0.24"/>
+    <rect x="544" y="446" width="26" height="26" rx="8" fill="#06B6D4" fill-opacity="0.16"/>
+    <path d="M551 452H563V466H551Z" stroke="#A5F3FC" stroke-width="1.4" stroke-linejoin="round"/>
+    <path d="M554 456H560M554 459H560M554 462H558" stroke="#A5F3FC" stroke-width="1.25" stroke-linecap="round"/>
+    <text x="578" y="464.5" fill="#E7EEFA" font-family="'Noto Sans CJK SC', 'Microsoft YaHei', 'PingFang SC', sans-serif" font-size="11.5" font-weight="650">更多平台</text>
+  </g>
+  <circle cx="528" cy="177" r="2" fill="#67E8F9" fill-opacity="0.8"/>
+  <circle cx="1138" cy="390" r="2.5" fill="#A78BFA" fill-opacity="0.8"/>
+  <path d="M516 178L522 178" stroke="#67E8F9" stroke-opacity="0.45" stroke-linecap="round"/>
+  <path d="M1140 391L1146 391" stroke="#A78BFA" stroke-opacity="0.45" stroke-linecap="round"/>
+</svg>
