@@ -15,9 +15,6 @@
   "files": [
     "dist",
     "dist-electron",
-    // 贡献者快照：由 scripts/gen-contributors.mjs 生成，运行时直接读取
-    // （不再请求 GitHub API，避免未认证请求 60 次/小时的限额）
-    "shared/contributors.json",
     "!node_modules",
   ],
   // 安装包不再内置 yt-dlp / ffmpeg：只带 Go 边车，运行时识别并复用系统已安装的版本，

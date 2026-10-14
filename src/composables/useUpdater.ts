@@ -1,4 +1,5 @@
 import { ref, computed, onUnmounted, watch } from 'vue'
+import { marked } from 'marked'
 import { RELEASES_URL } from '../../shared/app'
 
 /**
@@ -26,18 +27,45 @@ export type UpdateStatus = 'idle' | 'checking' | 'latest' | 'available' | 'downl
  * 裁剪依据是生成脚本写下的分节标题「## 📝 更新内容」。找不到就原样返回——
  * 兼容手工编写的 Release。
  */
+/**
+ * 把 Release 正文里的 Markdown 转成 HTML。
+ *
+ * 这一步之前漏了：`v-html` 期待 HTML，而 GitHub 的 Release 正文是 **Markdown**，
+ * 于是更新弹窗里把 `### 修复`、`- **…**` 原样显示成一坨纯文本。
+ *
+ * 用 `marked` 而不是自己写正则：Release 正文里会有列表、粗体、行内代码、
+ * 引用块与链接，正则拼接必然漏。
+ *
+ * 安全性：内容来自本仓库自己的 Release（由 `scripts/gen-release-notes.mjs` 生成，
+ * 数据源是 CHANGELOG），不是任意用户输入，因此直接渲染是可接受的。
+ * 若将来改成渲染第三方来源，需要加 sanitize。
+ */
+export function renderNotesHtml(markdown: string): string {
+  if (!markdown) return ''
+  try {
+    // breaks **必须为 false**：CHANGELOG 的条目是按 ~80 字符手工折行的，
+    // 开启后每个折行都会被当成硬换行（插入 <br>），一段话被切成好几行。
+    // 标准 Markdown 语义是「软换行合并成一个段落」，这才是我们要的。
+    return marked.parse(markdown, { async: false, gfm: true, breaks: false }) as string
+  } catch {
+    // 解析失败时退回纯文本，至少不要白屏
+    return markdown.replace(/[<>&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]!))
+  }
+}
+
 export function extractUserNotes(notes: string): string {
   if (!notes) return ''
   // 容忍生成脚本改模板：允许 emoji、空格与大小写差异
   const marker = /^#{2,3}\s*(?:📝\s*)?更新内容\s*$/m
   const hit = marker.exec(notes)
-  if (!hit) return notes.trim()
+  if (!hit) return renderNotesHtml(notes.trim())
 
   let body = notes.slice(hit.index + hit[0].length)
   // 去掉尾部的页脚小字（"完整历史见 CHANGELOG"之类），它是发布页的导航，应用内不需要
   body = body.replace(/\n---\s*\n<sub>[\s\S]*$/m, '')
   body = body.replace(/\n*<sub>[\s\S]*$/m, '')
-  return body.trim()
+  // 转成 HTML：v-html 不认 Markdown
+  return renderNotesHtml(body.trim())
 }
 export type UpdateErrorPhase = 'check' | 'download' | 'install'
 

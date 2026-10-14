@@ -40,7 +40,7 @@
         </div>
 
         <!-- Body -->
-        <div class="px-6 py-5 max-h-[60vh] overflow-y-auto">
+        <div class="px-6 py-5 max-h-[70vh] overflow-y-auto">
           <!-- Checking -->
           <div v-if="status === 'checking'" class="flex flex-col items-center justify-center py-10">
             <div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
@@ -284,6 +284,8 @@ onMounted(() => {
 .release-notes :deep(p) {
   margin: 0.3rem 0;
   line-height: 1.6;
+  /* 长路径/URL 不能让段落撑破容器 */
+  overflow-wrap: anywhere;
 }
 .release-notes :deep(ul),
 .release-notes :deep(ol) {
@@ -293,6 +295,7 @@ onMounted(() => {
 .release-notes :deep(li) {
   margin: 0.2rem 0;
   line-height: 1.6;
+  overflow-wrap: anywhere;
 }
 .release-notes :deep(a) {
   color: #8c5100;
@@ -308,6 +311,16 @@ onMounted(() => {
   border-radius: 4px;
   font-size: 0.85em;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* 行内代码要能跟正文一起折行。默认 `display: inline` 但长 token 会撑破行宽，
+     导致段落被切成很碎的短行；加这两条让它在词内也能断开。 */
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+/* 块级代码块里的 code 不要再叠一层背景与内边距 */
+.release-notes :deep(pre code) {
+  background: none;
+  padding: 0;
+  font-size: 0.8rem;
 }
 .release-notes :deep(pre) {
   background: rgba(59, 49, 37, 0.04);

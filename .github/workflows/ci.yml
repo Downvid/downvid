@@ -72,10 +72,6 @@ jobs:
       - name: Check dependency manifest
         if: runner.os == 'Linux'
         run: pnpm deps:manifest:check
-      # 贡献者快照随包分发（运行时不再请求 API），缺失会让关于页拿不到名单
-      - name: Check contributors snapshot
-        if: runner.os == 'Linux'
-        run: pnpm contributors:check
       - name: Build
         run: pnpm vite build
       # 校验 electron-builder 配置并打包到目录（不生成安装包），配置与新版 schema 不兼容时在 PR 阶段即可发现

@@ -37,7 +37,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 应用
   app: {
     getVersion: () => ipcRenderer.invoke('app:getVersion'),
-    getContributors: () => ipcRenderer.invoke('app:getContributors'),
     getDefaultDownloadDir: () => ipcRenderer.invoke('app:getDefaultDownloadDir'),
     getHomeDir: () => ipcRenderer.invoke('app:getHomeDir'),
     cookieStatus: (manualFile?: string) => ipcRenderer.invoke('app:cookieStatus', manualFile),

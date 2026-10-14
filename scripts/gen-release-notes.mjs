@@ -152,8 +152,6 @@ ${platformNote}
 
 ## 📝 更新内容
 
-> 在应用内的更新弹窗里，只会显示这一节的内容；上面的下载引导区只在发布页有用。
-
 ${changelogBody || `DownVid v${version} 发布。详见 [CHANGELOG.md](https://github.com/${OWNER}/${REPO}/blob/main/CHANGELOG.md)。`}
 
 ---

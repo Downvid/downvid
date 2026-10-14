@@ -64,82 +64,43 @@
         </button>
       </div>
 
-      <!-- Contributors -->
+      <!-- 贡献者：固定名单（不请求 API、不显示提交次数） -->
       <div class="mb-6">
         <h3 class="text-xs font-medium text-on-surface-variant uppercase tracking-wider mb-3">贡献者</h3>
-        <div class="bg-surface-container-low rounded-xl p-5 border border-outline-variant/10">
-          <!-- Loading -->
-          <div v-if="contributorsLoading" class="flex flex-col items-center justify-center py-8">
-            <MaterialIcon name="sync" :size="28" class="text-primary animate-spin mb-2" />
-            <p class="text-xs text-on-surface-variant">加载贡献者中...</p>
-          </div>
-
-          <!-- Error -->
-          <div v-else-if="contributorsError" class="flex flex-col items-center justify-center py-8">
-            <MaterialIcon name="error_outline" :size="28" class="text-on-surface-variant mb-2" />
-            <p class="text-xs text-on-surface-variant text-center mb-3">{{ contributorsError }}</p>
-            <button
-              class="text-xs text-primary hover:text-primary/80 underline underline-offset-2"
-              @click="loadContributors"
+        <ul class="m-0 list-none p-0 grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <li v-for="member in CONTRIBUTORS" :key="member.login" class="min-w-0">
+            <a
+              :href="member.url"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="flex min-w-0 flex-col items-center gap-2.5 rounded-xl bg-surface-container-low border border-outline-variant/10 p-4 transition-colors hover:bg-surface-container-highest"
             >
-              重试
-            </button>
-          </div>
-
-          <!-- Success -->
-          <div v-else-if="contributors.length > 0" class="flex flex-col gap-3">
-            <div class="grid grid-cols-[repeat(auto-fill,minmax(6rem,1fr))] gap-x-2 gap-y-4">
-              <button
-                v-for="c in contributors"
-                :key="`${c.login}-${c.htmlUrl}`"
-                class="group flex flex-col items-center gap-1.5 min-w-0 disabled:cursor-default"
-                :title="`${c.login} · ${c.contributions} 次贡献`"
-                :disabled="!c.htmlUrl"
-                @click="c.htmlUrl && openExternal(c.htmlUrl)"
-              >
-                <div class="relative">
-                  <div class="size-12 rounded-full overflow-hidden bg-surface-container-highest ring-2 ring-transparent group-enabled:group-hover:ring-primary/40 transition-all flex items-center justify-center">
-                    <img
-                      v-if="c.avatarUrl && !brokenAvatars.has(c.avatarUrl)"
-                      :src="c.avatarUrl"
-                      :alt="c.login"
-                      class="w-full h-full object-cover"
-                      loading="lazy"
-                      @error="brokenAvatars.add(c.avatarUrl)"
-                    />
-                    <span v-else class="text-sm font-bold text-on-surface-variant">{{ c.login.slice(0, 1).toUpperCase() }}</span>
-                  </div>
-                  <!--
-                    身份标：DEV（维护者）/ CONTRIBUTOR（真人贡献者）/ BOT / AI。
-                    此前只有 DEV、BOT、AI 三种，普通真人贡献者**没有任何标记** ——
-                    而他们恰恰是最该被看到的人。现在补上 CONTRIBUTOR。
-                  -->
-                  <span
-                    v-if="c.isDeveloper || c.isContributor || c.isBot"
-                    class="absolute -top-1 -right-2 px-1 py-0.5 text-[8px] font-bold rounded-sm leading-none"
-                    :class="badgeClass(c)"
-                  >
-                    {{ badgeLabel(c) }}
+              <div class="relative">
+                <div class="size-14 rounded-full overflow-hidden bg-surface-container-highest flex items-center justify-center">
+                  <img
+                    v-if="!brokenAvatars.has(member.login)"
+                    :src="avatarUrl(member.login)"
+                    :alt="member.login"
+                    class="w-full h-full object-cover"
+                    loading="lazy"
+                    @error="brokenAvatars.add(member.login)"
+                  />
+                  <span v-else class="text-base font-bold text-on-surface-variant">
+                    {{ member.login.slice(0, 1).toUpperCase() }}
                   </span>
                 </div>
-                <span class="w-full text-center text-[11px] leading-tight text-on-surface wrap-anywhere">{{ c.login }}</span>
-                <span class="text-[10px] leading-none text-on-surface-variant">{{ c.contributions }} 次</span>
-              </button>
-            </div>
-            <div v-if="contributorsWarning" class="text-center">
-              <span class="text-[11px] text-on-surface-variant/70">{{ contributorsWarning }}</span>
-            </div>
-            <div class="text-center pt-1">
-              <span class="text-xs text-on-surface-variant">共 {{ contributors.length }} 位贡献者</span>
-            </div>
-          </div>
-
-          <!-- Empty -->
-          <div v-else class="flex flex-col items-center justify-center py-8">
-            <MaterialIcon name="people_outline" :size="28" class="text-on-surface-variant mb-2" />
-            <p class="text-xs text-on-surface-variant">暂无贡献者</p>
-          </div>
-        </div>
+                <span
+                  v-if="member.role"
+                  class="absolute -top-1 -right-2 px-1 py-0.5 text-[8px] font-bold rounded-sm leading-none"
+                  :class="member.role === 'DEV' ? 'bg-primary text-on-primary' : 'bg-tertiary-container text-on-tertiary-container'"
+                >
+                  {{ member.role }}
+                </span>
+              </div>
+              <span class="w-full text-center text-xs font-medium text-on-surface wrap-anywhere">{{ member.login }}</span>
+            </a>
+          </li>
+        </ul>
       </div>
 
       <!-- 开源组件致谢：Material Symbols 是 Apache-2.0，随应用分发需保留声明 -->
@@ -227,44 +188,37 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import MaterialIcon from './icons/MaterialIcon.vue'
 import GitHubIcon from './icons/GitHubIcon.vue'
 import UpdateModal from './UpdateModal.vue'
 import { ISSUES_URL, REPO_SLUG, REPO_URL } from '../../shared/app'
 
-interface Contributor {
-  login: string
-  avatarUrl: string
-  htmlUrl: string
-  contributions: number
-  isBot: boolean
-  isAI?: boolean
-  isDeveloper: boolean
-  /** 真人贡献者（非 Bot、非 AI） */
-  isContributor?: boolean
-}
-
 /** 界面展示用的仓库标识（去掉 https:// 前缀） */
 const repoLabel = `github.com/${REPO_SLUG}`
 
+/**
+ * 贡献者：**固定名单**，不请求 GitHub API。
+ *
+ * 原先从 `/contributors` 拉取，而未认证请求限额 60 次/小时且按 IP 共享，
+ * 很容易 403；客户端带 token 不可行。改为手写名单：
+ * 稳定、离线可用、不再有失败态，也不用为"提交次数"这种会变化的数字做缓存。
+ *
+ * 顺序即展示顺序；`role` 只用于身份标。原作者不必额外标注 —— 许可证里已经写明。
+ */
+const CONTRIBUTORS = [
+  { login: 'yxxbc', url: 'https://github.com/yxxbc', role: 'DEV' },
+  { login: 'cshuangyy', url: 'https://github.com/cshuangyy' },
+  { login: 'hailaij', url: 'https://github.com/hailaij', role: 'CONTRIBUTOR' },
+  { login: 'jwfstars', url: 'https://github.com/jwfstars', role: 'CONTRIBUTOR' },
+]
+
+/** 头像地址：固定名单用 GitHub 头像，不依赖接口 */
+function avatarUrl(login: string): string {
+  return `https://github.com/${login}.png?size=112`
+}
+
 const showDonate = ref(false)
-
-/** 身份标文案：DEV / CONTRIBUTOR / BOT / AI */
-function badgeLabel(c: Contributor): string {
-  if (c.isDeveloper) return 'DEV'
-  if (c.isBot) return c.isAI ? 'AI' : 'BOT'
-  return 'CONTRIBUTOR'
-}
-
-/** 身份标配色：真人贡献者用次要色，与 DEV 的主色区分开 */
-function badgeClass(c: Contributor): string {
-  if (c.isDeveloper) return 'bg-primary text-on-primary'
-  if (c.isBot) return c.isAI
-    ? 'bg-secondary-container text-on-secondary-container'
-    : 'bg-surface-container-highest text-on-surface-variant'
-  return 'bg-tertiary-container text-on-tertiary-container'
-}
 
 /** 技术栈：与 README、package.json 保持一致，改其一时同步另一处 */
 const techStack = [
@@ -294,42 +248,13 @@ const ossCredits = [
 const appVersion = ref('1.0.0')
 const showUpdateDrawer = ref(false)
 
-const contributors = ref<Contributor[]>([])
 const brokenAvatars = reactive(new Set<string>())
-const contributorsLoading = ref(false)
-const contributorsError = ref('')
-const contributorsWarning = ref('')
-
-async function loadContributors() {
-  contributorsLoading.value = true
-  contributorsError.value = ''
-  contributorsWarning.value = ''
-  try {
-    const result = await window.electronAPI?.app?.getContributors?.()
-    if (result?.success && result.data) {
-      contributors.value = result.data
-      if (result.warning) contributorsWarning.value = result.warning
-    } else {
-      contributorsError.value = result?.error || '加载失败'
-    }
-  } catch (e) {
-    contributorsError.value = e instanceof Error ? e.message : '加载失败'
-  } finally {
-    contributorsLoading.value = false
-  }
-}
 
 onMounted(async () => {
   try {
     const version = await window.electronAPI?.app?.getVersion?.()
     if (version) appVersion.value = version
   } catch {}
-
-  // 加载贡献者
-  loadContributors()
-})
-
-onUnmounted(() => {
 })
 
 async function openExternal(url: string) {

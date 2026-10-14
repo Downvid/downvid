@@ -17,23 +17,6 @@ interface Window {
     // 应用信息
     app: {
       getVersion: () => Promise<string>
-      getContributors: () => Promise<{
-        success: boolean
-        data?: Array<{
-          login: string
-          avatarUrl: string
-          htmlUrl: string
-          contributions: number
-          isBot: boolean
-          isAI?: boolean
-          isDeveloper: boolean
-          /** 真人贡献者（非 Bot、非 AI） */
-          isContributor?: boolean
-        }>
-        error?: string
-        fromCache?: boolean
-        warning?: string
-      }>
       getDefaultDownloadDir: () => Promise<string>
       /** 用户主目录，界面用它把绝对路径缩写成 ~/... */
       getHomeDir: () => Promise<string>

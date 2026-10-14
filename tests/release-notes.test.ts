@@ -79,9 +79,13 @@ describe('extractUserNotes', () => {
     expect(notes).not.toMatch(/<div|<img/)    // 原始 HTML 容器
   })
 
-  it('手工写的 Release（没有分节标题）原样返回', () => {
+  it('手工写的 Release（没有分节标题）也要渲染成 HTML', () => {
     const manual = '## v1.3.0\n\n- 修复了一个问题\n- 新增了一个功能'
-    expect(extractUserNotes(manual)).toBe(manual)
+    const html = extractUserNotes(manual)
+    // 关键：不再是原样的 Markdown（那样在 v-html 里会显示成一坨纯文本）
+    expect(html).toContain('<h2')
+    expect(html).toContain('<li>修复了一个问题</li>')
+    expect(html).not.toContain('## v1.3.0')
   })
 
   it('空输入返回空串，不抛错', () => {
@@ -94,6 +98,55 @@ describe('extractUserNotes', () => {
 
   it('兼容没有 emoji 的写法', () => {
     const notes = extractUserNotes('## 更新内容\n\n- 修好了')
-    expect(notes).toBe('- 修好了')
+    expect(notes).toContain('<li>修好了</li>')
+  })
+
+  it('Markdown 被渲染成 HTML（回归点：此前 v-html 直接显示原文）', () => {
+    const html = extractUserNotes(GENERATED_NOTES)
+    // 标题、列表、粗体、行内代码都要变成标签
+    expect(html).toContain('<h3')
+    expect(html).toContain('<li>')
+    expect(html).toContain('<strong>')
+    // 不能残留 Markdown 语法
+    expect(html).not.toContain('### ')
+    expect(html).not.toContain('**升级提示**')
+  })
+
+  it('行内代码被渲染（CHANGELOG 里常用来写文件名/命令）', () => {
+    const html = extractUserNotes('## 更新内容\n\n- 修复 \`electron/updater.ts\` 的问题')
+    expect(html).toContain('<code>electron/updater.ts</code>')
+  })
+
+  it('引用块（> 开头）被渲染', () => {
+    const html = extractUserNotes(GENERATED_NOTES)
+    expect(html).toContain('<blockquote>')
+  })
+})
+
+/**
+ * 回归：CHANGELOG 的条目按 ~80 字符手工折行，渲染时**不能**把折行当成硬换行。
+ *
+ * 曾经用 `marked` 的 `breaks: true`，它会在每个换行处插入 `<br>`，
+ * 于是一段完整的话被切成好几行（实测：更新弹窗里每行都断得很碎）。
+ */
+describe('软换行不应变成硬换行', () => {
+  it('条目内的折行被合并，不产生 <br>', () => {
+    const notes = [
+      '## 更新内容',
+      '',
+      '- **某修复**：第一段说明文字，',
+      '  第二行是同一句话的延续，',
+      '  第三行也是。',
+    ].join('\n')
+    const html = extractUserNotes(notes)
+    expect(html).not.toContain('<br>')
+    // 三行应合成一个 li
+    expect(html.match(/<li>/g)?.length).toBe(1)
+  })
+
+  it('列表项的 markdown 结构仍然正确（多条目各占一行）', () => {
+    const notes = ['## 更新内容', '', '- 第一条', '- 第二条', '- 第三条'].join('\n')
+    const html = extractUserNotes(notes)
+    expect(html.match(/<li>/g)?.length).toBe(3)
   })
 })

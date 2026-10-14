@@ -340,4 +340,5 @@ Linux x64 有独立格式脚本可并行：`build:linux:x64:appimage`、`:deb`�
 - 所有 UI 文案、注释、commit body **一律中文**，匹配现有风格
 - 分支命名 `feat/…` `fix/…` `docs/…` `chore/…`，Conventional Commits。
   `main` 未开启分支保护，维护者可直接推送；分支与 PR 流程是对外部贡献者的建议
+- 禁止在pr、issue、代码中、注释、commit等全部地方透露或上传本地隐私，敏感信息，开发者的网路环境等
 - `AGENTS.md`（本文件）与 `CLAUDE.md` 是同一份知识的两个语言版本，**改其一时必须同步另一份**
