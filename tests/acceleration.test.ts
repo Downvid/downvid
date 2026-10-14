@@ -52,3 +52,27 @@ describe('队列分块与旧检查点兼容', () => {
     expect(canResumeDirect(saved, resource, 1000)).toBe(false)
   })
 })
+
+// 老用户的数据里没有 acceleration 字段，必须能兜底且不炸（设置形状变更的兼容要求）
+describe('加速设置的兼容与钳制', () => {
+  it('未设置时给默认值', () => {
+    expect(normalizeAcceleration(undefined)).toEqual({ enabled: true, maxConnections: 8, aria2Path: '' })
+  })
+
+  it('非法并发被钳制在 1~16', () => {
+    expect(normalizeAcceleration({ maxConnections: 999 }).maxConnections).toBe(16)
+    expect(normalizeAcceleration({ maxConnections: 0 }).maxConnections).toBe(1)
+    expect(normalizeAcceleration({ maxConnections: -5 }).maxConnections).toBe(1)
+    expect(normalizeAcceleration({ maxConnections: 'abc' as any }).maxConnections).toBe(8)
+    expect(normalizeAcceleration({ maxConnections: 3.7 }).maxConnections).toBe(3)
+  })
+
+  it('关闭加速时实际连接数为 1', () => {
+    expect(accelerationConnections({ enabled: false, maxConnections: 16 })).toBe(1)
+  })
+
+  it('非对象输入不炸', () => {
+    expect(() => normalizeAcceleration('garbage' as any)).not.toThrow()
+    expect(() => normalizeAcceleration(null as any)).not.toThrow()
+  })
+})

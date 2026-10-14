@@ -85,6 +85,10 @@ interface Window {
         platform: string
         sidecar: string | null
         managedDir: string
+        /** 每个依赖的版本 / 来源 / 路径；未探测过时为空数组 */
+        deps: import('./types/deps').DepStatus[]
+        /** 上次探测时间戳；未探测过为 null */
+        checkedAt: number | null
       }>
       onProgress: (callback: (data: import('./types/deps').DepsProgress) => void) => () => void
     }

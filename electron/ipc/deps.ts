@@ -2,7 +2,7 @@ import { ipcMain, BrowserWindow, shell } from 'electron'
 import fs from 'node:fs'
 import {
   getRuntimeStatus, downloadDeps, cancelDownload, isDownloading,
-  invalidateStatus, getManagedDir, getSidecarPath, platformKey,
+  invalidateStatus, getManagedDir, getSidecarPath, platformKey, cachedStatusSnapshot,
   type DetectOptions, type DownloadProgress, type DepKind,
 } from '../utils/runtime'
 
@@ -80,11 +80,23 @@ export function registerDepsIpc() {
     }
   })
 
-  // 诊断信息：侧车是否就位、平台标识等
-  ipcMain.handle('deps:diagnostics', () => ({
-    success: true,
-    platform: platformKey(),
-    sidecar: getSidecarPath(),
-    managedDir: getManagedDir(),
-  }))
+  /**
+   * 诊断信息：侧车位置、平台标识，以及**每个依赖的版本 / 来源 / 路径**。
+   *
+   * 带上版本很重要：用户报"解析失败"时，第一个要问的就是"你的 yt-dlp 是哪一版"——
+   * yt-dlp 的站点修复以周为单位发布，旧版本是很多问题的根因。以前只能来回问用户，
+   * 现在这份信息直接可读（也让用户自己就能判断是不是版本太旧）。
+   */
+  ipcMain.handle('deps:diagnostics', async () => {
+    const cached = cachedStatusSnapshot()
+    return {
+      success: true,
+      platform: platformKey(),
+      sidecar: getSidecarPath(),
+      managedDir: getManagedDir(),
+      // 探测过才有；未探测时为空数组，由调用方决定是否先触发一次检测
+      deps: cached?.results ?? [],
+      checkedAt: cached?.checkedAt ?? null,
+    }
+  })
 }
