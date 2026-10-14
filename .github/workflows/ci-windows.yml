@@ -1,0 +1,217 @@
+name: CI · Windows
+
+# Windows 侧的完整回归。
+#
+# Windows 是**问题最多、也最难在本地发现**的平台，本地是 macOS 不代表这里能过。
+# 历史上 CI 的 windows job 抓到过三类本地/ubuntu 都发现不了的问题：
+#   1. `process.platform` 是 win32 而 GOOS 是 windows，直接透传会
+#      `unsupported GOOS/GOARCH pair win32/amd64`（macOS/Linux 恰好同名所以看不出来）
+#   2. 默认 shell 是 PowerShell：`/tmp` 会解析成 `D:\tmp`，POSIX 断言不成立
+#      → 需要 POSIX 语义的步骤显式写 `shell: bash`
+#   3. 换行符：默认 core.autocrlf=true，检出即 CRLF，而 CRLF 不是 gofmt 的输出
+#      → 靠仓库根的 .gitattributes 统一为 LF，这里再独立校验一次
+#
+# 因此这个工作流刻意**不复用** Linux 的步骤：同样的检查在 Windows 上要按
+# Windows 的语义再跑一遍，能重复的只是「跑什么」，不是「怎么跑」。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  GOTOOLCHAIN: local
+
+jobs:
+  backend:
+    name: 后端 · Go 侧车（Windows）
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.24'
+          cache: false
+
+      # .gitattributes 必须把换行符统一成 LF，否则 gofmt 会把每个 Go 文件
+      # 都判为未格式化（CRLF 不是 gofmt 的输出）
+      - name: 检出文件必须是 LF（.gitattributes 生效）
+        shell: bash
+        run: |
+          if git ls-files --eol backend | grep -q 'w/crlf'; then
+            echo "::error::backend 下的 Go 文件是 CRLF，检查 .gitattributes（* text=auto eol=lf）"
+            git ls-files --eol backend | grep 'w/crlf'
+            exit 1
+          fi
+          echo "换行符 ok"
+
+      - name: gofmt（格式）
+        working-directory: backend
+        shell: bash
+        run: |
+          UNFORMATTED=$(gofmt -l .)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "::error::以下文件未经过 gofmt 格式化："
+            echo "$UNFORMATTED"
+            exit 1
+          fi
+
+      - name: go vet（静态检查）
+        working-directory: backend
+        run: go vet ./...
+
+      - name: go test（打乱顺序）
+        working-directory: backend
+        run: go test -shuffle=on -count=1 ./...
+
+      # 必须能编出 Windows 原生 exe，后续的原生回归要用它
+      - name: 编译 Windows 边车
+        working-directory: backend
+        shell: bash
+        run: |
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o /dev/null ./cmd/downvid-deps
+          echo "  ok windows/amd64"
+
+  # ===== 原生 exe 集成回归：本工作流的核心价值 =====
+  native-runtime:
+    name: 集成 · 原生 exe 运行依赖回归
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.24'
+          cache: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - run: pnpm install --frozen-lockfile
+
+      # 探测、损坏副本、WinGet/Scoop 落点、慢候选、总时限、进程树清理…
+      # 这些只能在 Windows 上真跑：脚本会编译一个可控的原生 fixture
+      # （scripts/fixtures/runtime-tool.go）来模拟慢启动与损坏文件
+      - name: 原生运行依赖回归
+        run: pnpm test:runtime:windows
+
+  frontend:
+    name: 前端 · 类型 / 契约 / 单测（Windows）
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - run: pnpm install --frozen-lockfile
+
+      # 路径断言是这里的重点：测试里写死 `/tmp/out/...` 会在 Windows 上失败，
+      # 生产代码用 path.join 得到的是反斜杠，预期值也必须用 path.join 算
+      - name: 类型检查
+        run: pnpm vue-tsc --noEmit
+
+      - name: IPC 契约校验
+        run: pnpm lint:ipc
+
+      - name: 图标名校验
+        run: pnpm lint:icons
+
+      - name: 官网校验
+        run: pnpm lint:website
+
+      - name: 纯逻辑单测（Vitest）
+        run: pnpm test
+
+      - name: 更新流程回归
+        run: pnpm test:updater
+
+      - name: 设置迁移与向后兼容
+        run: pnpm test:settings:migration
+
+  integration:
+    name: 集成 · 下载 / 加速（Windows）
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.24'
+          cache: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - run: pnpm install --frozen-lockfile
+
+      # 下载链路里有大量路径与文件锁语义，Windows 与 Unix 差异很大
+      # （重命名被占用、临时文件清理、长路径）
+      - name: 下载集成回归
+        run: pnpm test:download:integration
+
+      - name: 加速基准
+        run: pnpm test:acceleration
+
+      - name: 解析集成回归
+        run: pnpm test:parse:integration
+
+  package:
+    name: 打包 · 产物内容校验（Windows）
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.24'
+          cache: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: 构建前端与主进程
+        run: pnpm vite build
+
+      - name: 打包到目录
+        run: pnpm exec electron-builder --win dir --publish never --config electron-builder.json5
+
+      # Windows 侧要特别确认：边车是 .exe、没有误带 yt-dlp.exe/ffmpeg.exe
+      - name: 产物内容校验
+        run: pnpm test:package

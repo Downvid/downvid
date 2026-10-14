@@ -65,6 +65,7 @@ import FormatSelector from './FormatSelector.vue'
 import DownloadQueue from './DownloadQueue.vue'
 import { useDownloadStore } from '../stores/download'
 import { useDepsStore, readMissingKinds, stripDepMarkers } from '../stores/deps'
+import { readSettings } from '../stores/settings'
 import { useErrorModal } from '../composables/useErrorModal'
 import { classifyParseError, parseDiagnostic, PARSE_MESSAGES } from '../../shared/parse-error'
 
@@ -137,10 +138,10 @@ async function parseVideo() {
   store.videoInfo = null
   store.selectedFormat = null
 
-  const settings = JSON.parse(localStorage.getItem('settings') || '{}')
-  const cookieMode = settings.cookieMode || 'auto'
-  const cookiesFile = cookieMode === 'manual' ? (settings.cookiesFile || '') : ''
-  const proxy = settings.proxy || ''
+  const settings = readSettings()
+  const cookieMode = settings.cookieMode
+  const cookiesFile = cookieMode === 'manual' ? settings.cookiesFile : ''
+  const proxy = settings.proxy
 
   // 解析阶段无法获知真实进度（yt-dlp 只在下载阶段输出进度行），
   // 因此这里只做两件事：显示一个不确定进度条 + 记录已用时间。
@@ -193,13 +194,10 @@ async function parseVideo() {
 }
 
 async function loadDownloadDir() {
-  const savedSettings = localStorage.getItem('settings')
-  if (savedSettings) {
-    const settings = JSON.parse(savedSettings)
-    if (settings.downloadDir) {
-      store.downloadDir = settings.downloadDir
-      return
-    }
+  const settings = readSettings()
+  if (settings.downloadDir) {
+    store.downloadDir = settings.downloadDir
+    return
   }
   store.downloadDir = await window.electronAPI.app.getDefaultDownloadDir()
 }
@@ -207,7 +205,7 @@ async function loadDownloadDir() {
 onMounted(async () => {
   await loadDownloadDir()
   // 应用代理设置
-  const settings = JSON.parse(localStorage.getItem('settings') || '{}')
+  const settings = readSettings()
   if (settings.proxy) {
     window.electronAPI.app.setProxy(settings.proxy)
   }

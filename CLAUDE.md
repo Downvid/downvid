@@ -121,14 +121,23 @@ A broadcast event must **not** double as an `ipcMain.handle` channel (`lint:ipc`
 
 **3. Changing user settings shape → silently breaks existing users.**
 
-Settings live in `localStorage['settings']` (**not** Pinia) and are read directly by several
-components. Fields: `downloadDir`, `filenameTemplate`, `preferredQuality`, `cookieMode`,
-`cookiesFile`, `proxy`, `depPaths`, `acceleration` (enabled/concurrency/optional aria2c path).
+Settings live in `localStorage['settings']` (**not** Pinia). Fields: `downloadDir`,
+`filenameTemplate`, `preferredQuality`, `cookieMode`, `cookiesFile`, `proxy`, `depPaths`,
+`acceleration` (enabled/concurrency/optional aria2c path), `autoCheckUpdate` (default on),
+`autoDownloadUpdate` (default off).
 
-- `grep -rn "localStorage.getItem('settings')"` first; confirm each read has a default
-- Read as `{ ...defaults, ...JSON.parse(saved) }` so old data still works
+**The only entry points are `readSettings()` / `updateSettings()` in `src/stores/settings.ts`:**
+
+- Reads must go through `readSettings()` (it fills defaults and sanitizes `depPaths` /
+  `acceleration`); `grep -rn "localStorage.getItem('settings')"` should only match settings.ts
+  itself. `deps.ts`, `download.ts` and `DownloadView.vue` each used to carry their own copy, which
+  is how `filenameTemplate` ended up with two different defaults
+  (`%(title)s` vs `%(title)s.%(ext)s`)
+- Writes must go through `updateSettings(patch)` — a raw `setItem` overwrites everything and wipes
+  other components' fields (real incident: one "Save" in the settings panel erased `depPaths`)
 - **Removing or renaming a field is a MAJOR change** (see `docs/release.md`)
 - Update `src/components/SettingsView.vue` and `src/components/DepPanel.vue` too
+- `scripts/test-settings-migration.mjs` enforces the above, including the "no bypassing" scan
 
 **4. Runtime dependencies (yt-dlp / ffmpeg / ffprobe):**
 

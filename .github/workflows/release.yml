@@ -11,6 +11,11 @@ on:
         description: '发布版本号（如 1.2.0，留空则只构建不发布）'
         required: false
         default: ''
+      prerelease:
+        description: '标记为预发布（测试版）：稳定用户的自动更新不会拿到它'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
@@ -21,6 +26,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       version: ${{ steps.v.outputs.version }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
     steps:
       - uses: actions/checkout@v7
       - id: v
@@ -38,8 +44,96 @@ jobs:
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-  build-mac-arm64:
+          # 预发布：让「测试版本」不进稳定用户的更新通道。
+          # 已实测确认（用 electron 自己的仓库对照）：GitHub 的 /releases/latest
+          # 与 releases.atom 都会跳过标记为 prerelease 的版本，而 electron-updater
+          # 正是靠这两个端点找最新版的，所以稳定用户不会被推到 beta 上。
+          PRERELEASE="${{ inputs.prerelease }}"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+          if [ "$PRERELEASE" = "true" ]; then
+            echo "本次发布标记为**预发布**：稳定用户的自动更新不会拿到它"
+          fi
+
+  # ===== 发布门禁：全量测试 =====
+  #
+  # 发布是不可逆的：产物一旦推给用户，就只能靠下一个版本修回来，
+  # 而「下一个版本」本身还得依赖更新通道是好的。所以这里把三平台的
+  # 关键回归再跑一遍 —— 平时 CI 已经在跑，这里是**发布前的最后一道闸**，
+  # 宁可晚发十分钟，也不要发一个用户装完用不了的版本。
+  gate:
     needs: version
+    if: needs.version.outputs.version != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.24'
+          cache: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Go 侧车（格式 / 静态检查 / 测试）
+        working-directory: backend
+        shell: bash
+        run: |
+          UNFORMATTED=$(gofmt -l .)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "::error::以下文件未经过 gofmt 格式化："
+            echo "$UNFORMATTED"
+            exit 1
+          fi
+          go vet ./...
+          go test -shuffle=on -count=1 ./...
+
+      - name: 类型检查
+        run: pnpm vue-tsc --noEmit
+
+      - name: 契约与静态校验（IPC / 图标 / 官网 / 依赖清单）
+        run: |
+          pnpm lint:ipc
+          pnpm lint:icons
+          pnpm lint:website
+          pnpm deps:manifest:check
+
+      - name: 纯逻辑单测
+        run: pnpm test
+
+      # 更新流程与设置迁移：发布前必须确认这两层没坏
+      - name: 更新流程回归
+        run: pnpm test:updater
+
+      - name: 设置迁移与向后兼容
+        run: pnpm test:settings:migration
+
+      - name: 下载与解析集成回归
+        run: |
+          pnpm test:download:integration
+          pnpm test:parse:integration
+
+      # 边车必须能编出全部 5 个平台：任一编不过，对应平台的用户就装不上
+      - name: 交叉编译全部平台
+        working-directory: backend
+        shell: bash
+        run: |
+          for target in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64; do
+            GOOS="${target%/*}" GOARCH="${target#*/}" CGO_ENABLED=0 \
+              go build -o /dev/null ./cmd/downvid-deps
+            echo "  ok ${target}"
+          done
+
+  build-mac-arm64:
+    needs: [version, gate]
     runs-on: macos-latest
     timeout-minutes: 60
     steps:
@@ -76,7 +170,7 @@ jobs:
           retention-days: 7
 
   build-mac-x64:
-    needs: version
+    needs: [version, gate]
     runs-on: macos-latest
     timeout-minutes: 60
     steps:
@@ -113,7 +207,7 @@ jobs:
           retention-days: 7
 
   build-win:
-    needs: version
+    needs: [version, gate]
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
@@ -151,7 +245,7 @@ jobs:
           retention-days: 7
 
   build-linux-x64:
-    needs: version
+    needs: [version, gate]
     runs-on: ubuntu-latest
     timeout-minutes: 90
     strategy:
@@ -192,7 +286,7 @@ jobs:
           retention-days: 7
 
   build-linux-arm64:
-    needs: version
+    needs: [version, gate]
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 60
     steps:
@@ -274,7 +368,9 @@ jobs:
           name: v${{ env.VERSION }}
           target_commitish: ${{ github.sha }}
           draft: false
-          prerelease: false
+          # 预发布（测试版）：稳定用户的自动更新不会拿到它。
+          # 由 workflow_dispatch 的 prerelease 输入决定；打 tag 触发时为 false。
+          prerelease: ${{ needs.version.outputs.prerelease == 'true' }}
           body: ${{ steps.changelog.outputs.notes }}
           files: |
             artifacts/**/*.dmg

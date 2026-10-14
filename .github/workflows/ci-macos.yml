@@ -1,0 +1,214 @@
+name: CI · macOS
+
+# macOS 侧的完整回归。
+#
+# macOS 有三处**只有这里能验**的东西，Linux 与 Windows 都替代不了：
+#   1. **未签名的 .app**：本项目没有付费证书，identity 为 null。用户首次启动要
+#      右键打开或去「隐私与安全性」放行；自动更新则完全绕开 Squirrel.Mac，
+#      改为自行下载 zip → 校验 sha512 → 去隔离属性 + ad-hoc 签名 → 退出后替换
+#   2. **通用二进制与架构**：产物同时出 arm64 与 x64（见 electron-builder.json5），
+#      跑在 Apple Silicon 上但用户可能是 Intel
+#   3. **quarantine 属性**：网络下载的可执行文件带 com.apple.quarantine，
+#      Apple Silicon 会直接 `killed: 9` —— 边车安装后必须 xattr -c + codesign
+#
+# 另外 runner 是 macOS 而非用户环境：登录 shell 的 PATH 差异（GUI 应用只有精简
+# PATH）在这里能真实复现，Linux/Windows runner 不行。
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-macos-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  GOTOOLCHAIN: local
+
+jobs:
+  backend:
+    name: 后端 · Go 侧车（macOS）
+    runs-on: macos-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.24'
+          cache: false
+
+      - name: gofmt（格式）
+        working-directory: backend
+        shell: bash
+        run: |
+          UNFORMATTED=$(gofmt -l .)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "::error::以下文件未经过 gofmt 格式化："
+            echo "$UNFORMATTED"
+            exit 1
+          fi
+
+      - name: go vet（静态检查）
+        working-directory: backend
+        run: go vet ./...
+
+      - name: go test（打乱顺序）
+        working-directory: backend
+        run: go test -shuffle=on -count=1 ./...
+
+      # 两个架构都要能编：产物同时出 arm64 与 x64
+      - name: 交叉编译 darwin 双架构
+        working-directory: backend
+        shell: bash
+        run: |
+          for arch in arm64 amd64; do
+            GOOS=darwin GOARCH="$arch" CGO_ENABLED=0 go build -o /dev/null ./cmd/downvid-deps
+            echo "  ok darwin/$arch"
+          done
+
+  frontend:
+    name: 前端 · 类型 / 契约 / 单测（macOS）
+    runs-on: macos-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: 类型检查
+        run: pnpm vue-tsc --noEmit
+
+      - name: IPC 契约校验
+        run: pnpm lint:ipc
+
+      - name: 图标名校验
+        run: pnpm lint:icons
+
+      - name: 官网校验
+        run: pnpm lint:website
+
+      - name: 纯逻辑单测（Vitest）
+        run: pnpm test
+
+      - name: 更新流程回归
+        run: pnpm test:updater
+
+      - name: 设置迁移与向后兼容
+        run: pnpm test:settings:migration
+
+  integration:
+    name: 集成 · 下载 / 加速（macOS）
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.24'
+          cache: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: 下载集成回归
+        run: pnpm test:download:integration
+
+      - name: 加速基准
+        run: pnpm test:acceleration
+
+      - name: 解析集成回归
+        run: pnpm test:parse:integration
+
+  # ===== macOS 专属：未签名应用的启动与更新 =====
+  packaging:
+    name: 打包 · 未签名 .app 与产物内容
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.24'
+          cache: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: 构建前端与主进程
+        run: pnpm vite build
+
+      - name: 打包到目录（arm64）
+        run: pnpm exec electron-builder --mac dir --arm64 --publish never --config electron-builder.json5
+
+      # 边车、app.asar、版本号、有没有误带 yt-dlp/ffmpeg、产物里有没有源码泄漏
+      - name: 产物内容校验
+        run: pnpm test:package
+
+      # 未签名是本项目的既定事实（identity: null）。这里确认它「确实未签名」
+      # 而不是「签名坏了」——后者会让用户看到完全不同的报错。
+      - name: 确认产物未签名（identity 为 null 的预期结果）
+        shell: bash
+        run: |
+          APP=$(find release -maxdepth 3 -name 'DownVid.app' -type d | sort -V | tail -1)
+          echo "检查 $APP"
+          if codesign -dv "$APP" 2>&1 | grep -q 'Authority=Developer ID'; then
+            echo "::error::产物带了 Developer ID 签名，但 electron-builder.json5 里 identity 为 null"
+            exit 1
+          fi
+          echo "  ok 未签名（与 identity: null 一致）"
+
+      # 边车必须在 macOS 上能真的执行：架构不匹配或未去隔离属性都会
+      # 让用户点「下载」后拿到一个 `killed: 9` 的文件
+      - name: 边车可执行且架构正确
+        shell: bash
+        run: |
+          SIDECAR=$(find release -maxdepth 5 -name downvid-deps -type f | sort -V | tail -1)
+          echo "检查 $SIDECAR"
+          file "$SIDECAR"
+          "$SIDECAR" version
+          "$SIDECAR" detect --json --timeout 10 > /dev/null
+          echo "  ok 边车可执行"
+
+      # Info.plist 的版本号决定「应用内更新」认为自己是什么版本；
+      # 与 package.json 不一致会让用户永远收到「有新版本」的提示
+      - name: Info.plist 版本与 package.json 一致
+        shell: bash
+        run: |
+          APP=$(find release -maxdepth 3 -name 'DownVid.app' -type d | sort -V | tail -1)
+          PLIST_VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP/Contents/Info.plist")
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          echo "Info.plist=$PLIST_VERSION package.json=$PKG_VERSION"
+          if [ "$PLIST_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::版本不一致，用户会一直看到「有新版本」"
+            exit 1
+          fi

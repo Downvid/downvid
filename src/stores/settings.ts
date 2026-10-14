@@ -32,8 +32,13 @@ export interface AppSettings {
   cookiesFile: string
   proxy: string
   acceleration: AccelerationSettings
-  /** 手动指定的依赖可执行文件路径，由 DepPanel 维护 */
-  depPaths: Partial<Record<'yt-dlp' | 'ffmpeg' | 'ffprobe', string>>
+  /**
+   * 手动指定的依赖可执行文件路径，由 DepPanel 维护。
+   *
+   * 值类型必须是 `string | undefined`：早期用 `Partial<Record<...>>` 会与
+   * 存档数据里可能出现任意类型的现实冲突（`normalizeDepPaths` 负责清洗）。
+   */
+  depPaths: { [K in 'yt-dlp' | 'ffmpeg' | 'ffprobe']?: string }
 
   /**
    * 自动检查更新。
@@ -67,6 +72,25 @@ export const DEFAULT_SETTINGS: AppSettings = {
 }
 
 /**
+ * 清洗 depPaths：只保留已知依赖种类上的**非空字符串**。
+ *
+ * 存档数据可能被手工改坏，或是更早版本的形状（数组、字符串、null）。
+ * 早先只判断 `typeof === 'object'`，于是 `[]` 会被当成合法值留下来，
+ * 后续按对象使用就取不到任何路径 —— 表现为「手动填的路径没生效」，
+ * 且完全没有报错。
+ */
+export function normalizeDepPaths(value: unknown): AppSettings['depPaths'] {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  const raw = value as Record<string, unknown>
+  const out: AppSettings['depPaths'] = {}
+  for (const kind of ['yt-dlp', 'ffmpeg', 'ffprobe'] as const) {
+    const v = raw[kind]
+    if (typeof v === 'string' && v.trim()) out[kind] = v.trim()
+  }
+  return out
+}
+
+/**
  * 读取设置，并用默认值补齐缺失字段。
  *
  * 必须补默认值：老用户存的是旧形状，直接读会拿到 `undefined`。
@@ -79,8 +103,8 @@ export function readSettings(): AppSettings {
       ...DEFAULT_SETTINGS,
       ...raw,
       acceleration: normalizeAcceleration(raw?.acceleration),
-      // depPaths 需要单独兜：旧数据里可能没有，或不是对象
-      depPaths: raw && typeof raw.depPaths === 'object' && raw.depPaths ? raw.depPaths : {},
+      // depPaths 需要单独兜：旧数据里可能没有、不是对象，或类型不对
+      depPaths: normalizeDepPaths(raw?.depPaths),
     }
   } catch {
     return { ...DEFAULT_SETTINGS, acceleration: normalizeAcceleration() }

@@ -148,12 +148,20 @@ Go 边车由同文件的 `goBackend()` 插件构建。`vitest.config.ts` 与 `vi
 设置存在 `localStorage['settings']`（**不在** Pinia 中），多个组件直接读。
 
 字段：`downloadDir`、`filenameTemplate`、`preferredQuality`、`cookieMode`、`cookiesFile`、
-`proxy`、`depPaths`（运行依赖的手动路径）、`acceleration`（开关、并发上限、可选 aria2c 路径）。
+`proxy`、`depPaths`（运行依赖的手动路径）、`acceleration`（开关、并发上限、可选 aria2c 路径）、
+`autoCheckUpdate`（启动时自动检查更新，默认开）、`autoDownloadUpdate`（发现新版本自动下载，默认关）。
 
-- 改动前先 `grep -rn "localStorage.getItem('settings')"`，逐个确认读取处有默认值兜底
-- 读取时用 `{ ...默认值, ...JSON.parse(saved) }` 让旧数据能被补齐
+**唯一入口是 `src/stores/settings.ts` 的 `readSettings()` / `updateSettings()`**：
+
+- 读必须走 `readSettings()`（它会用默认值补齐、清洗 `depPaths` 与 `acceleration`）；
+  `grep -rn "localStorage.getItem('settings')"` 应当**只剩 settings.ts 自己**。
+  曾经 `deps.ts` / `download.ts` / `DownloadView.vue` 各自复制了一份读法，
+  于是 `filenameTemplate` 出现了两个不同的默认值（`%(title)s` 与 `%(title)s.%(ext)s`）。
+- 写必须走 `updateSettings(patch)`：直接 `setItem` 是整体覆盖，会把别的组件的字段抹掉
+  （历史事故：在设置面板点一次「保存」，`depPaths` 就没了）
 - **删除或重命名字段属于 MAJOR 变更**（见 `docs/release.md` 的版本语义）
 - 同步更新 `src/components/SettingsView.vue` 与 `src/components/DepPanel.vue`
+- `scripts/test-settings-migration.mjs` 覆盖以上约定（含「不许绕过入口」的静态扫描）
 
 ### 4. 改运行依赖（yt-dlp / ffmpeg / ffprobe）
 

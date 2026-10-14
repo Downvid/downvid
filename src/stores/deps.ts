@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import type { DepKind, DepStatus, DepsProgress, RuntimeStatus } from '../types/deps'
+import { readSettings } from './settings'
 
 /**
  * 去掉错误信息里的依赖标记与 Electron 的 IPC 前缀，只留给人看的部分。
@@ -14,9 +15,6 @@ export function stripDepMarkers(message: string): string {
     .replace(/^Error invoking remote method '[^']*':\s*(Error:\s*)?/, '')
     .trim()
 }
-
-/** 用户设置里记录的手动路径（localStorage['settings'].depPaths） */
-type DepPaths = Partial<Record<DepKind, string>>
 
 /**
  * 从主进程的错误信息里读出缺失的依赖种类。
@@ -37,18 +35,6 @@ export function readMissingKinds(message: string): DepKind[] {
     if (message.includes(`未找到可用的 ${kind}`)) kinds.push(kind)
   }
   return kinds
-}
-
-function readSettings(): { depPaths: DepPaths; proxy: string } {
-  try {
-    const raw = JSON.parse(localStorage.getItem('settings') || '{}')
-    return {
-      depPaths: (raw.depPaths || {}) as DepPaths,
-      proxy: typeof raw.proxy === 'string' ? raw.proxy : '',
-    }
-  } catch {
-    return { depPaths: {}, proxy: '' }
-  }
 }
 
 function formatBytes(bytes: number): string {

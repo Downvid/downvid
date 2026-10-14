@@ -1,11 +1,17 @@
-name: Test
+name: CI · Linux
 
-# 测试矩阵：按职责拆成独立 job，失败时一眼能看出是"后端"还是"前端"。
-# 原先这些步骤都塞在 ci.yml 的一个大 job 里，任一失败只显示一个红叉，
-# 而且 Go 的问题要等 Node 装完才能暴露。
+# Linux 侧的完整回归。
 #
-# 约定：**新增测试脚本必须在这里挂上**。曾经 `test:acceleration` 加了脚本却没接进 CI，
-# 于是加速逻辑长期没有任何自动化验证（见 AGENTS.md 的「新增检查步骤」要求）。
+# 为什么按平台拆成三个工作流（而不是一个带 matrix 的大工作流）：
+#   1. 失败定位：日志里一眼看出是哪个平台哪一步，而不是「6 个 job 里有一个红」
+#   2. 触发与耗时：Windows/macOS runner 排队慢，Linux 能先给出结论
+#   3. 平台专属步骤不必写 `if: runner.os == ...`，可读性差且容易写错
+#
+# 约定：**新增测试脚本必须挂进对应平台的工作流**。曾经 test:acceleration
+# 加了脚本却没接进 CI，加速逻辑长期没有自动化验证。
+#
+# 每一步都单独命名，脚本内部再用 harness 打印逐用例结果 —— 失败时先看步骤名，
+# 再看脚本输出的用例名，不用翻 YAML。
 
 on:
   push:
@@ -13,31 +19,32 @@ on:
   pull_request:
   workflow_dispatch:
 
-# 这里刻意不做 paths 过滤：官网（website/**）的校验也挂在这个工作流上，
-# 过滤会让「只改官网」的提交跳过校验。此前 website/** 由单独的 pages.yml 触发，
-# 而它在仓库从未启用 Pages（Settings → Pages 未选源）时必然报错。
-
 concurrency:
-  group: test-${{ github.ref }}
+  group: ci-linux-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
   contents: read
 
+env:
+  # Go 侧车只用标准库，没有 go.sum；关掉缓存省一次网络往返
+  GOTOOLCHAIN: local
+
 jobs:
-  # ===== 后端：Go 边车 =====
+  # ===== Go 侧车 =====
   backend:
-    name: 后端（Go 边车）
+    name: 后端 · Go 侧车
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+
       - uses: actions/setup-go@v7
         with:
           go-version: '1.24'
-          # 侧车只用标准库，没有 go.sum，无需缓存依赖
           cache: false
-      - name: gofmt
+
+      - name: gofmt（格式）
         working-directory: backend
         shell: bash
         run: |
@@ -47,15 +54,18 @@ jobs:
             echo "$UNFORMATTED"
             exit 1
           fi
-      - name: go vet
+
+      - name: go vet（静态检查）
         working-directory: backend
         run: go vet ./...
+
       # -shuffle=on 打乱用例顺序，能抓出「用例之间共享包级可变状态」的泄漏。
       # 这类问题单跑必过、全量跑才随机失败（已真实发生过：扫描预算的全局变量）。
-      - name: go test
+      - name: go test（打乱顺序）
         working-directory: backend
-        run: go test -shuffle=on ./...
-      # 5 个平台都要能编译：边车会被交叉编译成各平台二进制打进安装包
+        run: go test -shuffle=on -count=1 ./...
+
+      # 边车会被交叉编译成 5 个平台的二进制打进安装包，任一平台编不过都是发布事故
       - name: 交叉编译全部平台
         working-directory: backend
         shell: bash
@@ -66,112 +76,150 @@ jobs:
             echo "  ok ${target}"
           done
 
-  # ===== 前端：类型检查、契约校验、纯逻辑单测 =====
+  # ===== 前端：类型、契约、纯逻辑单测 =====
   frontend:
-    name: 前端（类型 / 契约 / 单测）
+    name: 前端 · 类型 / 契约 / 单测
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
+
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+
       - uses: pnpm/action-setup@v6
         with:
           version: 11
+
       - run: pnpm install --frozen-lockfile
-      - name: 类型检查
+
+      - name: 类型检查（strict + noUnusedLocals）
         run: pnpm vue-tsc --noEmit
+
       # IPC 三处（主进程 / preload / env.d.ts）是手工同步的，漏改会静默失败
       - name: IPC 契约校验
         run: pnpm lint:ipc
+
       # 图标名写错时字体会静默渲染成文字或空白，界面上很难发现
       - name: 图标名校验
         run: pnpm lint:icons
+
       # 官网是单文件、直接由 Vercel 从 main 发布，中间没有构建步骤：
-      # 引错图、漏翻译、配色漂移都只会在线上静默出现，所以在这里拦
+      # 引错图、漏翻译、配色漂移都只会在线上静默出现
       - name: 官网校验
         run: pnpm lint:website
-      - name: 纯逻辑单测
+
+      - name: 纯逻辑单测（Vitest）
         run: pnpm test
 
-  # ===== 集成回归：跨模块、需要起真实进程或本地 HTTP 服务 =====
+  # ===== 主进程侧逻辑（不需要真实 Electron）=====
+  main-process:
+    name: 主进程 · 更新 / 设置 / 清单
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - run: pnpm install --frozen-lockfile
+
+      # 更新是用户拿到修复的唯一通道，也是唯一「坏了就再也修不好」的功能：
+      # 存量用户装的是旧版客户端，没有第二次机会。
+      - name: 更新流程回归（版本比较 / 缓存 / 兜底 / 各安装方式分支）
+        run: pnpm test:updater
+
+      # 设置形状改动会让老用户设置静默失效；合并写入写错会抹掉别的字段
+      - name: 设置迁移与向后兼容
+        run: pnpm test:settings:migration
+
+      # 依赖清单落后或哈希失配会在用户端变成「下载即校验失败」
+      - name: 依赖清单与上游一致
+        run: pnpm deps:manifest:check
+
+  # ===== 集成回归：起真实进程、真实文件 IO =====
   integration:
-    name: 集成回归
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
+    name: 集成 · 下载 / 加速
+    runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
+
       - uses: actions/setup-go@v7
         with:
           go-version: '1.24'
           cache: false
+
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+
       - uses: pnpm/action-setup@v6
         with:
           version: 11
+
       - run: pnpm install --frozen-lockfile
+
       # 下载链路：本地 HTTP 服务 + 真实文件 IO + 真实 Store，仅在边界替换 Electron API
       - name: 下载集成回归
         run: pnpm test:download:integration
+
       # 加速基准：并发队列、限速场景、可选 aria2。
       # 未提供外部工具路径时只跑内置基准，外部引擎会被明确跳过。
       - name: 加速基准
         run: pnpm test:acceleration
-      # 原生 exe 集成回归：探测、损坏副本、WinGet/Scoop、慢候选、总时限
-      - name: Windows 原生运行依赖回归
-        if: runner.os == 'Windows'
-        run: pnpm test:runtime:windows
+
+      # 解析链路（抖音/快手解析器与 yt-dlp 回退），只在本地服务上跑
+      - name: 解析集成回归
+        run: pnpm test:parse:integration
 
   # ===== 构建与打包 =====
-  build:
-    name: 构建与打包
+  package:
+    name: 打包 · 产物内容校验
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
+
       - uses: actions/setup-go@v7
         with:
           go-version: '1.24'
           cache: false
+
       - uses: actions/setup-node@v7
         with:
           node-version: 22
+
       - uses: pnpm/action-setup@v6
         with:
           version: 11
+
       - run: pnpm install --frozen-lockfile
-      # 依赖清单落后或哈希失配会在用户端变成"下载即校验失败"
-      - name: 依赖清单与上游一致
-        run: pnpm deps:manifest:check
+
       - name: 构建前端与主进程
         run: pnpm vite build
+
       # 校验 electron-builder 配置并打包到目录（不生成安装包），
       # 配置与新版 schema 不兼容时在 PR 阶段即可发现
       - name: 打包到目录
         run: pnpm exec electron-builder --linux dir --publish never --config electron-builder.json5
-      # 打包产物必须带上依赖边车，否则用户机上依赖检测与下载会整体失效
-      - name: 产物包含依赖边车
-        shell: bash
-        run: test -x release/*/linux-unpacked/resources/downvid-deps/downvid-deps
-      # 安装包里不应再出现 yt-dlp / ffmpeg（体积与授权都靠这条约束守住）
-      - name: 产物不含 yt-dlp / ffmpeg
-        shell: bash
-        run: |
-          if find release/*/linux-unpacked/resources -name 'yt-dlp*' -o -name 'ffmpeg*' | grep -q .; then
-            echo "::error::安装包中仍包含 yt-dlp/ffmpeg 二进制"
-            exit 1
-          fi
+
+      # 逐项核对真实产物：边车在不在、有没有误带 yt-dlp/ffmpeg、
+      # app.asar 是否完整、package-type 是否存在（决定 deb/rpm 能否自动更新）
+      - name: 产物内容校验
+        run: pnpm test:package
+
+      # 清单生成脚本自检：用假产物确认不会生成死链
       - name: 更新清单生成脚本自检
         shell: bash
         run: |
-          # 用假安装包验证脚本，避免死链与命名不符
           mkdir -p tmp-artifacts
           for f in DownVid-Setup-0.0.0.exe DownVid-arm64-Mac-0.0.0.zip DownVid-x64-Mac-0.0.0.zip DownVid-x86_64-Linux-0.0.0.AppImage DownVid-amd64-Linux-0.0.0.deb DownVid-arm64-Linux-0.0.0.AppImage; do
             echo "$f" > "tmp-artifacts/$f"
@@ -179,10 +227,10 @@ jobs:
           node scripts/gen-update-manifests.mjs tmp-artifacts 0.0.0
           grep -q "DownVid-amd64-Linux-0.0.0.deb" tmp-artifacts/latest-linux.yml
           grep -q "DownVid-x64-Mac-0.0.0.zip" tmp-artifacts/latest-mac.yml
+
       - name: Release 正文生成脚本自检
         shell: bash
         run: |
-          # 正文里的下载链接按实际产物扫描生成，这里用假产物确认不会产生死链
           mkdir -p tmp-release && rm -f tmp-release/*
           for f in DownVid-Setup-0.0.0.exe DownVid-arm64-Mac-0.0.0.dmg; do
             echo x > "tmp-release/$f"
@@ -190,7 +238,6 @@ jobs:
           node scripts/gen-release-notes.mjs tmp-release 0.0.0 CHANGELOG.md > /tmp/notes.md
           grep -q "DownVid-Setup-0.0.0.exe" /tmp/notes.md
           grep -q "更新内容" /tmp/notes.md
-          # 缺产物时不应生成指向不存在文件的链接
           if grep -q "DownVid-Portable-0.0.0.exe" /tmp/notes.md; then
             echo "::error::Release 正文引用了不存在的产物（便携版）"
             exit 1

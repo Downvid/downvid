@@ -97,8 +97,8 @@ export const useDownloadStore = defineStore('download', () => {
 
   async function refreshCookieStatus() {
     try {
-      const settings = JSON.parse(localStorage.getItem('settings') || '{}')
-      const manualFile = settings.cookieMode === 'manual' ? (settings.cookiesFile || '') : ''
+      const settings = readSettings()
+      const manualFile = settings.cookieMode === 'manual' ? settings.cookiesFile : ''
       const status = await window.electronAPI?.app?.cookieStatus?.(manualFile || undefined)
       if (!status) return
       cookieReady.value = status.manual || status.hasSnapshot || status.availableBrowsers.length > 0
@@ -257,11 +257,11 @@ export const useDownloadStore = defineStore('download', () => {
       const isKuaishou = task.url.includes('kuaishou.com') || task.url.includes('v.kuaishou.com')
       const useDirectDownload = isDouyin || isKuaishou
 
-      const settings = JSON.parse(localStorage.getItem('settings') || '{}')
-      const cookieMode = settings.cookieMode || 'auto'
-      const cookiesFile = cookieMode === 'manual' ? (settings.cookiesFile || '') : ''
-      const filenameTemplate = settings.filenameTemplate || '%(title)s'
-      const proxy = settings.proxy || ''
+      const settings = readSettings()
+      const cookieMode = settings.cookieMode
+      const cookiesFile = cookieMode === 'manual' ? settings.cookiesFile : ''
+      const filenameTemplate = settings.filenameTemplate
+      const proxy = settings.proxy
 
       const downloadOptions: any = {
         url: task.url,
