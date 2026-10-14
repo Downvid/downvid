@@ -139,6 +139,7 @@ import MaterialIcon from './icons/MaterialIcon.vue'
 import { useDownloadStore } from '../stores/download'
 import { useErrorModal } from '../composables/useErrorModal'
 import { abbreviatePath, ensureHomeDir } from '../composables/usePathDisplay'
+import { updateSettings } from '../stores/settings'
 import type { DownloadTask } from '../types'
 
 const store = useDownloadStore()
@@ -195,10 +196,7 @@ async function selectDownloadDir() {
   const dir = await window.electronAPI.dialog.selectFolder()
   if (dir) {
     store.downloadDir = dir
-    const savedSettings = localStorage.getItem('settings')
-    const settings = savedSettings ? JSON.parse(savedSettings) : {}
-    settings.downloadDir = dir
-    localStorage.setItem('settings', JSON.stringify(settings))
+    updateSettings({ downloadDir: dir })
   }
 }
 

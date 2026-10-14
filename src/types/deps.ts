@@ -9,7 +9,7 @@
 export type DepKind = 'yt-dlp' | 'ffmpeg' | 'ffprobe'
 
 /** 依赖来源，用于界面标识与排查 */
-export type DepSource = 'system' | 'managed' | 'manual'
+export type DepSource = 'system' | 'managed' | 'manual' | 'scanned'
 
 export interface DepStatus {
   kind: DepKind

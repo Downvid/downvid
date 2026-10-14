@@ -172,6 +172,7 @@
 import { ref, onMounted } from 'vue'
 import MaterialIcon from './icons/MaterialIcon.vue'
 import { useDepsStore } from '../stores/deps'
+import { readDepPaths, updateDepPaths } from '../stores/settings'
 import type { DepKind, DepSource } from '../types/deps'
 
 const store = useDepsStore()
@@ -181,11 +182,8 @@ const kinds: DepKind[] = ['yt-dlp', 'ffmpeg', 'ffprobe']
 const paths = ref<Partial<Record<DepKind, string>>>({})
 
 function persist() {
-  try {
-    const settings = JSON.parse(localStorage.getItem('settings') || '{}')
-    settings.depPaths = paths.value
-    localStorage.setItem('settings', JSON.stringify(settings))
-  } catch {}
+  // 合并写入：只改 depPaths，不动设置面板维护的字段（反之亦然）
+  updateDepPaths({ ...paths.value })
 }
 
 function onPathInput(kind: DepKind, value: string) {
@@ -211,6 +209,7 @@ function sourceLabel(source?: DepSource): string {
   if (source === 'system') return '系统安装'
   if (source === 'managed') return 'DownVid 托管'
   if (source === 'manual') return '手动指定'
+  if (source === 'scanned') return '扫描发现'
   return ''
 }
 
@@ -218,14 +217,13 @@ function sourceClass(source?: DepSource): string {
   if (source === 'system') return 'bg-primary/10 text-primary'
   if (source === 'managed') return 'bg-tertiary/10 text-tertiary'
   if (source === 'manual') return 'bg-surface-variant text-on-surface-variant'
+  // 扫描发现的：提示用户这不是标准安装位置，便于判断是否要改用托管版本
+  if (source === 'scanned') return 'bg-amber-container/30 text-amber'
   return 'text-on-surface-variant'
 }
 
 onMounted(() => {
-  try {
-    const raw = JSON.parse(localStorage.getItem('settings') || '{}')
-    paths.value = raw.depPaths || {}
-  } catch {}
+  paths.value = readDepPaths()
   // 不阻塞首帧：refresh() 会 spawn Go 边车（冷启动 1~3 秒），
   // 直接 await 会让整个设置界面白屏那么久。先渲染，再在后台补数据。
   void store.refresh()

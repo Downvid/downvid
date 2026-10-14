@@ -50,6 +50,7 @@ const (
 	SourceManaged Source = "managed" // DownVid 下载到 userData 的
 	SourceSystem  Source = "system"  // 系统安装（PATH / 常见目录）
 	SourceManual  Source = "manual"  // 用户在设置里手动指定
+	SourceScanned Source = "scanned" // 保底全盘扫描发现的（不在已知安装位置）
 )
 
 // Options 探测输入
@@ -84,6 +85,8 @@ func FindOne(kind Kind, opts Options) Result { return findOne(kind, opts) }
 
 func findOne(kind Kind, opts Options) Result {
 	res := Result{Kind: string(kind), Optional: Optional[kind]}
+	// 重置扫描预算：每个依赖独立计算，避免前一个把预算用光
+	scanBudget = 20000
 
 	var lastErr error
 	for _, c := range candidatesFor(kind, opts) {
@@ -104,12 +107,156 @@ func findOne(kind Kind, opts Options) Result {
 		return res
 	}
 
+	// 保底：已知目录都没命中时，做一次**有界的**全盘扫描。
+	//
+	// 为什么需要：候选目录是枚举出来的，覆盖不了便携版、自定义安装目录、
+	// 或者将来某个包管理器换的新落点。这类情况下用户明明装了却被告知缺失，
+	// 且无从下手。
+	//
+	// 为什么必须有界：全盘遍历在 Windows 上可能耗时很久（且会扫到网络盘）。
+	// 因此只扫几个最可能的根目录、限制深度与访问条目数、命中即停。
+	if fallback := scanForBinary(kind, opts); fallback != nil {
+		res.Found = true
+		res.Path = fallback.Path
+		res.Version = fallback.Version
+		res.Source = string(SourceScanned)
+		res.Managed = false
+		return res
+	}
+
 	if lastErr != nil {
 		res.Reason = lastErr.Error()
 	} else {
-		res.Reason = "未在主目录、PATH 与常见安装目录中找到"
+		res.Reason = "未在托管目录、PATH、常见安装目录中找到（已尝试扫描常见位置）"
 	}
 	return res
+}
+
+// scanForBinary 在常见根目录下有限度地搜索可执行文件。
+//
+// 只作为保底：正常路径（托管目录 / PATH / 常见安装目录）都已尝试过才会走到这里。
+// 扫到的结果标记为 SourceScanned，界面会提示"自动扫描发现"，便于用户判断来源。
+func scanForBinary(kind Kind, opts Options) *probe.Info {
+	name := BinaryName(kind)
+	seen := map[string]bool{}
+
+	for _, root := range scanRoots() {
+		if seen[root] {
+			continue
+		}
+		seen[root] = true
+
+		found := scanDir(root, name, 0)
+		if found == "" {
+			continue
+		}
+		info, err := probeTool(kind, found)
+		if err != nil {
+			continue
+		}
+		if min, ok := probe.MinimumMajor[string(kind)]; ok && info.Major != 0 && info.Major < min {
+			continue
+		}
+		return &info
+	}
+	return nil
+}
+
+// scanDir 在 dir 下最多下探 maxDepth 层查找 name。
+//
+// 限制点：
+//   - 深度（默认 4 层）：够到 `.../bin/yt-dlp`、`.../ffmpeg/bin/ffmpeg.exe` 这类层级
+//   - 条目数（全局预算）：避免在大目录里长时间遍历
+//   - 跳过明显无关的目录（node_modules、缓存、系统目录）
+func scanDir(dir string, name string, depth int) string {
+	if depth > scanMaxDepth || scanBudget <= 0 {
+		return ""
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+
+	var subdirs []string
+	for _, e := range entries {
+		scanBudget--
+		if scanBudget <= 0 {
+			return ""
+		}
+
+		full := filepath.Join(dir, e.Name())
+
+		if e.IsDir() {
+			if shouldSkipDir(e.Name()) {
+				continue
+			}
+			subdirs = append(subdirs, full)
+			continue
+		}
+
+		// 命中：文件名完全匹配（Windows 上大小写不敏感）
+		if strings.EqualFold(e.Name(), name) {
+			return full
+		}
+	}
+
+	for _, sub := range subdirs {
+		if found := scanDir(sub, name, depth+1); found != "" {
+			return found
+		}
+	}
+	return ""
+}
+
+const scanMaxDepth = 4
+
+// scanBudget 是单次扫描允许访问的条目总数上限，避免在超大目录里卡住。
+// 每探测一个依赖都会重置。
+var scanBudget = 20000
+
+// shouldSkipDir 跳过明显不可能放可执行文件、或体量过大的目录
+func shouldSkipDir(name string) bool {
+	switch strings.ToLower(name) {
+	case "node_modules", ".git", ".cache", "cache", "caches", "logs", "tmp", "temp",
+		"windows", "system32", "winsxs", "$recycle.bin", "appdata":
+		return true
+	}
+	return false
+}
+
+// scanRoots 返回扫描的根目录，按可能性排序。
+//
+// 只放"用户会自己放东西"的地方，不放整个磁盘根（在 Windows 上遍历 C:\ 太慢）。
+func scanRoots() []string {
+	home, _ := os.UserHomeDir()
+	var roots []string
+
+	if home != "" {
+		roots = append(roots,
+			filepath.Join(home, "Downloads"),
+			filepath.Join(home, "Desktop"),
+			filepath.Join(home, "Documents"),
+			filepath.Join(home, "bin"),
+			filepath.Join(home, ".local", "bin"),
+			filepath.Join(home, "scoop", "apps"),
+			filepath.Join(home, "AppData", "Local", "Programs"),
+		)
+	}
+
+	switch runtime.GOOS {
+	case "darwin":
+		roots = append(roots, "/opt/homebrew/bin", "/usr/local/bin", "/Applications", "/opt/local/bin")
+	case "linux":
+		roots = append(roots, "/usr/local/bin", "/usr/bin", "/opt", "/snap/bin")
+	case "windows":
+		roots = append(roots,
+			`C:\Program Files`,
+			`C:\Program Files (x86)`,
+			`C:\tools`,
+			`C:\ffmpeg`,
+		)
+	}
+	return roots
 }
 
 // ===== 候选路径 =====

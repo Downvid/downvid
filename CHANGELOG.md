@@ -6,6 +6,22 @@
 
 ### 修复
 
+- **在设置里点「保存」会丢失依赖的手动指定路径**：设置面板与依赖面板各写各的整个
+  `settings` 对象，而设置面板的字段里没有 `depPaths`，整体覆盖时把它抹掉。
+  现改为**合并写入**（新增 `src/stores/settings.ts`），并统一了全部 6 个写入点——
+  这类"每加字段就要改所有写入点"的 bug 不会再出现
+- **winget 装的依赖检测不到**：候选目录只覆盖 `WinGet\Links`，漏掉了
+  `yt-dlp.FFmpeg` 这类 zip + nested portable 真正解压出来的 `WinGet\Packages` 路径
+
+### 新增
+
+- **依赖的保底扫描**：已知安装位置都没命中时，会在常见目录（下载/桌面/文档、
+  Homebrew、Program Files 等）做一次有界扫描，避免"明明装了却提示缺失"。
+  扫描结果标记为「扫描发现」并在界面上以不同颜色提示，便于判断来源。
+  限制深度、访问条目数与跳过目录，不会拖慢启动
+
+### 修复
+
 - **`An object could not be cloned`**：开始下载时把手动的响应式数组（Vue Proxy）直接传给了
   主进程，而 structured clone **无法克隆 Proxy**，因此报错。IPC 载荷统一拍平为普通对象/数组
 - **缺依赖的提示出现时机不对**：开始下载前会 `await deps.refresh()`——它会启动 Go 边车做一次

@@ -201,6 +201,7 @@ import MaterialIcon from './icons/MaterialIcon.vue'
 import DepPanel from './DepPanel.vue'
 import { useErrorModal } from '../composables/useErrorModal'
 import { abbreviatePath, ensureHomeDir } from '../composables/usePathDisplay'
+import { readSettings, updateSettings } from '../stores/settings'
 
 const { showError, showInfo } = useErrorModal()
 
@@ -271,29 +272,38 @@ async function testProxy() {
 
 async function selectDownloadDir() {
   const dir = await window.electronAPI.dialog.selectFolder()
-  if (dir) { settings.value.downloadDir = dir; localStorage.setItem('settings', JSON.stringify(settings.value)) }
+  if (dir) { settings.value.downloadDir = dir; updateSettings({ downloadDir: dir }) }
 }
 
 async function selectCookiesFile() {
   const file = await window.electronAPI.dialog.selectFile()
-  if (file) { settings.value.cookiesFile = file; localStorage.setItem('settings', JSON.stringify(settings.value)) }
+  if (file) { settings.value.cookiesFile = file; updateSettings({ cookiesFile: file }) }
 }
 
 function clearCookiesFile() {
   settings.value.cookiesFile = ''
-  localStorage.setItem('settings', JSON.stringify(settings.value))
+  updateSettings({ cookiesFile: '' })
 }
 
 function saveSettings() {
-  localStorage.setItem('settings', JSON.stringify(settings.value))
+  // 合并写入：SettingsView 不管 depPaths，整体覆盖会把 DepPanel 存的手动路径抹掉
+  updateSettings({ ...settings.value })
   window.electronAPI?.app?.setProxy?.(settings.value.proxy || '')
   showInfo('设置已保存')
   close()
 }
 
 async function loadSettings() {
-  const saved = localStorage.getItem('settings')
-  if (saved) settings.value = { ...settings.value, ...JSON.parse(saved) }
+  // 走统一的读取入口：它会补齐默认值，老数据缺字段也不会是 undefined
+  const saved = readSettings()
+  settings.value = {
+    downloadDir: saved.downloadDir,
+    filenameTemplate: saved.filenameTemplate,
+    preferredQuality: saved.preferredQuality,
+    cookieMode: saved.cookieMode,
+    cookiesFile: saved.cookiesFile,
+    proxy: saved.proxy,
+  }
   if (!settings.value.downloadDir) {
     settings.value.downloadDir = await window.electronAPI.app.getDefaultDownloadDir()
   }
