@@ -17,10 +17,15 @@ pnpm vue-tsc --noEmit       # renderer/main type check (strict + noUnusedLocals 
 pnpm test                   # pure-logic unit tests (Vitest, tests/*.test.ts)
 pnpm test:runtime:windows    # native Windows exe integration regression (requires Go)
 pnpm test:download:integration # local HTTP/file/store integration regression
+pnpm test:parse:integration # parser chain: fallbacks, round cap, cookie lifecycle
 pnpm test:acceleration      # acceleration benchmark; see docs/download-acceleration.md
+pnpm test:updater           # updater state machine, cache, fallback, install modes
+pnpm test:settings:migration # settings defaults/merge and the "no bypass" static scan
+pnpm test:package           # unpacked-artifact contents (needs a prior --dir build)
 pnpm lint:ipc               # static check of the hand-maintained IPC wiring
 pnpm lint:icons             # icon names must be valid (a typo renders as literal text)
 pnpm lint:website           # landing page: single file, assets, i18n pairs, theme colors
+pnpm lint:docs              # AGENTS.md ↔ CLAUDE.md parity + referenced paths/numbers exist
 pnpm deps:manifest:check    # is the dependency manifest behind upstream?
 pnpm build                  # vue-tsc && vite build && electron-builder (current platform)
 pnpm build:mac:arm64        # also :mac:x64 :win :linux:x64 :linux:arm64
@@ -47,6 +52,27 @@ Two layers: Go sidecar (`backend/internal/*/**_test.go`) and renderer/main pure 
   A test that cannot fail is worthless.
 - `vitest.config.ts` is separate from `vite.config.ts` on purpose — the latter runs `go build`
   in `buildStart`, which tests must not trigger.
+
+### CI workflow split
+
+Tests are split into three per-platform workflows (`.github/workflows/ci-linux.yml`, `ci-macos.yml`,
+`ci-windows.yml`), each with its own jobs, so a failure names the platform *and* the layer:
+
+| job | Contents |
+| --- | --- |
+| `backend` | gofmt / vet / `go test -shuffle=on` / cross-compile (all 5 targets on Linux, host only on macOS/Windows) |
+| `frontend` | type check / IPC contract / icon names / landing page / unit tests / updater / settings migration |
+| `main-process` | Linux only: updater / settings migration / manifest check |
+| `integration` | download integration / acceleration benchmark / parse integration |
+| `native-runtime` | Windows only: native exe runtime-deps regression |
+| `package` / `packaging` | build / pack to a directory / artifact contents / manifest & release-notes script self-checks |
+
+**Every new test script must be wired into all three per-platform workflows** — `test:acceleration`
+was once added without CI wiring and the acceleration logic went unverified for a long time. Likewise
+**`git add` a new workflow file before committing**: when the single test workflow was split into
+`ci-*.yml`, the deletion was staged while the three new files were still untracked, so one
+`git commit -a` would have left `main` with no CI at all (`scripts/lint-docs.mjs` checks that every
+workflow named in the docs exists).
 
 ---
 
@@ -220,6 +246,11 @@ A Go sidecar resolves them at startup, "prefer the machine's own, download only 
   UI keeps showing "Download" after a successful download (this really happened). Conversely system
   copies must **not** get a long budget: the candidate list can hold a dozen paths and one hung copy
   at 15 s each drags a single detection out to minutes (the Windows CI job caught exactly that).
+  Each number has a **single source of truth** — never restate it elsewhere: total budget
+  `rt.DetectTimeout`, per dependency `probeTimeLimit`, candidates `probe.CandidateTimeout` /
+  `probe.SystemCandidateTimeout`, scanning `scanTimeLimit` (all under `backend/internal/`). The
+  Electron side only owns the 90 s `runSidecar` timeout and **must not pass `--timeout`** (it used to
+  hardcode 70, silently overriding the 80 s Go default).
 - `cmd.WaitDelay` in `probe.run` **must stay**: on timeout only the direct child is killed, but
   candidates may be shell scripts or PyInstaller launchers whose grandchild still holds the stdout
   pipe, so `cmd.Run()` waits on I/O forever. A `sleep 300` fake binary turned a 5 s budget into
@@ -236,10 +267,10 @@ A Go sidecar resolves them at startup, "prefer the machine's own, download only 
 
 ### Parse dispatch (`ytdlp:parse`)
 
-Douyin and Kuaishou have bespoke parsers: platform API first, headless `puppeteer-core` driving a
-*system-installed* Chrome/Edge as fallback. Every failure is swallowed by an empty `catch` and falls
-through to `parseWithYtdlp`. When debugging a parse bug, check which branch actually ran — the errors
-are invisible.
+Douyin and Kuaishou have bespoke parsers: platform API first, headless `puppeteer-core` (launched via
+`electron/utils/browser.ts`) driving a *system-installed* Chrome/Edge as fallback. Every failure is
+swallowed by an empty `catch` and falls through to `parseWithYtdlp`. When debugging a parse bug, check
+which branch actually ran — the errors are invisible.
 
 ### Download has two entirely separate paths
 
@@ -271,7 +302,8 @@ Formats are built by the pure `electron/parsers/formats.ts`. Three regressions i
 tested): keep formats without `vcodec` (X/Twitter mp4 has none), keep m3u8 only for heights with no
 direct link, and offer a `bv*+ba/b` fallback when nothing reports a height.
 
-Pause = `child.kill()` (plus `taskkill /T /F` on Windows), task dropped from `activeDownloads`.
+Pause = `child.kill()` (plus `taskkill /T /F` on Windows), task dropped from the main process's
+`electron/store.ts` `activeDownloads`.
 Resume re-spawns and continues from the `.part` file. **No cross-restart resume.**
 
 ### yt-dlp environment quirks

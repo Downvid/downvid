@@ -88,8 +88,12 @@ func FindAll(opts Options) []Result {
 
 // DetectTimeout 小于 Electron 的 90 秒超时，给 JSON 回传留出余量。
 //
-// 总时限必须容得下「前两个候选都很慢」：单候选 15 秒（见 probe.CandidateTimeout，
-// yt-dlp 官方 macOS 构建首次执行最慢实测 12.4 秒），三个依赖各 30 秒。
+// 总时限必须容得下「一个依赖里最坏的那条路径」：托管副本 15 秒
+// （见 probe.CandidateTimeout，yt-dlp 官方 macOS 构建首次执行最慢实测
+// 12.4 秒）＋ 保底扫描 18 秒（见 scanTimeLimit）＝ 33 秒，仍远小于 80。
+//
+// 这是总时限的**唯一来源**：Electron 侧刻意不再传 `--timeout`（曾硬编码
+// 70 秒把它覆盖掉，让「文档写 80、实际跑 70」静默对不上）。
 const DetectTimeout = 80 * time.Second
 
 func FindAllContext(ctx context.Context, opts Options) []Result {

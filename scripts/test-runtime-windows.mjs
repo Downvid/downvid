@@ -44,7 +44,8 @@ function check(name, setup, verify) {
   const { args = [], expected } = setup(home, env)
   const start = Date.now()
   const run = spawnSync(sidecar, ['detect', '--json', '--managed-dir', path.join(home, 'managed'), ...args], {
-    env, encoding: 'utf8', windowsHide: true, timeout: 55000,
+    // 检测总时限现在是 80 秒，spawn 超时要留出余量，否则会先被 Node 杀掉
+    env, encoding: 'utf8', windowsHide: true, timeout: 120000,
   })
   assert.equal(run.status, 0, run.error?.message || run.stderr)
   const results = JSON.parse(run.stdout).results
@@ -114,6 +115,12 @@ try {
   assert.equal(runtime.path, deno)
   assert.equal(runtime.version, '2.3.0')
   console.log('通过：winget-deno-old-path')
+  // 慢候选不应把后面的正常副本饿死。
+  //
+  // 每个卡死候选的成本 = 该来源的候选预算 + probe 的 WaitDelay（2 秒，
+  // 用来兜住「子进程被杀、孙进程还占着 stdout 管道」那种挂起）。
+  // 这里依次是：手动 5s、托管 15s、PATH 前两个各 5s，都超时后才轮到正常副本，
+  // 所以上限要按这个成本算，不能凭感觉写一个「看起来很小」的数字。
   check('slow-candidates', (home, env) => {
     const manual = binary(path.join(home, 'manual'), 'yt-dlp', 'slow')
     binary(path.join(home, 'managed'), 'yt-dlp', 'slow')
@@ -125,7 +132,10 @@ try {
     return { args: ['--manual', `yt-dlp=${manual}`], expected }
   }, (results, expected, elapsed) => {
     assert.equal(entry(results, 'yt-dlp').path, expected)
-    assert.ok(elapsed < 20000, `检测耗时 ${elapsed} ms`)
+    // 5+2 + 15+2 + 5+2 + 5+2 ≈ 38 秒，留一点余量到 50 秒。
+    // 真正要守住的是「不会一路挂到总时限（80 秒）」——
+    // 曾经因为没有 WaitDelay，一个卡死候选就能把检测拖到 300 秒。
+    assert.ok(elapsed < 50000, `检测耗时 ${elapsed} ms，慢候选没有按预期被放弃`)
   })
   check('total-timeout', home => {
     const manual = binary(path.join(home, 'manual'), 'yt-dlp', 'slow')
@@ -133,7 +143,8 @@ try {
   }, (results, _, elapsed) => {
     assert.equal(entry(results, 'yt-dlp').found, false)
     assert.match(entry(results, 'yt-dlp').reason, /时限/)
-    assert.ok(elapsed < 4000, `总时限没有生效：${elapsed} ms`)
+    // 总时限 1 秒，但 probe 的 WaitDelay 还要 2 秒才能把管道收干净
+    assert.ok(elapsed < 6000, `总时限没有生效：${elapsed} ms`)
   })
   // 用真实父子进程复现 PyInstaller：先杀父进程会使子进程继续写文件。
   const treeDir = path.join(temp, 'pause-tree')

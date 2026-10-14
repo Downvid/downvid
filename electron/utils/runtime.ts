@@ -101,10 +101,14 @@ export function getManagedDir(): string {
 // ===== 探测 =====
 
 function detectArgs(options: DetectOptions): string[] {
-  // 70 秒：单候选 10 秒（见 probe.CandidateTimeout——yt-dlp 官方 macOS 构建
-  // 本机实测 8～10 秒），最坏情况「托管副本缺失 + 几个系统副本都很慢」
-  // 还要再加上保底扫描。留足余量，别让总时限把刚下载好的副本掐掉。
-  const args = ['detect', '--managed-dir', getManagedDir(), '--json', '--timeout', '70']
+  // 不传 --timeout：总时限的**唯一来源**是 Go 侧的 rt.DetectTimeout（80 秒），
+  // 边车不带参数时就用它。此前这里硬编码 '70'，把 80 覆盖成了 70，于是
+  // 「文档写 80、代码跑 70」静默对不上——正是本项目最怕的那类失同步。
+  //
+  // 80 秒的余量账：单候选 15 秒（托管副本）/ 5 秒（系统副本），最坏
+  // 「托管副本 15 + 保底扫描 18」＝ 33 秒，仍小于 80；Electron 侧
+  // runSidecar 的 90 秒再留出 JSON 回传的余量。
+  const args = ['detect', '--managed-dir', getManagedDir(), '--json']
   for (const [kind, file] of Object.entries(options.manualPaths || {})) {
     if (file) args.push('--manual', `${kind}=${file}`)
   }

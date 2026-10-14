@@ -29,10 +29,15 @@ pnpm vue-tsc --noEmit                          # 前端类型检查（strict + n
 pnpm test                                      # 纯逻辑单测（Vitest，tests/*.test.ts）
 pnpm test:runtime:windows                       # Windows 原生 exe 集成回归（需 Go）
 pnpm test:download:integration                  # 本地 HTTP / 文件 / Store 下载集成回归
+pnpm test:parse:integration                     # 解析链路（回退 / 轮次上限 / Cookie 生命周期）
 pnpm test:acceleration                          # 加速基准；外部引擎见 docs/download-acceleration.md
+pnpm test:updater                               # 更新状态机 / 缓存 / 兜底 / 各安装方式分支
+pnpm test:settings:migration                    # 设置默认值与合并写入 + 「不许绕过入口」静态扫描
+pnpm test:package                               # 打包产物内容校验（需先跑一次 --dir 打包）
 pnpm lint:ipc                                  # IPC 契约静态校验（三处同步 + 产物命名 + 仓库坐标一致）
 pnpm lint:icons                                # 图标名是否有效（写错会静默渲染成文字）
 pnpm lint:website                              # 官网单文件 / 引用资源 / 中英词条 / 配色一致性
+pnpm lint:docs                                 # AGENTS.md ↔ CLAUDE.md 一致 + 引用路径与数字真实存在
 pnpm deps:manifest:check                       # 依赖清单是否落后上游
 cd backend && gofmt -l . && go vet ./... && go test -shuffle=on ./...   # Go 侧车
 pnpm build                                     # 端到端：vue-tsc + vite build + electron-builder
@@ -50,8 +55,8 @@ pnpm build                                     # 端到端：vue-tsc + vite buil
 
 ### CI 工作流分工
 
-测试按**平台**拆成三个工作流（`.github/workflows/ci-linux.yml`、`ci-macos.yml`、`ci-windows.yml`），
-每个工作流内部再按职责拆 job，失败时一眼能看出是哪一层：
+测试按**平台**拆成三个工作流（`.github/workflows/ci-linux.yml`、`.github/workflows/ci-macos.yml`、
+`.github/workflows/ci-windows.yml`），每个工作流内部再按职责拆 job，失败时一眼能看出是哪一层：
 
 | job | 内容 |
 | --- | --- |
@@ -63,9 +68,10 @@ pnpm build                                     # 端到端：vue-tsc + vite buil
 | `package` / `packaging` | 构建 / 打包到目录 / 产物内容校验 / 清单与 Release 正文脚本自检 |
 
 **新增测试脚本必须挂到对应平台的三个工作流上** —— 曾经 `test:acceleration` 加了脚本却没接进 CI，
-加速逻辑长期没有自动化验证。同理，**新增工作流文件时必须先 `git add`**：曾有一次把
-`test.yml` 拆成 `ci-*.yml`，删除已 staged 而新文件还是 untracked，一次 `git commit -a`
-就会让 main 上不再有任何 CI（见 `scripts/lint-docs.mjs` 的 workflow 一致性校验）。
+加速逻辑长期没有自动化验证。同理，**新增工作流文件时必须先 `git add`**：曾有一次把单一的测试
+工作流拆成 `ci-linux.yml` / `ci-macos.yml` / `ci-windows.yml`，旧文件的删除已 staged 而三个新文件
+还是 untracked，一次 `git commit -a` 就会让 main 上不再有任何 CI
+（`scripts/lint-docs.mjs` 会校验文档提到的 workflow 真实存在）。
 
 ### 关于格式化
 
@@ -246,6 +252,10 @@ GitHub Pages **不再使用**：仓库从未在 Settings 里选过 Pages 源，`
 - 检测总时限 80 秒（Electron 侧 90 秒），每个依赖 45 秒；
   候选执行预算**按来源区分**：托管副本 15 秒、系统副本 5 秒；扫描另有 18 秒预算。
   Windows 目录优先读取实际环境变量，找不到有效副本才下载。
+  这些数字各有**唯一来源**，不要在多处重复书写：总时限 `rt.DetectTimeout`、
+  单依赖 `probeTimeLimit`、候选 `probe.CandidateTimeout` / `probe.SystemCandidateTimeout`、
+  扫描 `scanTimeLimit`（均在 `backend/internal/`）；Electron 侧只有 90 秒的
+  `runSidecar` 超时，**不再自己传 `--timeout`**（曾硬编码 70，把 80 静默覆盖成 70）。
   **这几个数字不能随手调小**：yt-dlp 官方 macOS 构建（PyInstaller，约 37MB）`--version`
   本机实测要 8～10 秒、首次执行最慢 12.4 秒，而 Homebrew / uv 装的是 Python zipapp、
   只要 0.2 秒——托管副本预算一旦低于 15 秒，**刚下载好的副本会被判为

@@ -69,7 +69,7 @@ detect 参数：
   --managed-dir <dir>     托管目录（下载安装位置）
   --manual <kind>=<path>  手动指定的可执行文件路径，可重复
   --json                  单行 JSON 输出（默认按事件流输出）
-  --timeout <秒>          检测总时限，默认 45
+  --timeout <秒>          检测总时限，默认 80（不传即用 rt.DetectTimeout）
 
 fetch 参数：
   --managed-dir <dir>     托管目录（必填）

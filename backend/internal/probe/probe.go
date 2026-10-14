@@ -214,6 +214,10 @@ func describeRunError(err error, out string) error {
 		// 超时≠损坏：yt-dlp 的官方 macOS 构建冷启动就要 8～10 秒，
 		// 说得太绝对会把用户的耐心和排查方向一起带偏
 		return errors.New("执行超时（可执行文件响应过慢，可能已损坏，也可能是首次运行较慢）")
+	case strings.Contains(msg, "context canceled"):
+		// 父级上下文被取消（例如整体检测到了时限）。不加这一条会直接把
+		// 英文的 "context canceled" 甩到界面上——错误信息一律用中文。
+		return errors.New("执行超时（检测被中断）")
 	case reKilled.MatchString(msg) || reKilled.MatchString(out):
 		return errors.New("无法执行（macOS 可能已损坏或未签名，请重新下载）")
 	case strings.Contains(msg, "permission denied"):
