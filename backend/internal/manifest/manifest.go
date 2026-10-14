@@ -68,7 +68,15 @@ func GoPlatform() string { return goruntime.GOOS + "/" + goruntime.GOARCH }
 
 // Tasks 生成当前平台的下载任务；only 为空表示全部依赖。
 func Tasks(managedDir string, only []string) ([]fetch.Task, error) {
-	platform := CurrentPlatform()
+	return TasksFor(CurrentPlatform(), managedDir, only)
+}
+
+// TasksFor 与 Tasks 相同，但显式指定平台键。
+//
+// 单独暴露是为了能在 macOS 上验证 **Windows 的完整下载路径**——issue #40 的
+// 最小复现是 Windows 上跑 `downvid-deps.exe fetch --only ffmpeg`，而本机跑不了
+// Windows 二进制。有了这个入口，就能用 "win32/x64" 直接断言任务能生成。
+func TasksFor(platform, managedDir string, only []string) ([]fetch.Task, error) {
 	want := make(map[string]bool, len(only))
 	for _, k := range only {
 		want[k] = true

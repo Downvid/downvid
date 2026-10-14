@@ -61,3 +61,32 @@ func TestCurrentPlatformResolvable(t *testing.T) {
 		t.Fatalf("当前平台（%s，Go 侧 %s/%s）应能生成下载任务：%v", got, runtime.GOOS, runtime.GOARCH, err)
 	}
 }
+
+// issue #40 的最小复现是 Windows 上跑：
+//
+//	downvid-deps.exe fetch --managed-dir <dir> --only ffmpeg --timeout 20
+//	→ {"event":"error","message":"暂不支持 windows/amd64 平台的 ffmpeg 下载"}
+//
+// 本机跑不了 Windows 二进制，因此用 TasksFor 显式喂入 win32/x64，
+// 验证这条路径在 macOS 上也能走通。
+func TestWindowsFetchPathProducesTasks(t *testing.T) {
+	for _, platform := range []string{"win32/x64", "darwin/x64", "linux/x64", "darwin/arm64", "linux/arm64"} {
+		for _, only := range [][]string{nil, {"yt-dlp"}, {"ffmpeg"}, {"ffprobe"}} {
+			tasks, err := TasksFor(platform, `C:\tmp\downvid-runtime`, only)
+			if err != nil {
+				t.Errorf("平台 %s only=%v 应能生成任务，却报错：%v", platform, only, err)
+				continue
+			}
+			if len(tasks) == 0 {
+				t.Errorf("平台 %s only=%v 未生成任务", platform, only)
+			}
+		}
+	}
+}
+
+// 事故当时传进去的正是 Go 命名，必须仍然报错（而不是静默生成错任务）
+func TestGoNamingStillFailsLoudly(t *testing.T) {
+	if _, err := TasksFor("windows/amd64", "/tmp/x", nil); err == nil {
+		t.Error("传入 Go 命名时应报错，避免静默生成错误任务")
+	}
+}
