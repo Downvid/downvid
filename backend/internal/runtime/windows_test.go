@@ -211,11 +211,19 @@ func TestScanRespectsDeadline(t *testing.T) {
 	}
 }
 
-// findOne 必须重置时限，否则第一个依赖超时后其余都扫不了
+// findOne 必须重置时限，否则第一个依赖超时后其余都扫不了。
+//
+// 断言「时限被换成了比原来更晚的值」，而不是「时限在当前时间之后」：
+// 后者依赖**扫描实际耗时**——Windows 上 ffprobe 缺失会真的扫满 3 秒预算，
+// 时限随之落在过去，断言失败；macOS 上候选目录命中、不触发扫描，断言通过。
+// 同一份代码两个平台结论不同，说明断言选错了对象（CI 抓到的就是这个）。
 func TestFindOneResetsScanDeadline(t *testing.T) {
-	scanDeadline = time.Now().Add(-1 * time.Second)
+	stale := time.Now().Add(-1 * time.Second)
+	scanDeadline = stale
+
 	_ = FindOne(KindFFprobe, Options{ManagedDir: t.TempDir()})
-	if time.Now().After(scanDeadline) {
-		t.Error("FindOne 未重置扫描时限")
+
+	if !scanDeadline.After(stale) {
+		t.Errorf("FindOne 未重置扫描时限：仍是 %v", scanDeadline)
 	}
 }
