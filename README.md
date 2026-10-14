@@ -33,9 +33,6 @@
 
 ---
 
-> [!NOTE]
-> DownVid 基于 [Videdown](https://github.com/cshuangyy/videdown) 二次开发，遵循 MIT License。
-
 > [!IMPORTANT]
 > 本项目是 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 的图形界面封装，不包含破解或绕过技术保护措施的代码。请遵守当地法律法规、平台规则及内容版权要求，使用者需自行承担使用责任。
 
@@ -224,7 +221,9 @@ pnpm lint:ipc
 
 ## 开源协议与致谢
 
-DownVid 基于 [MIT License](./LICENSE) 开源，并基于 [Videdown](https://github.com/cshuangyy/videdown) 二次开发。
+DownVid 基于 [MIT License](./LICENSE) 开源。
+
+DownVid 最初基于 [Videdown](https://github.com/cshuangyy/videdown) 开发，之后经过了大量修改、重构与功能扩展。感谢原作者 cshuangyy 的开源工作；原项目的版权与许可声明保留在 [LICENSE](./LICENSE) 中。
 
 感谢社区贡献者与项目依赖的维护者：
 
