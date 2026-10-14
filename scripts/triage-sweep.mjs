@@ -88,7 +88,8 @@ for (const issue of issues) {
   // 标签：自助/缺信息由分类决定；解析类问题另打 parse-error 便于筛选
   const addLabels = []
   if (verdict.close) {
-    addLabels.push(verdict.reason === 'template-only' ? 'needs-info' : 'self-service')
+    // 两种「没信息」都打 needs-info；自助类打 self-service
+    addLabels.push(verdict.reason === 'self-service' ? 'self-service' : 'needs-info')
   } else if (isParseIssue(issue.title, issue.body || '')) {
     // 用报告形态判定，而不是要求 kind 被识别出来：
     // `no such table: meta` 这类 yt-dlp 内部报错归不到具体类别，

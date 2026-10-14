@@ -142,3 +142,81 @@ export function isTemplateOnlyReport(body: string): boolean {
   return stripped.length < 24
 }
 
+// ===== 「信息不足」检测（手工提交的 Issue）=====
+//
+// 上面那个函数只覆盖**应用自动生成**的正文。但用户也可以从 Issues → New issue
+// 选模板**手工**提交，然后把每个必填项填成 `dsadsa` / `dadas` / `123` ——
+// 模板校验只要求「非空」，于是这样一条 Issue 照样能开出来，正文里没有任何
+// 有用信息（实测 #60）。这类必须单独识别，否则它会一直躺在 open 里。
+
+/**
+ * 各模板章节标题 + 模板自带的固定选项文本。
+ *
+ * 剥掉它们之后剩下的，才是「用户真正写的内容」。标题用中英双语，
+ * 因为仓库有两套模板（`bug_report.yml` / `bug_report_en.yml`）。
+ */
+const TEMPLATE_SECTIONS = [
+  // 章节标题（中 / 英）
+  /^#+\s*(运行平台|DownVid 版本号?|问题类型|问题描述|复现步骤|视频链接.*|期望行为|截图.*|错误日志|提交前确认)\s*$/gm,
+  /^#+\s*(Platform|DownVid Version|Issue Category|Issue Description|Steps to Reproduce|Video URL.*|Expected Behavior|Screenshots.*|Error Logs|Before Submitting)\s*$/gm,
+]
+
+/** 模板里的固定选项与勾选项，不算用户输入 */
+const TEMPLATE_BOILERPLATE = [
+  /_No response_/g,
+  /^(macOS|Windows|Linux)\b.*$/gm, // 平台下拉的选项文本
+  // 提交前确认的**所有**勾选项。此前只匹配「我已 / 我使用 / I have」，
+  // 于是 `- [x] I am using the latest version` 漏网，被当成用户内容
+  /^\s*-\s*\[[ xX]\]\s*.*$/gm,
+]
+
+/**
+ * 是否是「模板照抄、没有实质内容」的 Issue。
+ *
+ * 判据：剥掉模板的标题/固定选项/下拉值后，**用户写的散文**过短，
+ * 且正文里没有任何看起来像真实信息的痕迹（链接、版本号、路径、报错、非空代码块）。
+ *
+ * ## 为什么要按「散文行」而不是总长度
+ *
+ * 占位垃圾的特征是**短的单 token**：`dadas`、`sdasdas`、`dsadasd`，
+ * 以及下拉框的选项值 `Other`。它们拼起来也能凑出几十个字符，
+ * 按总长度判断会放行（实测 #60 就是这样漏掉的）。
+ * 真实描述则通常是有空格或含中文的句子。
+ *
+ * 所以：只统计「像散文」的行——含空白、或含中日韩文字、或本身很长。
+ *
+ * ## 为什么要求「无真实信息痕迹」
+ *
+ * 一句话的简短报告（「选 1080P 之后一直卡在 0%」）是**有效**的，
+ * 不能因为短就关掉。真正该关的是纯填充。有链接 / 版本号 / 报错 / 非空代码块
+ * 就说明用户至少提供了线索，一律放行。
+ */
+export function isInsufficientInfoReport(body: string): boolean {
+  let text = body || ''
+
+  for (const re of TEMPLATE_SECTIONS) text = text.replace(re, '')
+  for (const re of TEMPLATE_BOILERPLATE) text = text.replace(re, '')
+
+  // 非空的代码块（带内容）= 用户贴了真实报错，直接放行。
+  // 空的 ```shell``` 是模板自带，不算。
+  if (/```[a-z]*\s*\n\s*\S[\s\S]*?```/.test(text)) return false
+  // 去掉代码围栏本身，只留内容（空块就什么都不剩）
+  text = text.replace(/```[a-z]*/g, '')
+
+  // 真实信息痕迹
+  if (/https?:\/\/\S+/.test(text)) return false
+  if (/\b\d+\.\d+(\.\d+)?\b/.test(text)) return false // 版本号
+  if (/[/\\][\w.-]+[/\\]/.test(text)) return false // 文件路径
+  if (/(ERROR|WARNING|Traceback|HTTP \d{3})/i.test(text)) return false
+
+  // 只统计「像散文」的行
+  const prose = text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0)
+    .filter((l) => /\s/.test(l) || /[\u4e00-\u9fa5\u3040-\u30ff\uac00-\ud7af]/.test(l) || l.length >= 12)
+    .join('')
+  const meaningful = prose.replace(/[\s`*\-:|_#[\]]/g, '')
+  return meaningful.length < 10
+}
+

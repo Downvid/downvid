@@ -83,6 +83,52 @@ Error invoking remote method 'ytdlp:parse': Error: ERROR: [youtube] 8atq1TtMPZM:
 
 - 操作系统: Win32`
 
+/** #60：手工从模板提交，但每一项都填了占位垃圾——真实正文 */
+const ISSUE_60 = `### Platform
+
+macOS (Apple Silicon)
+
+### DownVid Version
+
+dadas
+
+### Issue Category
+
+Other
+
+### Issue Description
+
+sdasdas
+
+### Steps to Reproduce
+
+dsadasd
+
+### Video URL (if applicable)
+
+_No response_
+
+### Expected Behavior
+
+_No response_
+
+### Screenshots/Screen Recording
+
+_No response_
+
+### Error Logs
+
+\`\`\`shell
+
+\`\`\`
+
+### Before Submitting
+
+- [x] I have searched existing issues and found no duplicates
+- [x] I am using the latest version
+- [x] I have read the README and FAQ
+`
+
 // ===== 空报告：必须关 =====
 
 suite.case('应用自动生成的空报告（#58）应被关闭', async (t) => {
@@ -106,6 +152,53 @@ suite.case('空报告只多打几个换行 / 空格仍然算空', async (t) => {
   t.equal(v.close, true, '用户没有实质补充，不应因为多了空白就放行')
 })
 
+suite.case('手工提交但填占位垃圾的模板 Issue（#60）应被关闭', async (t) => {
+  // 这条不是应用自动生成的，是用户从模板手工提交、把必填项填成 dsadsa/dadas。
+  // 模板校验只要求「非空」，所以照样能开出来，正文里没有任何可用信息。
+  const v = classifyIssue(ISSUE_60)
+  t.equal(v.close, true, '全是占位文字，无法据此定位问题')
+  t.equal(v.reason, 'insufficient-info', '应归类为「信息不足」而不是「只有模板」')
+  t.ok(commentFor(v).includes('链接'), '关评要告诉用户该补什么信息')
+})
+
+suite.case('下拉框选项（Other）不算用户内容', async (t) => {
+  // `Other` 是 Issue Category 的选项值，单独出现时不能算「用户写了东西」
+  const v = classifyIssue('### Issue Category\n\nOther\n\n### Issue Description\n\nx\n')
+  t.equal(v.close, true)
+})
+
+suite.case('填写完整的模板 Issue 不能关', async (t) => {
+  const v = classifyIssue(`### Platform
+
+Windows 11
+
+### DownVid Version
+
+1.3.4
+
+### Issue Category
+
+下载失败/中断
+
+### Issue Description
+
+下载 B 站视频到 99% 之后报错，重试三次都一样，换成 720P 可以成功。
+
+### Steps to Reproduce
+
+1. 粘贴链接
+2. 选 1080P
+3. 等到 99% 出现错误
+
+### Error Logs
+
+\`\`\`shell
+ERROR: unable to download video data: HTTP Error 403
+\`\`\`
+`)
+  t.equal(v.close, false, '有描述、有版本、有原始报错，是有效报告')
+})
+
 // ===== 真实报告：绝不能关 =====
 
 suite.case('带原始报错的报告（#50 page-reload）不能关', async (t) => {
@@ -125,6 +218,12 @@ suite.case('authentication 但带原始报错（#57）不能关', async (t) => {
   // 同样是 authentication，但有代码块 → 可能是真的解析回归，不是让用户配 Cookie 就完事
   const v = classifyIssue(ISSUE_57)
   t.equal(v.close, false, '有原始报错就不该按「自助类」关掉')
+})
+
+suite.case('简短但有效的报告不能因为短就关掉', async (t) => {
+  // 一句话的报告（如「选 1080P 之后卡在 0%」）是有效的，不能按长度一刀切
+  const v = classifyIssue('### Issue Description\n\n选 1080P 之后进度一直卡在 0%\n\n### Steps to Reproduce\n\n1. 粘贴链接\n2. 选 1080P\n3. 卡住')
+  t.equal(v.close, false, '有具体现象描述就是有效报告')
 })
 
 suite.case('用户手写的问题描述不会被误判成空报告', async (t) => {

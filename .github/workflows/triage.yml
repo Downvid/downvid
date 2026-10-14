@@ -127,9 +127,11 @@ jobs:
               state_reason: 'not_planned',
             })
             // 打标签方便事后统计「有多少报告其实是自助类 / 缺信息」
-            const label = process.env.TRIAGE_REASON === 'template-only'
-              ? 'needs-info'
-              : 'self-service'
+            // template-only 与 insufficient-info 都是「缺信息」，
+            // 只有 self-service 才是「按指引可自行解决」
+            const label = process.env.TRIAGE_REASON === 'self-service'
+              ? 'self-service'
+              : 'needs-info'
             try {
               await github.rest.issues.addLabels({ ...context.repo, issue_number, labels: [label] })
             } catch (e) {
