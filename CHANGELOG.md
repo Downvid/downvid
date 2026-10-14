@@ -22,6 +22,24 @@
   `WinGet\Packages`（zip + nested portable 真正解压的位置）与机器级
   （`--scope machine`）的整套路径
 
+- **国内网络下应用完全打不开（纯白窗口）**：`index.html` 里的 Google Fonts 是跨域且
+  render-blocking 的样式表，当 `fonts.googleapis.com` 请求一直 pending（国内直连基本必挂）时，
+  Chromium 会**连带阻塞后面的 `<script type="module">`**，Vue 永不挂载 —— 窗口停在纯白，
+  日志里连 `did-finish-load` 都不出现。改为 `media="print"` + `onload` 异步加载，
+  连不上时回退到系统字体栈（感谢 @jwfstars）
+- **依赖探测会把「执行失败的文件」当成可用**：原先只要输出了版本号就认，不看退出码；
+  现在要求命令成功退出且版本格式匹配。同时给检测加了总时限（45 秒 / 单依赖 15 秒 /
+  单候选 3 秒），避免依次等待多个候选时超过 Electron 的 60 秒超时
+- **损坏或过旧的副本会遮蔽正常版本**：扫描遇到不可用的同名副本后继续遍历，而不是直接放弃
+- **Windows 的 WinGet / Scoop / Chocolatey 路径改为读实际环境变量**，支持自定义目录与
+  迁移后的 `LOCALAPPDATA`；补齐 WinGet 用户级与机器级、Scoop、`.deno/bin` 的查找
+- **Windows 上暂停后仍在继续下载**：先杀 yt-dlp 父进程再 `taskkill /T` 时，
+  PyInstaller 子进程可能存活并继续下载（界面已显示暂停、文件却最终下完）。
+  现改为先终止完整进程树并等待退出；恢复任务会等待暂停请求完成，避免旧调用清理复用
+  taskId 的新任务（感谢 @hailaij）
+- **下载历史出现重复记录 / 文件状态不同步**：历史改为按本地文件合并，并同步文件是否存在
+  （感谢 @hailaij）
+
 ### 新增
 
 - **依赖的保底扫描**：已知位置都没命中时，在常见目录做一次有界扫描，
