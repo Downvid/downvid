@@ -113,6 +113,10 @@ jobs:
       - name: 文档一致性校验（AGENTS.md ↔ CLAUDE.md）
         run: pnpm lint:docs
 
+      # 词条漏英文 / 占位符对不上都不会报错，只会静默显示错文案
+      - name: i18n 词条校验
+        run: pnpm lint:i18n
+
       - name: 纯逻辑单测（Vitest）
         run: pnpm test
 
@@ -142,6 +146,11 @@ jobs:
       # 设置形状改动会让老用户设置静默失效；合并写入写错会抹掉别的字段
       - name: 设置迁移与向后兼容
         run: pnpm test:settings:migration
+
+      # Issue 自动关闭的分类逻辑：误关一条真实报告比留一条噪音更糟，
+      # 用例全部取自仓库里真实出现过的 Issue 正文（#50 #52 #57 #58）
+      - name: Issue 分类回归
+        run: pnpm test:issue:triage
 
       # 依赖清单落后或哈希失配会在用户端变成「下载即校验失败」
       - name: 依赖清单与上游一致

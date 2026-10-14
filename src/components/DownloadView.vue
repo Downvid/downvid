@@ -5,8 +5,8 @@
       <div class="flex-1 overflow-y-auto px-8 py-6">
         <div class="max-w-xl mx-auto w-full flex flex-col gap-6">
           <div class="flex flex-col gap-1">
-            <h1 class="font-headline text-2xl font-bold leading-tight text-on-surface">全平台视频下载</h1>
-            <p class="text-on-surface-variant text-sm">输入链接即刻解析高清数字资产</p>
+            <h1 class="font-headline text-2xl font-bold leading-tight text-on-surface">{{ t('download.title') }}</h1>
+            <p class="text-on-surface-variant text-sm">{{ t('download.subtitle') }}</p>
           </div>
 
           <UrlInput @parse="parseVideo" />
@@ -39,7 +39,7 @@
           <div class="flex justify-between items-center text-[12px] font-semibold">
             <div class="flex items-center gap-2 text-primary">
               <MaterialIcon name="sync" :size="16" class="animate-spin" />
-              <span class="tracking-wide">正在提取视频元数据...</span>
+              <span class="tracking-wide">{{ t('download.extracting') }}</span>
             </div>
             <!-- 解析没有可用的进度来源，因此不显示百分比，避免给出不真实的数字 -->
             <span class="text-on-surface-variant font-normal">{{ parseElapsedText }}</span>
@@ -64,6 +64,7 @@ import UrlInput from './UrlInput.vue'
 import FormatSelector from './FormatSelector.vue'
 import DownloadQueue from './DownloadQueue.vue'
 import { useDownloadStore } from '../stores/download'
+import { t } from '../i18n'
 import { useDepsStore, readMissingKinds, stripDepMarkers } from '../stores/deps'
 import { readSettings } from '../stores/settings'
 import { useErrorModal } from '../composables/useErrorModal'
@@ -76,7 +77,7 @@ const { showError } = useErrorModal()
 // 因此不显示百分比，改为不确定进度条 + 已用时间。
 const parseElapsed = ref(0)
 const parseElapsedText = computed(() =>
-  parseElapsed.value > 0 ? `已用 ${parseElapsed.value} 秒` : '通常需要几秒',
+  parseElapsed.value > 0 ? t('download.elapsed', { seconds: parseElapsed.value }) : t('download.usuallySeconds'),
 )
 
 function extractUrl(text: string): string {
@@ -124,11 +125,11 @@ async function parseVideo() {
   try {
     const parsed = new URL(store.url)
     if (!['http:', 'https:'].includes(parsed.protocol)) {
-      showError('请输入有效的链接', `不支持的协议: ${parsed.protocol}`)
+      showError(t('download.invalidLink'), t('download.badProtocol', { protocol: parsed.protocol }))
       return
     }
   } catch {
-    showError('请输入有效的链接', `无法解析的 URL: ${store.url}`)
+    showError(t('download.invalidLink'), t('download.badUrl', { url: store.url }))
     return
   }
 
@@ -179,7 +180,7 @@ async function parseVideo() {
   } catch (e: any) {
     clearElapsed()
     // 主进程可能在错误后附带 Cookie 读取失败的解决建议，分类时只看错误本身
-    const [rawError, hint = ''] = (e.message || '未知错误').split('\n\n提示：')
+    const [rawError, hint = ''] = (e.message || t('download.unknownError')).split('\n\n提示：')
     // 缺少运行依赖时直接弹「一键下载」引导，比只弹错误框更有用
     if (rawError.includes('[deps-missing:') || /未找到可用的 (yt-dlp|ffmpeg|ffprobe)/.test(rawError)) {
       useDepsStore().promptForMissing(readMissingKinds(rawError))
@@ -187,7 +188,10 @@ async function parseVideo() {
       return
     }
     const sanitized = stripDepMarkers(rawError)
-    showError('解析失败：' + PARSE_MESSAGES[classifyParseError(sanitized)], parseDiagnostic(sanitized), hint)
+    const kind = classifyParseError(sanitized)
+      // 把类别一并传给弹窗：它据此决定是否给「提交 Issue」入口
+      // （authentication / invalid-url 这类不给，否则会生成空 Issue）
+      showError(t('download.parseFailed', { message: PARSE_MESSAGES[kind] }), parseDiagnostic(sanitized), hint, kind)
   } finally {
     store.isParsing = false
   }

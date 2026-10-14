@@ -1,0 +1,91 @@
+name: Release audit
+
+# 定期核对「最新的 tag 是不是真的发布了」。
+#
+# 背景：`v1.3.5` 的 tag 推上去了、CHANGELOG 也写了，但那次 `Build & Release`
+# 在 3 分钟后被取消，于是 GitHub Release 里没有 v1.3.5，自动更新通道仍指向 v1.3.4。
+# 存量用户永远收不到这次修复，而**没有任何地方会提示这件事**。
+#
+# release.yml 里已经加了一道「发布后自检」，但那只在发布流程跑到底时才执行；
+# 运行被取消时后续步骤根本不会执行。所以再加一道**独立于发布流程**的定期审计：
+# 它只看结果（tag ↔ Release 是否对得上），不管过程发生了什么。
+
+on:
+  schedule:
+    # 每天一次（UTC 03:00）
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # 需要 tag 列表
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: 找出最新的版本 tag
+        id: latest
+        run: |
+          # 按版本号排序取最新的 v* tag
+          TAG=$(git tag --list 'v*' --sort=-v:refname | head -1)
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "最新 tag：$TAG"
+
+      - name: 校验该 tag 是否真的发布了
+        id: verify
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if node scripts/verify-release.mjs --tag "${{ steps.latest.outputs.tag }}"; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # 发布不完整时开一条 Issue（去重：已有同名 open issue 就不重复开）
+      - name: 发布不完整则开 Issue 提醒
+        if: steps.verify.outputs.ok == 'false'
+        uses: actions/github-script@v8
+        env:
+          TAG: ${{ steps.latest.outputs.tag }}
+        with:
+          script: |
+            const tag = process.env.TAG
+            const title = `[发布审计] ${tag} 的 tag 存在但没有对应的 Release`
+            const { data: existing } = await github.rest.issues.listForRepo({
+              ...context.repo, state: 'open', labels: 'release-audit',
+            })
+            if (existing.some((i) => i.title === title)) {
+              core.info('已存在同名 Issue，跳过')
+              return
+            }
+            const body = [
+              `自动审计发现：\`${tag}\` 的 tag 已经推送，但 **GitHub Release 里没有它**。`,
+              '',
+              '这意味着：',
+              '- 自动更新通道（`/releases/latest`）仍然指向**上一个**已发布版本',
+              '- 该版本里的所有修复**到不了任何用户手里**',
+              '',
+              '常见原因：`Build & Release` 运行被取消或失败（检查 Actions 页面）。',
+              '',
+              '修复方式：Actions → **Build & Release** → Run workflow，版本号填',
+              `\`${tag.replace(/^v/, '')}\`（须与 package.json 一致）。`,
+              '',
+              `<sub>本 Issue 由 release-audit 工作流自动创建。</sub>`,
+            ].join('\n')
+            const { data: issue } = await github.rest.issues.create({ ...context.repo, title, body })
+            try {
+              await github.rest.issues.addLabels({ ...context.repo, issue_number: issue.number, labels: ['release-audit'] })
+            } catch (e) {
+              core.warning(`加标签失败（标签可能尚未创建）：${e.message}`)
+            }

@@ -383,3 +383,18 @@ jobs:
             artifacts/**/*.tar.gz
             artifacts/latest*.yml
             artifacts/**/*.blockmap
+
+      # 发布**完成后**回头核对一次：Release 真的存在、且带着全部平台的更新清单。
+      #
+      # 为什么需要这一步：实测 `v1.3.5` 的 tag 推上去了、CHANGELOG 也写了，
+      # 但这次运行在 3 分钟后**被取消**，于是 GitHub Release 里没有 v1.3.5，
+      # 自动更新通道仍指向 v1.3.4 —— 所有存量用户永远收不到这次修复，
+      # 而版本号已经继续往前走了。这种失败**没有任何提示**：
+      # tag 在、CHANGELOG 在、package.json 也在，只有 Release 页面少了一条。
+      #
+      # 放在最后而不是依赖 job 的成功状态：被取消时后续步骤不执行，
+      # 恰恰是我们希望有人（或下一个版本的发布）注意到的时刻。
+      - name: 校验发布完整性
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/verify-release.mjs --tag "v${{ env.VERSION }}"

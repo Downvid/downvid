@@ -1,10 +1,18 @@
 <template>
   <section class="w-[45%] bg-surface-container-low flex flex-col pt-6 px-6 pb-6 shadow-ambient z-10 border-l border-outline-variant/10">
     <div class="flex items-center justify-between mb-4">
-      <h2 class="font-headline text-base font-bold text-on-surface">任务队列</h2>
+      <h2 class="font-headline text-base font-bold text-on-surface">{{ t('queue.title') }}</h2>
       <div class="flex items-center gap-2">
         <span class="text-[10px] font-mono font-bold text-on-secondary-container bg-secondary-container px-1.5 py-0.5 rounded-sm">
-          {{ activeTaskCount }} 进行中
+          {{ t('queue.activeCount', { count: activeTaskCount }) }}
+        </span>
+        <!-- 有了并发上限后，任务可能真的在「排队等待」而非「正在下载」。
+             不显示排队数会让用户以为卡住了。 -->
+        <span
+          v-if="queuedTaskCount > 0"
+          class="text-[10px] font-mono font-bold text-on-surface-variant bg-surface-container-highest px-1.5 py-0.5 rounded-sm"
+        >
+          {{ t('queue.queuedCount', { count: queuedTaskCount }) }}
         </span>
         <button
           class="p-1.5 text-on-surface-variant hover:text-on-surface rounded-sm hover:bg-surface-container-highest transition-colors"
@@ -18,8 +26,8 @@
     <div class="flex flex-col gap-3 overflow-y-auto pr-1 pb-4">
       <div v-if="store.downloadTasks.length === 0" class="flex flex-col items-center justify-center py-12 text-on-surface-variant">
         <MaterialIcon name="download_for_offline" :size="48" class="mb-3 opacity-30" />
-        <p class="text-sm">暂无下载任务</p>
-        <p class="text-xs mt-1 opacity-70">解析视频后点击下载按钮添加任务</p>
+        <p class="text-sm">{{ t('queue.empty') }}</p>
+        <p class="text-xs mt-1 opacity-70">{{ t('queue.emptyHint') }}</p>
       </div>
 
       <div
@@ -61,12 +69,12 @@
             <template v-if="task.status === 'downloading' || task.status === 'merging'">
               <div class="flex items-center justify-between text-[10px] text-on-surface-variant font-mono">
                 <span>
-                  <span v-if="task.status === 'merging'" class="text-primary">{{ task.statusMessage || '正在合并音视频...' }}</span>
+                  <span v-if="task.status === 'merging'" class="text-primary">{{ task.statusMessage || t('queue.statusMerging') }}</span>
                   <span v-else-if="task.speed">{{ task.speed }} - ETA {{ task.eta }}</span>
-                  <span v-else>正在下载...</span>
+                  <span v-else>{{ t('queue.statusDownloading') }}</span>
                 </span>
                 <div class="flex items-center gap-2">
-                  <button class="text-on-surface-variant hover:text-amber transition-colors" @click="pauseTask(task.id)" title="暂停下载">
+                  <button class="text-on-surface-variant hover:text-amber transition-colors" @click="pauseTask(task.id)" :title="t('queue.tooltipPause')">
                     <MaterialIcon name="pause" :size="14" />
                   </button>
                   <span class="font-bold text-primary">{{ Math.round(task.progress || 0) }}%</span>
@@ -80,9 +88,9 @@
             <!-- Paused -->
             <template v-else-if="task.status === 'paused'">
               <div class="flex items-center justify-between text-[10px] text-on-surface-variant font-mono">
-                <span class="text-amber">已暂停</span>
+                <span class="text-amber">{{ t('queue.statusPaused') }}</span>
                 <div class="flex items-center gap-2">
-                  <button class="text-on-surface-variant hover:text-primary transition-colors" @click="resumeTask(task)" title="继续下载">
+                  <button class="text-on-surface-variant hover:text-primary transition-colors" @click="resumeTask(task)" :title="t('queue.tooltipResume')">
                     <MaterialIcon name="play_arrow" :size="14" />
                   </button>
                   <span class="font-bold text-amber">{{ Math.round(task.progress || 0) }}%</span>
@@ -96,7 +104,7 @@
             <!-- Pending -->
             <div v-else-if="task.status === 'pending'" class="flex items-center gap-1.5 text-[10px] text-on-surface-variant mt-1.5">
               <MaterialIcon name="pending" :size="12" />
-              <span>等待下载...</span>
+              <span>{{ t('queue.statusPending') }}</span>
             </div>
 
             <!-- Completed -->
@@ -108,9 +116,21 @@
             </div>
 
             <!-- Error -->
-            <div v-else-if="task.status === 'error'" class="flex items-center gap-1.5 text-[10px] text-error mt-1.5">
-              <MaterialIcon name="error" :size="12" />
-              <span class="truncate">{{ task.error || '下载失败' }}</span>
+            <div v-else-if="task.status === 'error'" class="flex items-center justify-between gap-2 mt-1.5">
+              <div class="flex items-center gap-1.5 text-[10px] text-error min-w-0">
+                <MaterialIcon name="error" :size="12" class="shrink-0" />
+                <span class="truncate">{{ task.error || t('queue.errorFallback') }}</span>
+              </div>
+              <!-- 失败任务此前只能删掉重下（要重新解析、重选格式）。重试直接复用
+                   已保存的 url / 格式 / 目录，回到队列里重新排队。 -->
+              <button
+                class="flex items-center gap-1 shrink-0 text-[10px] text-error hover:text-on-error hover:bg-error px-1.5 py-0.5 rounded-sm transition-colors"
+                :title="t('queue.tooltipRetry')"
+                @click="retryTask(task.id)"
+              >
+                <MaterialIcon name="refresh" :size="12" />
+                <span>{{ t('common.retry') }}</span>
+              </button>
             </div>
           </div>
         </div>
@@ -121,7 +141,7 @@
     <div class="mt-auto pt-4 border-t border-outline-variant/10 flex items-center justify-between text-[11px] text-on-surface-variant">
       <div class="flex items-center gap-2">
         <MaterialIcon name="storage" :size="14" />
-        <span>存储空间: {{ diskSpaceDisplay }}</span>
+        <span>{{ t('queue.storage') }}: {{ diskSpaceDisplay }}</span>
       </div>
       <div class="flex items-center gap-2">
         <span class="font-mono" :title="store.downloadDir">{{ abbreviatePath(store.downloadDir) }}</span>
@@ -138,6 +158,7 @@ import { computed, ref, watch } from 'vue'
 import MaterialIcon from './icons/MaterialIcon.vue'
 import { useDownloadStore } from '../stores/download'
 import { useErrorModal } from '../composables/useErrorModal'
+import { t } from '../i18n'
 import { abbreviatePath, ensureHomeDir } from '../composables/usePathDisplay'
 import { updateSettings } from '../stores/settings'
 import type { DownloadTask } from '../types'
@@ -149,7 +170,8 @@ const { showError } = useErrorModal()
 void ensureHomeDir()
 
 const activeTaskCount = computed(() => store.activeTaskCount)
-const diskSpaceDisplay = ref('加载中...')
+const queuedTaskCount = computed(() => store.queuedTaskCount)
+const diskSpaceDisplay = ref(t('common.loading'))
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B'
@@ -164,10 +186,10 @@ async function loadDiskSpace() {
     if (result && result.total > 0) {
       diskSpaceDisplay.value = `${formatBytes(result.free)} / ${formatBytes(result.total)}`
     } else {
-      diskSpaceDisplay.value = '未知'
+      diskSpaceDisplay.value = t('common.unknown')
     }
   } catch {
-    diskSpaceDisplay.value = '未知'
+    diskSpaceDisplay.value = t('common.unknown')
   }
 }
 
@@ -180,7 +202,7 @@ function formatDuration(seconds?: number): string {
 
 async function openFileLocation(task: DownloadTask) {
   if (!task.filePath) {
-    showError('这个任务还没有生成文件，无法定位')
+    showError(t('queue.noFileToLocate'))
     return
   }
   // 用 showItemInFolder 而不是 openPath：后者会用系统默认程序"打开文件"
@@ -188,7 +210,7 @@ async function openFileLocation(task: DownloadTask) {
   const result = await window.electronAPI.shell.showItemInFolder(task.filePath)
   if (!result?.success) {
     // 文件可能已被移动或删除——这是最容易被误判成"点了没反应"的情况
-    showError(result?.error || '无法打开所在文件夹，文件可能已被移动或删除')
+    showError(result?.error || t('queue.openFolderFailed'))
   }
 }
 
@@ -214,6 +236,10 @@ function pauseTask(id: string) {
 
 function resumeTask(task: DownloadTask) {
   store.resumeTask(task)
+}
+
+function retryTask(id: string) {
+  store.retryTask(id)
 }
 
 // 下载目录在父组件挂载后才异步确定，且可被用户切换；任务完成后可用空间也会变化

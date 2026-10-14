@@ -161,7 +161,8 @@ Go 边车由同文件的 `goBackend()` 插件构建。`vitest.config.ts` 与 `vi
 
 字段：`downloadDir`、`filenameTemplate`、`preferredQuality`、`cookieMode`、`cookiesFile`、
 `proxy`、`depPaths`（运行依赖的手动路径）、`acceleration`（开关、并发上限、可选 aria2c 路径）、
-`autoCheckUpdate`（启动时自动检查更新，默认开）、`autoDownloadUpdate`（发现新版本自动下载，默认关）。
+`autoCheckUpdate`（启动时自动检查更新，默认开）、`autoDownloadUpdate`（发现新版本自动下载，默认关）、
+`language`（界面语言：`'auto'` 跟随系统 / `'zh-CN'` / `'en-US'`，默认 `'auto'`）。
 
 **唯一入口是 `src/stores/settings.ts` 的 `readSettings()` / `updateSettings()`**：
 
@@ -326,6 +327,22 @@ aria2 临时片段隔离在输出目录 `.downvid-aria2` 中，同一暂停任�
 `electron/store.ts` 的 `activeDownloads` 移除。恢复 = 重新 spawn，从 `.part` 续传。
 **无跨重启恢复。**
 
+### 任务级并发闸门（`src/stores/download-rules.ts`）
+
+**同时最多 3 个任务在跑**（`MAX_CONCURRENT_DOWNLOADS`），其余留在 `pending` 排队。
+`pumpQueue()` 是唯一执行点：`startDownload` / `resumeTask` / `retryTask` 都汇到它，
+由纯函数 `selectStartableTasks()` 决定谁可以开始，任务结束让出槽位后自动补位。
+
+- **不要绕过 `pumpQueue()` 直接调 `processDownload()`**：那是启动单个任务的底层入口，
+  绕过就突破了并发上限。`isDownloading` 拦不住连点——它在 `startDownload` 的同步流程里
+  就被置回 `false`。
+- 没有这道闸时，连点几次「下载」会同时跑起多个任务，每个再开 8～16 路分块，
+  **互相抢带宽**（表现为「每一个都变慢」，很难归因），也更容易触发站点 429。
+- `merging` 同样占槽位（ffmpeg 在抢 CPU 与磁盘）；`paused` / `error` / `completed` 不占。
+- 调度按 `createdAt` 升序（先进先出），否则用户会觉得队列坏了。
+- 失败任务可**重试**（`retryTask`，重置规则在 `retryReset()`）：必须回到 `pending`
+  才会被重新调度，停在 `error` 上会让「重试」看起来毫无反应。
+
 ### yt-dlp 环境细节
 
 - `--ffmpeg-location` 传**目录**而非文件：yt-dlp 会在该目录里同时找 ffmpeg 与 ffprobe，
@@ -373,6 +390,15 @@ aria2 临时片段隔离在输出目录 `.downvid-aria2` 中，同一暂停任�
 
 ## 界面约定
 
+- **所有界面文案走 `t('key')`**（`src/i18n/`），不要写中文字面量。
+  `pnpm lint:i18n` 会扫 `src/` 并拦住硬编码中文。三个容易踩的点：
+  - `t()` 读的是一个响应式 `ref`，**不能在模块顶层调用**（那样切换语言不会更新）。
+    需要常量时用 `computed(() => t('...'))`，列表项用 `get label()`。
+  - 新增词条必须**同时**补 `zh-CN` 与 `en-US`，且占位符集合一致（`lint:i18n` 双向校验）。
+  - 主进程（`electron/`）的报错文案是硬编码中文、拿不到渲染进程的语言设置，
+    由 `src/i18n/main-messages.ts` 按「原文 → 词条」映射兜底翻译；认不出的原样透传。
+  - 例外的**协议标记**不要翻译（翻译了匹配就失效）：`未找到可用的`（`readMissingKinds`
+    的匹配串）、`需要登录`（`friendlyDownloadError` 的关键词）、`\n\n提示：`、`更新内容`。
 - **Tailwind v4**（CSS-first，**没有** `tailwind.config.js`）：Material-3 风格语义色 token
   （`bg-surface`、`text-on-surface-variant`、`surface-container-high` 等）定义在
   `src/style.css` 的 `@theme` 中。**用语义 token，不要写 raw hex。**
@@ -403,6 +429,25 @@ Linux x64 有独立格式脚本可并行：`build:linux:x64:appimage`、`:deb`�
    按**最终产物**重新生成全部 `latest*.yml`（各 job 自己生成的那份会互相覆盖，不能用）
 3. Release 正文由 `scripts/gen-release-notes.mjs` 生成：顶部是「点徽章即下载」的引导区，
    下载链接**按实际产物扫描生成**，不会出现死链。改模板后记得用假产物本地跑一遍
+
+### 发布必须核对「tag ↔ Release」对得上
+
+**tag 推上去不等于发布成功。** 实测发生过：`v1.3.5` 的 tag 已推送、CHANGELOG 也写了，
+但 `Build & Release` 运行在 3 分钟后**被取消**，于是没有对应的 GitHub Release，
+自动更新通道（`/releases/latest`）仍指向 v1.3.4 —— 该版本的修复**到不了任何用户手里**。
+这种失败没有任何提示：tag 在、CHANGELOG 在、`package.json` 也在，
+只有 Release 页面少了一条，而那是最不容易被注意到的位置。
+
+- `pnpm verify:release`（`scripts/verify-release.mjs`）：核对某个 tag 是否真有 Release、
+  是否带着全部平台的 `latest*.yml`。`release.yml` 末尾会自检一次。
+- `.github/workflows/release-audit.yml`：**独立于发布流程**的每日审计，
+  只看结果（最新 tag ↔ Release 是否对得上），不一致就开一条带 `release-audit` 标签的 Issue。
+- 本地开发时版本号与已发布版本一致是正常的；**不要为了让 `verify:release` 通过而提前升版本**。
+
+### 未发布的改动记在 `[Unreleased]`
+
+没有发布计划时，`package.json` 的版本号**保持在最近一次已发布的版本**，
+CHANGELOG 用 `## [Unreleased]` 段落累积改动。发布时再一次性改成 `## [x.y.z] - 日期` 并升版本号。
 
 ---
 

@@ -48,3 +48,97 @@ export function safeIssueReport(message: string, detail: string): { title: strin
   const kind = classifyParseError(`${detail}\n${message}`)
   return { title: `[Bug] ${PARSE_MESSAGES[kind]}`, body: `## 问题描述\n\n${PARSE_MESSAGES[kind]}\n\n## 脱敏诊断\n\n${parseDiagnostic(`${detail}\n${message}`)}\n\n## 复现步骤\n\n请补充不含个人信息的复现步骤。` }
 }
+
+/**
+ * 哪些错误**不应该**提供「提交 Issue」入口。
+ *
+ * ## 为什么要有这个名单
+ *
+ * 有些错误的处置办法**已经在应用里**（配置 Cookie、更新 yt-dlp、换个链接），
+ * 它们不是代码缺陷，提 Issue 提不出任何可行动的信息。但界面对所有 `type === 'error'`
+ * 都渲染「提交 Issue」按钮，而应用又会**自动生成**一个只有错误类别、没有任何用户
+ * 输入的正文并预填到新建页面。结果是：用户一路回车 → 仓库多一条
+ * 「该视频需要登录或访问权限，请检查 Cookies 设置」的空 Issue。
+ *
+ * 实测这类空报告会**重复出现**（同一个文案连开两条），维护者只能挨个关掉，
+ * 真正有价值的报告（带 URL、带原始报错）反而被淹没。
+ *
+ * ## 名单内容
+ *
+ * 只放「用户自己能解决 / 不是缺陷」的类别：
+ *   - authentication     → 配置 Cookie 即可
+ *   - access-denied      → 403，多半是限流或需要登录
+ *   - rate-limit         → 等几分钟
+ *   - invalid-url        → 链接本身就是错的（含把站点当"不支持"的误判，见 #52）
+ *   - unsupported-url    → 站点不受支持，是已知边界
+ *   - runtime-unavailable→ 装个 Node/Deno 即可
+ *   - not-found          → 视频已被删除
+ *
+ * **不要**把 format-unavailable / page-reload / challenge-failed / network / unknown
+ * 放进来——这些往往对应真实的解析回归（历史上 #50 就是 page-reload），
+ * 挡住了反而让维护者失去线索。
+ */
+export const NO_ISSUE_KINDS: readonly ParseErrorKind[] = [
+  'authentication',
+  'access-denied',
+  'rate-limit',
+  'invalid-url',
+  'unsupported-url',
+  'runtime-unavailable',
+  'not-found',
+]
+
+/**
+ * 这条错误是否值得开 Issue。
+ *
+ * `kind` 为 undefined 时（非解析类错误）保守地返回 true：那类错误（下载失败、
+ * 代理不可用……）没有"用户自己就能解决"的统一特征，宁可让用户能提。
+ */
+export function shouldOfferIssue(kind?: ParseErrorKind): boolean {
+  if (!kind) return true
+  return !NO_ISSUE_KINDS.includes(kind)
+}
+
+/**
+ * 报告正文里**必须由用户填写**的部分是否为空。
+ *
+ * 应用预填的正文只有「问题描述（= 错误类别文案）+ 脱敏诊断 + 复现步骤占位」，
+ * 用户什么都没加时，正文与这个模板完全一致。CI 的 issue 门禁用同一个函数判断
+ * 「这条报告是不是空报告」——**界面与 CI 共用一份实现**，避免两边标准漂移。
+ */
+export const ISSUE_PLACEHOLDER_STEPS = '请补充不含个人信息的复现步骤。'
+
+/**
+ * 判断一条 Issue 正文是否只是模板、没有任何用户补充。
+ *
+ * 判据：剥掉**应用自动生成**的固定片段后，剩下的"用户内容"过短。
+ *
+ * 关键点：`错误详情` 的代码块**不能**剥掉——那里面是真实的原始报错
+ * （`Unsupported URL: https://…`、`Sign in to confirm…`），是这条 Issue
+ * 唯一的线索。剥掉它会把 #50 / #52 / #57 这类**有价值的报告**误判成空报告。
+ * 而 #58 / #59 那类「一路回车」的报告没有任何代码块，剥完就什么都不剩。
+ */
+export function isTemplateOnlyReport(body: string): boolean {
+  let text = body || ''
+  // 应用生成的固定章节标题
+  text = text.replace(/^#+\s*(问题描述|脱敏诊断|复现步骤|错误详情|环境信息)\s*$/gm, '')
+  // 应用生成的复现步骤占位
+  text = text.replace(ISSUE_PLACEHOLDER_STEPS, '')
+  // 应用生成的错误类别与版本行
+  text = text.replace(/错误类别：[\w-]+/g, '')
+  text = text.replace(/^(ytdlp|runtime|操作系统|用户代理)：.*$/gm, '')
+  // 应用回显的固定文案（PARSE_MESSAGES 的每一句都是应用自己写的）。
+  // 注意：**裸的类别名**（authentication / rate-limit …）也要算模板内容，
+  // 否则 `错误类别：authentication` 剥掉前缀后剩下的 `authentication`
+  // 会被当成"用户输入"而放行。
+  for (const message of Object.values(PARSE_MESSAGES)) {
+    text = text.split(message).join('')
+  }
+  for (const key of Object.keys(PARSE_MESSAGES)) {
+    text = text.split(key).join('')
+  }
+  // 代码块里的原始报错**保留**——那是用户报告的实质内容
+  const stripped = text.replace(/[\s`*\-:|]/g, '')
+  return stripped.length < 24
+}
+

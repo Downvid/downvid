@@ -47,7 +47,7 @@
                 <span class="material-symbols-outlined text-sm transition-transform" :class="showDetail ? 'rotate-90' : ''">
                   chevron_right
                 </span>
-                {{ showDetail ? '收起错误详情' : '查看错误详情' }}
+                {{ showDetail ? t('error.hideDetail') : t('error.showDetail') }}
               </button>
               <Transition name="detail">
                 <div v-if="showDetail" class="mt-2 relative group">
@@ -57,7 +57,7 @@
                     @click="copyDetail"
                   >
                     <span class="material-symbols-outlined text-xs">content_copy</span>
-                    {{ copied ? '已复制' : '复制' }}
+                    {{ copied ? t('common.copied') : t('common.copy') }}
                   </button>
                 </div>
               </Transition>
@@ -72,24 +72,27 @@
               @click="copyDetail"
             >
               <span class="material-symbols-outlined text-sm">content_copy</span>
-              复制错误信息
+              {{ t('error.copyDetail') }}
             </button>
             <div v-else />
             <div class="flex items-center gap-2">
+              <!-- 只有「可能是代码缺陷」的错误才给 Issue 入口：
+                   用户自己就能解决的（配 Cookie / 换链接 / 等限流）不给，
+                   否则会生成一堆只有模板、没有信息的空 Issue（见 #58 #59）。 -->
               <button
-                v-if="type === 'error'"
+                v-if="type === 'error' && offerIssue"
                 class="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-primary hover:bg-primary-container/20 transition-colors"
                 @click="openIssue"
               >
                 <span class="material-symbols-outlined text-sm">bug_report</span>
-                提交 Issue
+                {{ t('error.submitIssue') }}
               </button>
               <button
                 class="px-4 py-1.5 rounded-md text-xs font-bold transition-colors"
                 :class="type === 'error' ? 'bg-primary text-on-primary hover:bg-primary/90' : 'bg-surface-container-highest text-on-surface hover:bg-surface-variant'"
                 @click="close"
               >
-                知道了
+                {{ t('error.acknowledge') }}
               </button>
             </div>
           </div>
@@ -102,7 +105,8 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { newIssueUrl } from '../../shared/app'
-import { safeIssueReport } from '../../shared/parse-error'
+import { safeIssueReport, shouldOfferIssue, classifyParseError, type ParseErrorKind } from '../../shared/parse-error'
+import { t } from '../i18n'
 
 const props = defineProps<{
   visible: boolean
@@ -111,6 +115,8 @@ const props = defineProps<{
   message: string
   detail?: string
   hint?: string
+  /** 解析错误类别；用于决定是否提供「提交 Issue」入口 */
+  kind?: ParseErrorKind
 }>()
 
 const emit = defineEmits<{
@@ -122,10 +128,22 @@ const copied = ref(false)
 
 const type = computed(() => props.type || 'error')
 const title = computed(() => props.title || {
-  error: '出错了',
-  warning: '注意',
-  info: '提示',
+  error: t('error.title'),
+  warning: t('error.warning'),
+  info: t('error.info'),
 }[type.value])
+
+/**
+ * 是否提供「提交 Issue」入口。
+ *
+ * 优先用调用方传进来的 `kind`（解析错误有明确类别）；
+ * 没有 kind 时用 `message + detail` 现场分类——非解析类错误也可能携带
+ * 能被识别的特征串（例如主进程透传的原始报错）。
+ */
+const offerIssue = computed(() => {
+  const kind = props.kind ?? classifyParseError(`${props.detail || ''}\n${props.message}`)
+  return shouldOfferIssue(kind)
+})
 
 const issueUrl = computed(() => {
   const report = safeIssueReport(props.message, props.detail || '')

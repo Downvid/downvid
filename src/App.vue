@@ -18,6 +18,7 @@
       :message="modalState.message"
       :detail="modalState.detail"
       :hint="modalState.hint"
+      :kind="modalState.kind"
       @update:visible="modal.close()"
     />
 

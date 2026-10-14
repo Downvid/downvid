@@ -150,7 +150,8 @@ A broadcast event must **not** double as an `ipcMain.handle` channel (`lint:ipc`
 Settings live in `localStorage['settings']` (**not** Pinia). Fields: `downloadDir`,
 `filenameTemplate`, `preferredQuality`, `cookieMode`, `cookiesFile`, `proxy`, `depPaths`,
 `acceleration` (enabled/concurrency/optional aria2c path), `autoCheckUpdate` (default on),
-`autoDownloadUpdate` (default off).
+`autoDownloadUpdate` (default off), `language` (UI language: `'auto'` follows the system,
+`'zh-CN'` or `'en-US'`; default `'auto'`).
 
 **The only entry points are `readSettings()` / `updateSettings()` in `src/stores/settings.ts`:**
 
@@ -306,6 +307,25 @@ Pause = `child.kill()` (plus `taskkill /T /F` on Windows), task dropped from the
 `electron/store.ts` `activeDownloads`.
 Resume re-spawns and continues from the `.part` file. **No cross-restart resume.**
 
+### Task-level concurrency gate (`src/stores/download-rules.ts`)
+
+**At most 3 tasks run at once** (`MAX_CONCURRENT_DOWNLOADS`); the rest stay `pending` in the queue.
+`pumpQueue()` is the single enforcement point: `startDownload` / `resumeTask` / `retryTask` all funnel
+through it, the pure `selectStartableTasks()` decides who starts, and a finishing task frees its slot
+and refills the queue.
+
+- **Never call `processDownload()` directly** — that's the low-level "start this one task" entry, and
+  bypassing it breaks the limit. `isDownloading` cannot stop rapid clicking: it's reset to `false`
+  synchronously inside `startDownload`.
+- Without this gate, clicking "Download" a few times starts several tasks at once, each opening 8–16
+  block requests that **compete for bandwidth** (every task gets slower — hard to attribute), and
+  site 429s get likelier.
+- `merging` occupies a slot too (ffmpeg competes for CPU and disk); `paused` / `error` / `completed`
+  do not.
+- Scheduling is by ascending `createdAt` (FIFO), otherwise the queue looks broken.
+- Failed tasks can be **retried** (`retryTask`, reset rules in `retryReset()`): it must return to
+  `pending` to be rescheduled — staying on `error` makes "Retry" look like it does nothing.
+
 ### yt-dlp environment quirks
 
 - `--ffmpeg-location` takes a **directory**, not a file: yt-dlp looks for both ffmpeg and ffprobe
@@ -351,6 +371,17 @@ Resume re-spawns and continues from the `.part` file. **No cross-restart resume.
 
 ### UI conventions
 
+- **All UI strings go through `t('key')`** (`src/i18n/`); never write a literal. `pnpm lint:i18n`
+  scans `src/` and rejects hardcoded Chinese. Three easy traps:
+  - `t()` reads a reactive `ref`, so **never call it at module top level** — language switches would
+    not re-render. Use `computed(() => t('...'))`, or `get label()` for list items.
+  - A new key must be added to **both** `zh-CN` and `en-US` with the same placeholder set
+    (`lint:i18n` checks both directions).
+  - Main-process (`electron/`) error strings are hardcoded Chinese and cannot see the renderer's
+    locale; `src/i18n/main-messages.ts` maps known originals to keys and passes unknown text through.
+  - **Protocol markers must not be translated** (translation breaks the match): `未找到可用的`
+    (matched by `readMissingKinds`), `需要登录` (`friendlyDownloadError` keyword), `\n\n提示：`,
+    `更新内容`.
 - **Tailwind v4**, CSS-first — no `tailwind.config.js`. Material-3 semantic tokens
   (`bg-surface`, `text-on-surface-variant`, `surface-container-high`, …) are defined in `src/style.css`
   `@theme`. **Use tokens, not raw hex.**
@@ -378,6 +409,27 @@ links are built from **scanned artifacts** so they can't 404. Re-test it against
 editing the template.
 
 Artifact names are what old clients' updater manifests point at — don't rename them.
+
+### A pushed tag is not a published release
+
+**Verify the tag ↔ Release pair.** This really happened: the `v1.3.5` tag was pushed and the
+CHANGELOG updated, but the `Build & Release` run was **cancelled after 3 minutes**, so there was no
+GitHub Release for it and the updater channel (`/releases/latest`) still pointed at v1.3.4 — the fixes
+in that version **could never reach any user**. Nothing signals this: the tag exists, the CHANGELOG
+entry exists, `package.json` is bumped; only the Releases page is one entry short, which is the least
+noticeable place of all.
+
+- `pnpm verify:release` (`scripts/verify-release.mjs`) checks a tag really has a Release with the
+  `latest*.yml` manifests for every platform. `release.yml` runs it once at the end.
+- `.github/workflows/release-audit.yml` is a **daily audit independent of the release flow**: it only
+  looks at the outcome (newest tag ↔ Release) and opens a `release-audit`-labelled issue on mismatch.
+- During local development it is normal for the version to equal the published one; **don't bump the
+  version early just to make `verify:release` pass.**
+
+### Unreleased work goes in `[Unreleased]`
+
+With no release planned, keep `package.json` at the **latest published version** and accumulate changes
+under `## [Unreleased]`. When releasing, rewrite it to `## [x.y.z] - <date>` and bump the version.
 
 ---
 

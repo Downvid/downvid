@@ -1,0 +1,123 @@
+name: Triage
+
+# 新 Issue 自动分类与关闭。
+#
+# 背景：应用内的「提交 Issue」会**预填**一条只有错误类别、没有用户输入的正文，
+# 用户一路回车就能开出
+#   [Bug] 该视频需要登录或访问权限，请检查 Cookies 设置
+# 这种 Issue —— 里面没有任何可行动的信息（实测同一文案连开两条 #58 #59）。
+# 项目越火这类报告越多，真正的报告会被淹没。
+#
+# 分类逻辑在 `scripts/lib/issue-triage.ts`，**界面、CI 校验、本工作流共用同一份实现**
+# （本文件用 ts.transpileModule 加载它，不复制逻辑），
+# 回归用例见 `scripts/test-issue-triage.mjs`（用仓库里真实出现过的 Issue 正文）。
+#
+# 原则：**拿不准就不关**。错关一条真实报告比留一条噪音更糟。
+
+on:
+  issues:
+    # 注意：**不订阅 `labeled`**。
+    #
+    # 本工作流自己会给关闭的 Issue 打 `self-service` / `needs-info` 标签。
+    # 如果订阅了 `labeled`，那一动作会立刻再次触发自己 —— 每次都是多余的
+    # 一次运行（虽然分类结果不变，不会来回抖动，但纯属浪费）。
+    # 打标签是「我们自己造成的」变更，不该被当成新输入。
+    #
+    # 也不订阅 `closed`：已经关闭的 Issue 没有再次处理的必要
+    # （下面的 if 也会挡掉，但不在触发条件里更干净）。
+    types: [opened, edited, reopened]
+  # 手动触发：对**历史积压**的 Issue 做一次批量分类。
+  #
+  # 实时触发只覆盖「新建/编辑/重开」，躺在仓库里的老 Issue 永远不会被处理——
+  # 实测 4 条 open Issue 一个标签都没有。手动跑一次 sweep 就能全部补上，
+  # 之后新来的由实时触发接管。
+  workflow_dispatch:
+    inputs:
+      sweep:
+        description: '批量分类所有 open Issue（打标签 / 关闭空报告）'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: triage-${{ github.event.issue.number || 'sweep' }}
+  cancel-in-progress: false
+
+jobs:
+  # ===== 历史积压的批量分类（仅手动触发时）=====
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - run: pnpm install --frozen-lockfile
+
+      # 脚本默认 dry-run；这里显式 --apply。分类规则与实时 triage 共用
+      # scripts/lib/issue-triage.ts，不会出现两套口径。
+      - name: 批量分类 open Issue
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/triage-sweep.mjs --apply
+
+  triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # 已关闭的就不用再看了（reopened 时状态是 open）
+    if: github.event.issue.state == 'open'
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      # 需要 typescript 来加载 .ts 分类逻辑，与仓库其它校验脚本同一条路径
+      - run: pnpm install --frozen-lockfile
+
+      - name: 分类 Issue
+        id: triage
+        run: |
+          # 用仓库自己的加载器读分类逻辑，而不是把逻辑复制到 YAML 里。
+          # 正文走文件传递，避免把用户输入拼进 shell（注入 + 引号地狱）。
+          printf '%s' "$ISSUE_BODY" > /tmp/issue-body.txt
+          node scripts/triage-issue.mjs --body-file /tmp/issue-body.txt
+        env:
+          ISSUE_BODY: ${{ github.event.issue.body }}
+
+      - name: 关闭并说明原因
+        if: steps.triage.outputs.close == 'true'
+        uses: actions/github-script@v8
+        env:
+          TRIAGE_COMMENT: ${{ steps.triage.outputs.comment }}
+          TRIAGE_REASON: ${{ steps.triage.outputs.reason }}
+        with:
+          script: |
+            const issue_number = context.payload.issue.number
+            const body = process.env.TRIAGE_COMMENT
+            if (body) {
+              await github.rest.issues.createComment({ ...context.repo, issue_number, body })
+            }
+            await github.rest.issues.update({
+              ...context.repo,
+              issue_number,
+              state: 'closed',
+              state_reason: 'not_planned',
+            })
+            // 打标签方便事后统计「有多少报告其实是自助类 / 缺信息」
+            const label = process.env.TRIAGE_REASON === 'template-only'
+              ? 'needs-info'
+              : 'self-service'
+            try {
+              await github.rest.issues.addLabels({ ...context.repo, issue_number, labels: [label] })
+            } catch (e) {
+              core.warning(`加标签 ${label} 失败（标签可能尚未创建）：${e.message}`)
+            }

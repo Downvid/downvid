@@ -2,8 +2,15 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import type { VideoInfo, VideoFormat, DownloadTask, AudioFormat, AudioTrack } from '../types'
 import { useDepsStore, readMissingKinds, stripDepMarkers } from './deps'
-import { shouldIgnoreProgress, statusAfterResult, shouldRecordHistory } from './download-rules'
+import {
+  shouldIgnoreProgress,
+  statusAfterResult,
+  shouldRecordHistory,
+  selectStartableTasks,
+  retryReset,
+} from './download-rules'
 import { readSettings } from './settings'
+import { t } from '../i18n'
 
 /**
  * 把任意值转成"可被 structured clone"的普通数据。
@@ -39,20 +46,20 @@ export function friendlyDownloadError(raw: string): string {
   if (has('403', 'Forbidden')) {
     // yt-dlp 明确提示需要登录时，把方向指到 Cookie 上
     if (has('sign in', 'login', 'cookies')) {
-      return '站点拒绝下载（403）：该视频需要登录，请在「设置 → Cookies」配置后重试'
+      return t('err.forbiddenLogin')
     }
-    return '站点拒绝下载（403）：可能是访问过于频繁或需要登录。稍后重试，或在「设置 → Cookies」配置 Cookie'
+    return t('err.forbidden')
   }
-  if (has('429', 'Too Many Requests')) return '请求过于频繁（429）：请等待几分钟后重试'
-  if (has('disk', 'space')) return '磁盘空间不足'
-  if (has('permission', 'access denied', 'EACCES', 'EPERM')) return '没有写入权限，请检查下载目录'
-  if (has('ECONNRESET', 'ETIMEDOUT', 'socket hang up', 'timed out')) return '网络连接中断，请重试'
+  if (has('429', 'Too Many Requests')) return t('err.rateLimited')
+  if (has('disk', 'space')) return t('err.diskFull')
+  if (has('permission', 'access denied', 'EACCES', 'EPERM')) return t('err.permission')
+  if (has('ECONNRESET', 'ETIMEDOUT', 'socket hang up', 'timed out')) return t('err.network')
   if (has('Unable to download webpage', 'Name or service not known', 'getaddrinfo')) {
-    return '无法访问该站点：请检查网络连接，或在「设置 → 代理」中配置代理'
+    return t('err.unreachable')
   }
-  if (has('ffmpeg', 'FFmpeg')) return 'FFmpeg 合并失败：请检查「设置 → 运行依赖」中的 ffmpeg'
-  if (has('private video', 'members-only', '需要登录')) return '该视频需要登录才能访问'
-  if (has('video unavailable', 'not available in your country')) return '视频不可用（可能已删除或限制地区）'
+  if (has('ffmpeg', 'FFmpeg')) return t('err.ffmpeg')
+  if (has('private video', 'members-only', '需要登录')) return t('err.privateVideo')
+  if (has('video unavailable', 'not available in your country')) return t('err.videoUnavailable')
   return text
 }
 
@@ -120,6 +127,11 @@ export const useDownloadStore = defineStore('download', () => {
     downloadTasks.value.filter(t =>
       t.status === 'downloading' || t.status === 'pending' || t.status === 'merging' || t.status === 'paused'
     ).length
+  )
+
+  /** 排队等待中的任务数（用于在界面上区分「等待下载」与「正在下载」） */
+  const queuedTaskCount = computed(() =>
+    downloadTasks.value.filter(t => t.status === 'pending').length
   )
 
   // Actions
@@ -199,16 +211,57 @@ export const useDownloadStore = defineStore('download', () => {
     // 下载中却什么都没发生，既不再推进也无法再次继续。
     pausedTasks.delete(task.id)
     downloadTasks.value[idx].status = 'pending'
-    processDownload(downloadTasks.value[idx])
+    // 经队列闸门而不是直接启动：用户可能同时点「继续」多个任务，
+    // 直接启动会突破并发上限。
+    pumpQueue()
   }
 
+  /**
+   * 重试一个失败的任务。
+   *
+   * 失败的任务此前只能删掉重下——用户得重新解析、重选格式。重试直接复用
+   * 已保存的 url / 格式 / 目录，回到 `pending` 交给队列调度。
+   */
+  function retryTask(taskId: string) {
+    const idx = downloadTasks.value.findIndex(t => t.id === taskId)
+    if (idx === -1 || downloadTasks.value[idx].status !== 'error') return
+    Object.assign(downloadTasks.value[idx], retryReset())
+    pumpQueue()
+  }
+
+  /**
+   * 启动一个任务（不经过队列闸门）。
+   *
+   * 调用方必须先确认该任务拿到了下载槽位——要么来自 `pumpQueue`，
+   * 要么是用户明确「继续」的暂停任务。直接调用会绕过并发上限。
+   */
   function processDownload(task: DownloadTask) {
     if (taskExecutions.has(task.id)) return
     const execution = executeDownload(task)
     taskExecutions.set(task.id, execution)
     void execution.finally(() => {
       if (taskExecutions.get(task.id) === execution) taskExecutions.delete(task.id)
+      // 一个任务让出槽位后立刻补位，否则队列会停在「明明有空闲却没人下载」。
+      pumpQueue()
     })
+  }
+
+  /**
+   * 把队列里排在前面的任务补进空闲的下载槽位。
+   *
+   * 这是**并发上限的唯一执行点**：所有「开始下载」的入口最终都汇到这里，
+   * 由 `selectStartableTasks` 决定谁可以跑。之所以要集中：此前
+   * `startDownload()` 每个任务都直接 `processDownload`，用户连点几次就会
+   * 同时跑起来，各自再开 8～16 路分块，互相抢带宽。
+   *
+   * 重入是安全的：`processDownload` 有 `taskExecutions` 守卫，
+   * 同一个任务不会被启动两次。
+   */
+  function pumpQueue() {
+    for (const id of selectStartableTasks(downloadTasks.value)) {
+      const task = downloadTasks.value.find(t => t.id === id)
+      if (task) processDownload(task)
+    }
   }
 
   async function executeDownload(task: DownloadTask) {
@@ -233,7 +286,7 @@ export const useDownloadStore = defineStore('download', () => {
         if (idx !== -1) {
           if (data.status === 'merging') {
             downloadTasks.value[idx].status = 'merging'
-            downloadTasks.value[idx].statusMessage = data.message || '正在合并音视频...'
+            downloadTasks.value[idx].statusMessage = data.message || t('queue.statusMerging')
             downloadTasks.value[idx].progress = 99
           } else if (data.status === 'completed') {
             downloadTasks.value[idx].status = 'completed'
@@ -330,7 +383,7 @@ export const useDownloadStore = defineStore('download', () => {
       }
     } catch (e: any) {
       // 主进程可能附带 Cookie 读取失败的解决建议：分类只看错误本身，建议保留展示
-      const [rawError, hint] = (e.message || '下载失败').split('\n\n提示：')
+      const [rawError, hint] = (e.message || t('queue.errorFallback')).split('\n\n提示：')
       // 解析/下载因缺少 yt-dlp、ffmpeg 失败时，弹出「一键下载」引导
       if (rawError.includes('[deps-missing:') || /未找到可用的 (yt-dlp|ffmpeg|ffprobe)/.test(rawError)) {
         useDepsStore().promptForMissing(readMissingKinds(rawError))
@@ -383,7 +436,7 @@ export const useDownloadStore = defineStore('download', () => {
         id: taskId,
         url: url.value,
         videoInfo: videoInfo.value,
-        selectedFormat: { formatId: 'subtitle', quality: '字幕', ext: 'srt', filesize: 0 },
+        selectedFormat: { formatId: 'subtitle', quality: t('download.downloadSubtitle'), ext: 'srt', filesize: 0 },
         outputDir: downloadDir.value,
         status: 'pending',
         progress: 0,
@@ -393,7 +446,9 @@ export const useDownloadStore = defineStore('download', () => {
       ;(task as any).acceleration = { ...readSettings().acceleration }
       ;(task as any).selectedSubtitles = [...selectedSubtitles.value]
       downloadTasks.value.unshift(task)
-      processDownload(task)
+      // 经队列闸门启动，而不是直接 processDownload：用户连点「下载」时
+      // 其余任务会留在 pending 排队，而不是一起开跑互相抢带宽。
+      pumpQueue()
       isDownloading.value = false
       return
     }
@@ -415,7 +470,7 @@ export const useDownloadStore = defineStore('download', () => {
     ;(task as any).selectedAudioTrack = selectedAudioTrack.value ? { ...selectedAudioTrack.value } : null
     ;(task as any).selectedSubtitles = []
     downloadTasks.value.unshift(task)
-    processDownload(task)
+    pumpQueue()
     isDownloading.value = false
   }
 
@@ -424,9 +479,9 @@ export const useDownloadStore = defineStore('download', () => {
     videoInfo, selectedFormat, selectedAudioFormat, selectedAudioTrack,
     selectedSubtitles, downloadMode, isDownloading,
     downloadTasks, downloadDir,
-    isYouTubeUrl, showBilibiliCookieHint, cookieReady, cookieLastGoodBrowser, refreshCookieStatus, activeTaskCount,
+    isYouTubeUrl, showBilibiliCookieHint, cookieReady, cookieLastGoodBrowser, refreshCookieStatus, activeTaskCount, queuedTaskCount,
     selectVideoFormat, selectAudioFormat, selectAudioTrack, selectSubtitle,
-    removeTask, clearCompletedTasks, pauseTask, resumeTask, startDownload,
+    removeTask, clearCompletedTasks, pauseTask, resumeTask, retryTask, startDownload,
     sanitizeFilename,
   }
 })

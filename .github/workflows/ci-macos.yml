@@ -104,6 +104,10 @@ jobs:
       - name: 文档一致性校验（AGENTS.md ↔ CLAUDE.md）
         run: pnpm lint:docs
 
+      # 词条漏英文 / 占位符对不上都不会报错，只会静默显示错文案
+      - name: i18n 词条校验
+        run: pnpm lint:i18n
+
       - name: 纯逻辑单测（Vitest）
         run: pnpm test
 

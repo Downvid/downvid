@@ -1,4 +1,5 @@
 import { ref, readonly } from 'vue'
+import type { ParseErrorKind } from '../../shared/parse-error'
 
 interface ErrorModalState {
   visible: boolean
@@ -8,6 +9,13 @@ interface ErrorModalState {
   detail: string
   /** 可操作的解决建议，醒目展示（不折叠） */
   hint: string
+  /**
+   * 解析错误类别。
+   *
+   * 用于决定是否渲染「提交 Issue」入口：像「需要登录」「链接无效」这类
+   * 用户自己就能解决的错误不给入口，否则会生成只有模板的空 Issue（#58 #59）。
+   */
+  kind?: ParseErrorKind
 }
 
 const state = ref<ErrorModalState>({
@@ -17,6 +25,7 @@ const state = ref<ErrorModalState>({
   message: '',
   detail: '',
   hint: '',
+  kind: undefined,
 })
 
 function showModal(options: {
@@ -25,6 +34,7 @@ function showModal(options: {
   message: string
   detail?: string
   hint?: string
+  kind?: ParseErrorKind
 }) {
   state.value = {
     visible: true,
@@ -33,11 +43,12 @@ function showModal(options: {
     message: options.message,
     detail: options.detail || '',
     hint: options.hint || '',
+    kind: options.kind,
   }
 }
 
-function showError(message: string, detail?: string, hint?: string) {
-  showModal({ type: 'error', message, detail, hint })
+function showError(message: string, detail?: string, hint?: string, kind?: ParseErrorKind) {
+  showModal({ type: 'error', message, detail, hint, kind })
 }
 
 function showWarning(message: string, detail?: string) {
