@@ -324,7 +324,13 @@ async function loadContributors() {
 // 用户得重启应用才能看到新贡献者。
 let unsubscribeContributors: (() => void) | null = null
 
+/** 设置里的「立即检查更新」会广播这个事件，让本页打开更新弹窗 */
+function openUpdateDrawer() {
+  showUpdateDrawer.value = true
+}
+
 onMounted(async () => {
+  window.addEventListener('about-open-update', openUpdateDrawer)
   try {
     const version = await window.electronAPI?.app?.getVersion?.()
     if (version) appVersion.value = version
@@ -344,6 +350,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  window.removeEventListener('about-open-update', openUpdateDrawer)
   unsubscribeContributors?.()
   unsubscribeContributors = null
 })

@@ -172,6 +172,52 @@
                 </div>
               </div>
 
+              <!-- 更新 -->
+              <div v-show="activeSection === 'update'" class="flex flex-col gap-5">
+                <div class="flex flex-col gap-3">
+                  <label class="flex items-start gap-3 p-3 rounded-md cursor-pointer transition-colors hover:bg-surface-container-highest">
+                    <input v-model="settings.autoCheckUpdate" type="checkbox" class="mt-0.5 size-4 accent-primary" />
+                    <div class="flex flex-col gap-0.5">
+                      <span class="text-sm font-medium text-on-surface">启动时自动检查更新</span>
+                      <span class="text-[11px] text-on-surface-variant leading-relaxed">
+                        启动 3 秒后向后请求一次 GitHub Releases。关闭后不再自动检查，
+                        也不会在退出时自动安装；「关于」页的手动「检查更新」仍然可用。
+                      </span>
+                    </div>
+                  </label>
+
+                  <label
+                    class="flex items-start gap-3 p-3 rounded-md transition-colors"
+                    :class="settings.autoCheckUpdate ? 'cursor-pointer hover:bg-surface-container-highest' : 'opacity-50 cursor-not-allowed'"
+                  >
+                    <input
+                      v-model="settings.autoDownloadUpdate"
+                      type="checkbox"
+                      class="mt-0.5 size-4 accent-primary"
+                      :disabled="!settings.autoCheckUpdate"
+                    />
+                    <div class="flex flex-col gap-0.5">
+                      <span class="text-sm font-medium text-on-surface">发现新版本时自动下载</span>
+                      <span class="text-[11px] text-on-surface-variant leading-relaxed">
+                        开启后自动下载安装包（仍需你点「立即安装」）。关闭时只提示有新版本，
+                        下载由你决定 —— 移动网络或计费流量下建议关闭。
+                      </span>
+                    </div>
+                  </label>
+                </div>
+
+                <div class="flex items-center gap-2 pt-1">
+                  <button
+                    class="flex items-center gap-1.5 px-3 py-2 bg-surface-container-highest text-on-surface rounded-md text-sm font-medium hover:bg-surface-variant transition-colors border border-outline-variant/20"
+                    @click="checkNow"
+                  >
+                    <MaterialIcon name="refresh" :size="14" />
+                    立即检查更新
+                  </button>
+                  <span class="text-[11px] text-on-surface-variant">手动检查不受上面的开关限制</span>
+                </div>
+              </div>
+
               <!-- 运行依赖 -->
               <div v-show="activeSection === 'deps'" class="flex flex-col gap-5">
                 <DepPanel />
@@ -218,6 +264,7 @@ const sections = [
   { key: 'cookies', icon: 'cookie', label: 'Cookies' },
   { key: 'proxy', icon: 'language', label: '代理' },
   { key: 'deps', icon: 'extension', label: '运行依赖' },
+  { key: 'update', icon: 'system_update', label: '更新' },
 ]
 
 interface Settings {
@@ -227,6 +274,8 @@ interface Settings {
   cookieMode: 'auto' | 'manual'
   cookiesFile: string
   proxy: string
+  autoCheckUpdate: boolean
+  autoDownloadUpdate: boolean
 }
 
 const settings = ref<Settings>({
@@ -236,6 +285,8 @@ const settings = ref<Settings>({
   cookieMode: 'auto',
   cookiesFile: '',
   proxy: '',
+  autoCheckUpdate: true,
+  autoDownloadUpdate: false,
 })
 
 const qualityOptions = [
@@ -285,10 +336,28 @@ function clearCookiesFile() {
   updateSettings({ cookiesFile: '' })
 }
 
+/** 手动检查更新：打开关于页的更新弹窗（不受自动检查开关限制） */
+async function checkNow() {
+  try {
+    const result = await window.electronAPI?.checkForUpdates?.()
+    if (result?.error) { showError('检查更新失败', undefined, result.error); return }
+    // 无论有没有新版本，都跳到关于页的更新弹窗展示结果
+    close()
+    window.dispatchEvent(new CustomEvent('navigate-to-about-update'))
+  } catch (e) {
+    showError(`检查更新失败：${e instanceof Error ? e.message : '未知错误'}`)
+  }
+}
+
 function saveSettings() {
   // 合并写入：SettingsView 不管 depPaths，整体覆盖会把 DepPanel 存的手动路径抹掉
   updateSettings({ ...settings.value })
   window.electronAPI?.app?.setProxy?.(settings.value.proxy || '')
+  // 开关要立刻生效（无需重启）
+  window.electronAPI?.setUpdatePrefs?.({
+    autoCheck: settings.value.autoCheckUpdate,
+    autoDownload: settings.value.autoDownloadUpdate,
+  })
   showInfo('设置已保存')
   close()
 }
@@ -303,6 +372,8 @@ async function loadSettings() {
     cookieMode: saved.cookieMode,
     cookiesFile: saved.cookiesFile,
     proxy: saved.proxy,
+    autoCheckUpdate: saved.autoCheckUpdate,
+    autoDownloadUpdate: saved.autoDownloadUpdate,
   }
   if (!settings.value.downloadDir) {
     settings.value.downloadDir = await window.electronAPI.app.getDefaultDownloadDir()

@@ -44,6 +44,7 @@ import SettingsView from './components/SettingsView.vue'
 import DepsPrompt from './components/DepsPrompt.vue'
 import { useErrorModal } from './composables/useErrorModal'
 import { useDepsStore } from './stores/deps'
+import { readSettings } from './stores/settings'
 import type { TabType } from './types'
 
 const modal = useErrorModal()
@@ -64,6 +65,14 @@ function changeTab(tab: TabType) {
 }
 
 // 监听跳转设置页事件
+// 设置里的「立即检查更新」→ 切到关于页并打开更新弹窗
+window.addEventListener('navigate-to-about-update', () => {
+  currentTab.value = 'about'
+  window.dispatchEvent(new CustomEvent('tab-changed', { detail: 'about' }))
+  // 等视图切换后再让 AboutView 打开弹窗（它用 v-show 切换，事件监听已就绪）
+  setTimeout(() => window.dispatchEvent(new CustomEvent('about-open-update')), 0)
+})
+
 window.addEventListener('navigate-to-settings', () => {
   showSettings.value = true
 })
@@ -73,7 +82,7 @@ let unsubscribeMenu: (() => void) | null = null
 let unsubscribeUpdate: (() => void) | null = null
 let unsubscribeSettings: (() => void) | null = null
 
-onMounted(() => {
+onMounted(async () => {
   // 通知 preload 移除启动加载动画
   window.postMessage({ payload: 'removeLoading' }, '*')
 
@@ -106,14 +115,24 @@ onMounted(() => {
       }
     })
   }
-  // 延迟 3 秒后检查更新，避免影响启动速度
-  // 以返回值为准弹窗，不依赖 update:status 事件；检查失败时静默，不打扰启动
-  setTimeout(async () => {
-    try {
-      const result = await window.electronAPI?.checkForUpdates?.()
-      if (result?.hasUpdate) showUpdate.value = true
-    } catch {}
-  }, 3000)
+  // 把自动更新开关同步给主进程（设置存在渲染进程，主进程读不到）
+  const saved = readSettings()
+  window.electronAPI?.setUpdatePrefs?.({
+    autoCheck: saved.autoCheckUpdate,
+    autoDownload: saved.autoDownloadUpdate,
+  })
+
+  // 延迟 3 秒后检查更新，避免影响启动速度。
+  // 以返回值为准弹窗，不依赖 update:status 事件；检查失败时静默，不打扰启动。
+  // 关闭了自动检查则完全不请求（主进程侧也会再挡一次）。
+  if (saved.autoCheckUpdate) {
+    setTimeout(async () => {
+      try {
+        const result = await window.electronAPI?.checkForUpdates?.()
+        if (result?.hasUpdate) showUpdate.value = true
+      } catch {}
+    }, 3000)
+  }
 })
 
 onUnmounted(() => {

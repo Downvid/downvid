@@ -27,6 +27,23 @@ const AI_COAUTHORS: Record<string, { name: string; org: string; url: string }> =
 }
 
 const HEADERS = { 'Accept': 'application/vnd.github+json', 'User-Agent': 'DownVid-App' }
+
+/**
+ * GitHub 未认证请求的限额是 **60 次/小时，且按来源 IP 共享**。
+ * 一次贡献者刷新要 3 个请求（contributors 1 页 + commits 2 页），
+ * 多人共用出口 IP 时很容易耗尽，表现为 403。
+ */
+export class RateLimitError extends Error {
+  constructor() {
+    super('GitHub API 请求次数已达上限（未认证请求为 60 次/小时）')
+    this.name = 'RateLimitError'
+  }
+}
+
+function isRateLimited(e: unknown): boolean {
+  const msg = String((e as any)?.message || '')
+  return /\b403\b|\b429\b|rate limit/i.test(msg)
+}
 const PER_PAGE = 100
 const MAX_PAGES = 10
 
@@ -40,6 +57,12 @@ async function fetchAllPages(url: string): Promise<any[]> {
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       batch = await response.json()
     } catch (e) {
+      // 限额耗尽（403/429）时**不要继续翻页**：后面每一页都会再消耗一次限额，
+      // 让恢复时间更晚。直接停下，保留已拿到的部分。
+      if (isRateLimited(e)) {
+        if (page === 1) throw new RateLimitError()
+        break
+      }
       if (page === 1) throw e
       break
     }

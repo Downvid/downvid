@@ -31,6 +31,21 @@ export interface AppSettings {
   proxy: string
   /** 手动指定的依赖可执行文件路径，由 DepPanel 维护 */
   depPaths: Partial<Record<'yt-dlp' | 'ffmpeg' | 'ffprobe', string>>
+
+  /**
+   * 自动检查更新。
+   *
+   * 关闭后**不会**在启动时请求 GitHub，也不会在退出时自动安装已下载的更新；
+   * 「关于」页的手动「检查更新」仍然可用（那是用户显式发起的）。
+   * 默认开启：不检查更新会让用户长期停留在旧版本（实测存量用户升级率很低）。
+   */
+  autoCheckUpdate: boolean
+  /**
+   * 发现新版本时是否自动下载（仍需用户点「立即安装」）。
+   *
+   * 关闭时只提示有新版本，下载由用户决定——移动网络/计费流量下更友好。
+   */
+  autoDownloadUpdate: boolean
 }
 
 export const SETTINGS_KEY = 'settings'
@@ -43,6 +58,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   cookiesFile: '',
   proxy: '',
   depPaths: {},
+  autoCheckUpdate: true,
+  autoDownloadUpdate: false,
 }
 
 /**

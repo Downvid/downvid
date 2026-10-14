@@ -40,6 +40,29 @@ let downloading: Promise<{ success: boolean; error?: string }> | null = null
 let updaterReady = false
 
 /**
+ * 自动更新的开关，由渲染进程在启动时与设置变更时同步过来。
+ *
+ * 为什么不让主进程直接读 localStorage：设置存在渲染进程的 localStorage 里，
+ * 主进程读不到。因此由渲染进程显式同步（与 `app:setProxy` 同一思路）。
+ *
+ * 默认值与 `src/stores/settings.ts` 的 DEFAULT_SETTINGS 保持一致。
+ */
+const updatePrefs = { autoCheck: true, autoDownload: false }
+
+export function setUpdaterPrefs(prefs: { autoCheck?: boolean; autoDownload?: boolean }) {
+  if (typeof prefs.autoCheck === 'boolean') updatePrefs.autoCheck = prefs.autoCheck
+  if (typeof prefs.autoDownload === 'boolean') updatePrefs.autoDownload = prefs.autoDownload
+  // 关闭自动检查时，也不应在退出时自动安装（那同样需要先检查/下载）
+  autoUpdater.autoInstallOnAppQuit = updatePrefs.autoCheck
+  autoUpdater.autoDownload = updatePrefs.autoDownload
+}
+
+/** 供 checkForUpdates 判断是否允许自动发起（手动检查不受限） */
+export function isAutoCheckEnabled(): boolean {
+  return updatePrefs.autoCheck
+}
+
+/**
  * 检查结果的缓存有效期。
  *
  * 用户可能反复点「检查更新」（或反复开关弹窗）。每次都发请求既浪费，
@@ -241,10 +264,21 @@ async function checkViaGitHubApi(): Promise<{ version: string; releaseNotes: str
   return { version: String(data.tag_name || '').replace(/^v/, ''), releaseNotes: data.body || '', releaseDate: data.published_at || '' }
 }
 
-export async function checkForUpdates(): Promise<CheckResult> {
+/**
+ * 检查更新。
+ *
+ * @param manual 用户显式点「检查更新」时为 true —— 此时**忽略**自动检查开关，
+ *               否则用户关掉自动检查后就再也手动查不了了。
+ */
+export async function checkForUpdates(manual = false): Promise<CheckResult> {
   const currentVersion = app.getVersion()
   const base = { currentVersion, downloadUrl: RELEASES_URL }
   const reason = unsupportedReason()
+
+  // 自动检查被关闭且非手动触发 → 直接返回"无更新"，不请求 GitHub
+  if (!manual && !isAutoCheckEnabled()) {
+    return { ...base, hasUpdate: false }
+  }
 
   // 短时间内重复点击「检查更新」时复用结果，不再发包：
   // 既避免 GitHub 限流，也避免同一个新版本反复弹窗。
@@ -335,9 +369,9 @@ export function setupAutoUpdater() {
   if (updaterReady) return
   updaterReady = true
 
-  // 由用户确认后再下载；Windows/Linux 已下载的更新在退出时自动安装
-  autoUpdater.autoDownload = false
-  autoUpdater.autoInstallOnAppQuit = true
+  // 默认由用户确认后再下载；具体值由 setUpdaterPrefs 按用户设置覆盖
+  autoUpdater.autoDownload = updatePrefs.autoDownload
+  autoUpdater.autoInstallOnAppQuit = updatePrefs.autoCheck
 
   autoUpdater.on('update-available', (info) => {
     sendStatus({ status: 'available', version: info.version, releaseNotes: info.releaseNotes || '' })

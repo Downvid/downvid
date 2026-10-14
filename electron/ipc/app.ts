@@ -2,9 +2,9 @@ import { ipcMain, app } from 'electron'
 import { APP } from '../constants'
 import fs from 'node:fs'
 import path from 'node:path'
-import { fetchAllContributors } from '../utils/contributors'
+import { fetchAllContributors, RateLimitError } from '../utils/contributors'
 import { broadcast } from '../store'
-import { checkForUpdates, downloadUpdate, installUpdate } from '../updater'
+import { checkForUpdates, downloadUpdate, installUpdate, setUpdaterPrefs } from '../updater'
 
 // 贡献者内存缓存
 let contributorsCache: any[] | null = null
@@ -92,6 +92,12 @@ export function registerAppIpc() {
 
       return { success: true, data }
     } catch (error) {
+      // 区分「限额耗尽」与「网络不通」：前者等一小时即可恢复，
+      // 后者要检查网络/代理。提示文案不同，否则用户会往错的方向排查。
+      const warning = error instanceof RateLimitError
+        ? 'GitHub 接口请求次数已达上限（未认证请求为 60 次/小时），暂时显示缓存数据，约一小时后自动恢复'
+        : '无法连接 GitHub，显示缓存数据'
+
       // API 失败但有本地缓存（即使过期了），返回本地缓存
       if (fileCache) {
         contributorsCache = fileCache.data
@@ -100,7 +106,7 @@ export function registerAppIpc() {
           success: true,
           data: fileCache.data,
           fromCache: true,
-          warning: '无法连接 GitHub，显示缓存数据',
+          warning,
         }
       }
 
@@ -111,7 +117,12 @@ export function registerAppIpc() {
     }
   })
 
-  ipcMain.handle('app:checkForUpdates', () => checkForUpdates())
+  // 手动检查：忽略自动检查开关
+  ipcMain.handle('app:checkForUpdates', () => checkForUpdates(true))
+  ipcMain.handle('app:setUpdatePrefs', (_, prefs: { autoCheck?: boolean; autoDownload?: boolean }) => {
+    setUpdaterPrefs(prefs || {})
+    return true
+  })
   ipcMain.handle('app:downloadUpdate', () => downloadUpdate())
   ipcMain.handle('app:installUpdate', () => installUpdate())
 }
