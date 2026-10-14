@@ -37,26 +37,32 @@ type Info struct {
 
 var (
 	reFFmpegVersion = regexp.MustCompile(`version\s+(\S+)`)
+	reYtDlpVersion  = regexp.MustCompile(`^\d{4}\.\d{2}\.\d{2}(?:\.\d+)?$`)
 	reDigits        = regexp.MustCompile(`\d+`)
 	reKilled        = regexp.MustCompile(`(?i)killed|signal: 9`)
 )
 
 // Run 执行工具并解析版本号；失败时返回的错误信息可直接展示给用户
 func Run(tool, path string) (Info, error) {
+	return RunContext(context.Background(), tool, path)
+}
+
+// RunContext 同时受调用方总预算与单个候选时限约束。
+func RunContext(ctx context.Context, tool, path string) (Info, error) {
 	args, ok := Args[tool]
 	if !ok {
 		args = []string{"--version"}
 	}
 
 	info := Info{Path: path}
-	out, err := run(path, args, 15*time.Second)
+	out, err := run(ctx, path, args, 3*time.Second)
+	if err != nil {
+		return info, describeRunError(err, out)
+	}
 	info.Version = ParseVersion(tool, out)
 	info.Major = Major(info.Version)
 
 	if info.Version == "" {
-		if err != nil {
-			return info, describeRunError(err, out)
-		}
 		return info, errors.New("无法解析版本输出：" + firstLine(out))
 	}
 	return info, nil
@@ -70,13 +76,14 @@ func ParseVersion(tool, out string) string {
 	}
 	// ffmpeg / ffprobe：`ffmpeg version 6.0 Copyright (c) ...`
 	if tool == "ffmpeg" || tool == "ffprobe" {
-		if m := reFFmpegVersion.FindStringSubmatch(line); len(m) == 2 {
+		if m := reFFmpegVersion.FindStringSubmatch(line); strings.HasPrefix(line, tool+" version ") && len(m) == 2 && Major(m[1]) > 0 {
 			return m[1]
 		}
+		return ""
 	}
 	// yt-dlp：直接输出版本号
-	if fields := strings.Fields(line); len(fields) > 0 {
-		return fields[0]
+	if tool == "yt-dlp" && reYtDlpVersion.MatchString(line) {
+		return line
 	}
 	return ""
 }
@@ -94,8 +101,8 @@ func Major(version string) int {
 	return n
 }
 
-func run(path string, args []string, timeout time.Duration) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+func run(parent context.Context, path string, args []string, timeout time.Duration) (string, error) {
+	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, path, args...)
@@ -104,6 +111,9 @@ func run(path string, args []string, timeout time.Duration) (string, error) {
 	cmd.Stdout = sink
 	cmd.Stderr = sink
 	err := cmd.Run()
+	if ctx.Err() != nil {
+		err = ctx.Err()
+	}
 	return sink.String(), err
 }
 

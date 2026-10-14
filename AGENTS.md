@@ -27,6 +27,7 @@ yt-dlp / ffmpeg **不需要**预先安装（见「运行依赖」一节）。
 ```bash
 pnpm vue-tsc --noEmit                          # 前端类型检查（strict + noUnusedLocals + noUnusedParameters）
 pnpm test                                      # 纯逻辑单测（Vitest，tests/*.test.ts）
+pnpm test:runtime:windows                       # Windows 原生 exe 集成回归（需 Go）
 pnpm lint:ipc                                  # IPC 契约静态校验（三处同步 + 产物命名 + 仓库坐标一致）
 pnpm deps:manifest:check                       # 依赖清单是否落后上游
 cd backend && gofmt -l . && go vet ./... && go test ./...   # Go 侧车
@@ -193,6 +194,8 @@ Linux 用 `amd64`/`x86_64` 而不是 `x64`（与 electron-builder 的 `${arch}` 
 
 - `electron/utils/runtime.ts`：定位边车（打包后在 `resources/downvid-deps/`）、执行、
   缓存探测结果 60 秒、广播 `deps:progress`。下载在主进程里完成，界面关闭不中断。
+- 检测总时限 45 秒，每个依赖 15 秒，每个候选执行 3 秒；扫描另有 3 秒预算，
+  同时受剩余检测时限约束。Windows 目录优先读取实际环境变量，找不到有效副本才下载。
 - `electron/ipc/deps.ts`：`deps:status / check / download / cancel / openDir / diagnostics`。
 - `electron/utils/binary.ts` 的 `resolveDependency()` 是**唯一入口**：
   解析失败抛 `MissingDependencyError`，消息带 `[[deps-missing:<kind>]]` 标记，
@@ -252,9 +255,9 @@ libmp3lame / aac / libx264。**代价**：上游不公布校验值，`deps:manif
 
 - `--ffmpeg-location` 传**目录**而非文件：yt-dlp 会在该目录里同时找 ffmpeg 与 ffprobe，
   托管目录安装时两者都能命中。
-- YouTube 需要 JS 运行时；`checkJsRuntime()` 返回 `process.execPath`（Electron 二进制）作为
-  `--js-runtimes node:<path>`，打包应用无需单独安装 Node。非 Electron 环境下缺失会明确报错并
-  引导安装（此前是静默跳过）。
+- YouTube 需要实际安装的 Node / Deno；`utils/js-runtime.ts` 的 `checkJsRuntime()`
+  不得返回 Electron 二进制。除 PATH 外也查 WinGet、Scoop、用户 `.deno/bin` 等目录，
+  避免 GUI 应用继承旧 PATH 时漏检；运行依赖侧车不会自动安装 JS 运行时。
 - **字幕模式不需要 ffmpeg**，因此不强制解析它，也不传 `--ffmpeg-location`。
 - Cookie 经 `utils/cookies.ts` 的 `runWithCookies`：手动文件 → 无；自动模式依次尝试各已安装
   浏览器 → 快照 `userData/ytdlp-cookies/browser-cookies.txt` → 无。仅在 cookie **读取**错误

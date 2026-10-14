@@ -14,6 +14,11 @@ func TestParseVersion(t *testing.T) {
 		{"ffmpeg", "ffmpeg version 9.0.2 Copyright (c) 2000-2025", "9.0.2"},
 		{"ffprobe", "ffprobe version n7.1-static Copyright (c)", "n7.1-static"},
 		{"yt-dlp", "", ""},
+		{"yt-dlp", "ERROR: missing runtime DLL", ""},
+		{"yt-dlp", "2026.10.10 error", ""},
+		{"ffmpeg", "ERROR: missing runtime DLL", ""},
+		{"ffmpeg", "ffmpeg version unknown", ""},
+		{"ffmpeg", "another tool version 6.0", ""},
 	}
 	for _, c := range cases {
 		if got := ParseVersion(c.tool, c.out); got != c.want {

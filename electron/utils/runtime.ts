@@ -99,7 +99,7 @@ export function getManagedDir(): string {
 // ===== 探测 =====
 
 function detectArgs(options: DetectOptions): string[] {
-  const args = ['detect', '--managed-dir', getManagedDir(), '--json']
+  const args = ['detect', '--managed-dir', getManagedDir(), '--json', '--timeout', '45']
   for (const [kind, file] of Object.entries(options.manualPaths || {})) {
     if (file) args.push('--manual', `${kind}=${file}`)
   }

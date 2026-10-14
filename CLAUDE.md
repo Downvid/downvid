@@ -15,6 +15,7 @@ pnpm install
 pnpm dev                    # vite dev server + electron, hot reload; also compiles the Go sidecar
 pnpm vue-tsc --noEmit       # renderer/main type check (strict + noUnusedLocals + noUnusedParameters)
 pnpm test                   # pure-logic unit tests (Vitest, tests/*.test.ts)
+pnpm test:runtime:windows    # native Windows exe integration regression (requires Go)
 pnpm lint:ipc               # static check of the hand-maintained IPC wiring
 pnpm deps:manifest:check    # is the dependency manifest behind upstream?
 pnpm build                  # vue-tsc && vite build && electron-builder (current platform)
@@ -171,6 +172,9 @@ A Go sidecar resolves them at startup, "prefer the machine's own, download only 
   caches detection 60 s, broadcasts `deps:progress`. Downloads run in main, so closing the window
   doesn't abort them. `electron/ipc/deps.ts` exposes
   `deps:status/check/download/cancel/openDir/diagnostics`.
+- Detection has a 45 s total budget, 15 s per dependency and 3 s per candidate execution.
+  Scanning has its own 3 s budget capped by the remaining detection time. Windows directories
+  honor actual environment variables; downloading is only needed when no usable copy is found.
 - `resolveDependency()` in `electron/utils/binary.ts` is the single entry point; on failure it throws
   `MissingDependencyError` carrying a `[[deps-missing:<kind>]]` marker the renderer turns into a
   one-click download prompt (same trick as the cookie hint's `\n\n提示：`).
@@ -218,9 +222,9 @@ Resume re-spawns and continues from the `.part` file. **No cross-restart resume.
 
 - `--ffmpeg-location` takes a **directory**, not a file: yt-dlp looks for both ffmpeg and ffprobe
   there, which is what makes a managed-dir install work.
-- YouTube needs a JS runtime; `checkJsRuntime()` returns `process.execPath` (the Electron binary) as
-  `--js-runtimes node:<path>`, so packaged apps need no separate Node. Outside Electron a missing
-  runtime now errors explicitly (it used to be skipped silently).
+- YouTube needs an installed Node / Deno; `checkJsRuntime()` in `utils/js-runtime.ts` must never
+  return the Electron binary. It checks WinGet, Scoop and the user's `.deno/bin` as well as PATH
+  so a GUI process with an old PATH can still find the runtime. The sidecar does not install JS runtimes.
 - **Subtitle mode doesn't need ffmpeg** — it isn't resolved, and no `--ffmpeg-location` is passed.
 - Cookies go through `utils/cookies.ts` `runWithCookies`: manual file → none, or (auto) each installed
   browser → snapshot `userData/ytdlp-cookies/browser-cookies.txt` → none. It only moves to the next

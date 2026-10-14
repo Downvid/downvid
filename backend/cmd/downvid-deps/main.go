@@ -64,6 +64,7 @@ detect 参数：
   --managed-dir <dir>     托管目录（下载安装位置）
   --manual <kind>=<path>  手动指定的可执行文件路径，可重复
   --json                  单行 JSON 输出（默认按事件流输出）
+  --timeout <秒>          检测总时限，默认 45
 
 fetch 参数：
   --managed-dir <dir>     托管目录（必填）
@@ -85,6 +86,7 @@ func runDetect(args []string) {
 	fs := flag.NewFlagSet("detect", flag.ExitOnError)
 	managedDir := fs.String("managed-dir", "", "托管目录")
 	jsonOutput := fs.Bool("json", false, "单行 JSON 输出")
+	timeout := fs.Int("timeout", int(rt.DetectTimeout/time.Second), "检测总时限（秒）")
 	var manual manualFlags
 	fs.Var(&manual, "manual", "手动指定路径 kind=path，可重复")
 	// 兼容 --manual-dir/--manual-path 两种等价写法
@@ -95,7 +97,12 @@ func runDetect(args []string) {
 		manualPaths[rt.Kind(kind)] = path
 	}
 	opts := rt.Options{ManagedDir: *managedDir, ManualPaths: manualPaths}
-	results := rt.FindAll(opts)
+	if *timeout <= 0 {
+		cli.Fail("检测时限必须大于 0")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(*timeout)*time.Second)
+	defer cancel()
+	results := rt.FindAllContext(ctx, opts)
 
 	payload := map[string]any{
 		"event":    "detect",

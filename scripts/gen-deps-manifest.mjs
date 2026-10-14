@@ -22,7 +22,7 @@
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { devNull, tmpdir } from 'node:os'
 import path from 'node:path'
 
 const YTDLP_REPO = 'yt-dlp/yt-dlp-nightly-builds'
@@ -55,6 +55,10 @@ const argValue = (name) => {
 }
 
 let workDir = null
+const retrySignal = new Int32Array(new SharedArrayBuffer(4))
+function waitBeforeRetry(seconds) {
+  Atomics.wait(retrySignal, 0, 0, seconds * 1000)
+}
 function tmpFile(name) {
   if (!workDir) workDir = mkdtempSync(path.join(tmpdir(), 'downvid-deps-'))
   return path.join(workDir, name)
@@ -84,7 +88,7 @@ function curlText(textArgs, { retries = 5, quiet = false } = {}) {
       lastError = e?.stderr?.toString().trim() || e?.message || ''
       if (attempt < retries) {
         if (!quiet) console.warn(`  ! curl 第 ${attempt} 次失败，重试中`)
-        execFileSync('sleep', [String(attempt * 2)])
+        waitBeforeRetry(attempt * 2)
       }
     }
   }
@@ -112,7 +116,7 @@ function latestTag(repo) {
   try {
     // 不带 -L：需要捕获 302 的 Location 才能拿到 tag
     const location = curlText([
-      '-sS', '-o', '/dev/null', '-w', '%{redirect_url}', '--max-time', '60',
+      '-sS', '-o', devNull, '-w', '%{redirect_url}', '--max-time', '60',
       `https://github.com/${repo}/releases/latest`,
     ], { quiet: true }).trim()
     tag = location.split('/tag/')[1] || ''
@@ -264,13 +268,13 @@ function assetAvailable(url) {
   let lastError = ''
   for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
-      execFileSync('curl', ['-fsSL', '-r', '0-0', '--max-time', '60', '-o', '/dev/null', url],
+      execFileSync('curl', ['-fsSL', '-r', '0-0', '--max-time', '60', '-o', devNull, url],
         { stdio: ['ignore', 'ignore', 'pipe'] })
       return true
     } catch (e) {
       lastError = e?.stderr?.toString().trim() || e?.message || ''
       if (/404|Not Found/i.test(lastError)) return false
-      if (attempt < attempts) execFileSync('sleep', [String(attempt * 2)])
+      if (attempt < attempts) waitBeforeRetry(attempt * 2)
     }
   }
   console.warn(`  ! 无法确认产物是否存在（网络原因），跳过：${url}`)
