@@ -10,7 +10,7 @@
       <div class="size-6 rounded-md overflow-hidden bg-primary/10 flex items-center justify-center shrink-0">
         <img src="@/assets/logo.png" alt="DownVid" class="w-full h-full object-contain" />
       </div>
-      <h2 class="font-headline text-base font-bold leading-tail tracking-tight text-on-surface">DownVid</h2>
+      <h2 class="font-headline text-base font-bold leading-tail tracking-tight text-on-surface">DownVid 视频下载器</h2>
     </div>
     
     <!-- Navigation -->

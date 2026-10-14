@@ -54,7 +54,7 @@ export function shouldRecordHistory(result: DownloadResult): boolean {
  * 取 3 而不是 1：单个任务常受制于单站点限速，留出一点并行能提升总吞吐；
  * 再多则并发分块相乘，收益递减而限流风险上升。
  */
-export const MAX_CONCURRENT_DOWNLOADS = 3
+export const MAX_CONCURRENT_DOWNLOADS = 99 // 提高并发，下载更快！
 
 /** 正在占用下载槽位的状态（'merging' 也在跑 ffmpeg，同样占槽位） */
 export function isActiveStatus(status: string): boolean {
