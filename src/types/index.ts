@@ -73,6 +73,7 @@ export interface HistoryRecord {
   thumbnail: string
   url: string
   filePath: string
+  fileExists?: boolean
   format: string
   quality: string
   fileSize?: string

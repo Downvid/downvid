@@ -8,6 +8,7 @@
 package runtime
 
 import (
+	"context"
 	"errors"
 	"os"
 	"os/exec"
@@ -73,9 +74,18 @@ type Result struct {
 
 // FindAll 依次探测全部依赖
 func FindAll(opts Options) []Result {
+	ctx, cancel := context.WithTimeout(context.Background(), DetectTimeout)
+	defer cancel()
+	return FindAllContext(ctx, opts)
+}
+
+// DetectTimeout 小于 Electron 的 60 秒超时，给 JSON 回传留出余量。
+const DetectTimeout = 45 * time.Second
+
+func FindAllContext(ctx context.Context, opts Options) []Result {
 	results := make([]Result, 0, len(Kinds))
 	for _, kind := range Kinds {
-		results = append(results, findOne(kind, opts))
+		results = append(results, findOneContext(ctx, kind, opts))
 	}
 	return results
 }
@@ -84,18 +94,27 @@ func FindAll(opts Options) []Result {
 func FindOne(kind Kind, opts Options) Result { return findOne(kind, opts) }
 
 func findOne(kind Kind, opts Options) Result {
+	return findOneContext(context.Background(), kind, opts)
+}
+
+func findOneContext(parent context.Context, kind Kind, opts Options) Result {
+	ctx, cancel := context.WithTimeout(parent, 15*time.Second)
+	defer cancel()
 	res := Result{Kind: string(kind), Optional: Optional[kind]}
 	// 重置扫描预算与时限：每个依赖独立计算，避免前一个把额度用光
 	resetScanBudget()
 
 	var lastErr error
 	for _, c := range candidatesFor(kind, opts) {
-		info, err := probeTool(kind, c.Path)
+		if ctx.Err() != nil {
+			break
+		}
+		info, err := probeToolContext(ctx, kind, c.Path)
 		if err != nil {
 			lastErr = err
 			continue
 		}
-		if min, ok := probe.MinimumMajor[string(kind)]; ok && info.Major != 0 && info.Major < min {
+		if min, ok := probe.MinimumMajor[string(kind)]; ok && info.Major < min {
 			lastErr = errors.New("版本过旧（" + info.Version + "），建议重新下载")
 			continue
 		}
@@ -115,7 +134,12 @@ func findOne(kind Kind, opts Options) Result {
 	//
 	// 为什么必须有界：全盘遍历在 Windows 上可能耗时很久（且会扫到网络盘）。
 	// 因此只扫几个最可能的根目录、限制深度与访问条目数、命中即停。
-	if fallback := scanForBinary(kind, opts); fallback != nil {
+	// 扫描预算从扫描开始计算，不能被前面的版本执行消耗掉。
+	resetScanBudget()
+	if deadline, ok := ctx.Deadline(); ok && deadline.Before(scanDeadline) {
+		scanDeadline = deadline
+	}
+	if fallback := scanForBinary(ctx, kind); fallback != nil {
 		res.Found = true
 		res.Path = fallback.Path
 		res.Version = fallback.Version
@@ -124,7 +148,9 @@ func findOne(kind Kind, opts Options) Result {
 		return res
 	}
 
-	if lastErr != nil {
+	if ctx.Err() != nil {
+		res.Reason = "依赖检测达到时限，请手动指定可执行文件路径后重试"
+	} else if lastErr != nil {
 		res.Reason = lastErr.Error()
 	} else {
 		res.Reason = "未在托管目录、PATH、常见安装目录中找到（已尝试扫描常见位置）"
@@ -136,9 +162,10 @@ func findOne(kind Kind, opts Options) Result {
 //
 // 只作为保底：正常路径（托管目录 / PATH / 常见安装目录）都已尝试过才会走到这里。
 // 扫到的结果标记为 SourceScanned，界面会提示"自动扫描发现"，便于用户判断来源。
-func scanForBinary(kind Kind, opts Options) *probe.Info {
+func scanForBinary(ctx context.Context, kind Kind) *probe.Info {
 	name := BinaryName(kind)
 	seen := map[string]bool{}
+	var result *probe.Info
 
 	for _, root := range scanRoots() {
 		if seen[root] {
@@ -146,18 +173,19 @@ func scanForBinary(kind Kind, opts Options) *probe.Info {
 		}
 		seen[root] = true
 
-		found := scanDir(root, name, 0)
-		if found == "" {
-			continue
+		found := scanDirMatching(root, name, 0, func(file string) bool {
+			probeCtx, cancel := context.WithDeadline(ctx, scanDeadline)
+			defer cancel()
+			info, err := probeToolContext(probeCtx, kind, file)
+			if err != nil || info.Major < probe.MinimumMajor[string(kind)] {
+				return false
+			}
+			result = &info
+			return true
+		})
+		if found != "" {
+			return result
 		}
-		info, err := probeTool(kind, found)
-		if err != nil {
-			continue
-		}
-		if min, ok := probe.MinimumMajor[string(kind)]; ok && info.Major != 0 && info.Major < min {
-			continue
-		}
-		return &info
 	}
 	return nil
 }
@@ -170,6 +198,11 @@ func scanForBinary(kind Kind, opts Options) *probe.Info {
 //     而不是单个目录里有多少文件
 //   - 跳过明显无关的目录（node_modules、缓存、系统目录）
 func scanDir(dir string, name string, depth int) string {
+	return scanDirMatching(dir, name, depth, func(string) bool { return true })
+}
+
+// 无效或过旧的同名文件不应遮蔽同一目录树中的其他副本。
+func scanDirMatching(dir string, name string, depth int, accept func(string) bool) string {
 	// 三道闸：深度、目录数预算、以及 wall-clock 上限。
 	// 加时间上限是因为目录数预算无法约束"每个目录都很慢"的情况
 	// （Windows 上 Program Files 叠加杀软扫描，单次 ReadDir 可能数百毫秒）。
@@ -197,13 +230,13 @@ func scanDir(dir string, name string, depth int) string {
 		}
 
 		// 命中：文件名完全匹配（Windows 上大小写不敏感）
-		if strings.EqualFold(e.Name(), name) {
+		if strings.EqualFold(e.Name(), name) && accept(full) {
 			return full
 		}
 	}
 
 	for _, sub := range subdirs {
-		if found := scanDir(sub, name, depth+1); found != "" {
+		if found := scanDirMatching(sub, name, depth+1, accept); found != "" {
 			return found
 		}
 	}
@@ -288,9 +321,13 @@ func scanRoots() []string {
 	case "linux":
 		roots = append(roots, "/usr/local/bin", "/usr/bin", "/opt", "/snap/bin")
 	case "windows":
+		local := envDir("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
 		roots = append(roots,
-			`C:\Program Files`,
-			`C:\Program Files (x86)`,
+			filepath.Join(local, "Programs"),
+			envDir("SCOOP", filepath.Join(home, "scoop")),
+			envDir("SCOOP_GLOBAL", filepath.Join(envDir("ProgramData", `C:\ProgramData`), "scoop")),
+			envDir("ProgramFiles", `C:\Program Files`),
+			envDir("ProgramFiles(x86)", `C:\Program Files (x86)`),
 			`C:\tools`,
 			`C:\ffmpeg`,
 		)
@@ -340,10 +377,14 @@ func dedupe(list []candidate) []candidate {
 }
 
 func probeTool(kind Kind, path string) (probe.Info, error) {
+	return probeToolContext(context.Background(), kind, path)
+}
+
+func probeToolContext(ctx context.Context, kind Kind, path string) (probe.Info, error) {
 	if _, err := os.Stat(path); err != nil {
 		return probe.Info{Path: path}, err
 	}
-	return probe.Run(string(kind), path)
+	return probe.RunContext(ctx, string(kind), path)
 }
 
 // ===== PATH 解析 =====
@@ -460,26 +501,34 @@ func windowsInstallDirs(home string) []string {
 	//   - yt-dlp.FFmpeg 是 zip + nested portable，解压后为
 	//     <hash>\ffmpeg-N-xxxx-win64-gpl\bin\{ffmpeg,ffprobe}.exe
 	//   - DenoLand.Deno 提供 JS 运行时（yt-dlp 的清单把它列为依赖）
-	wingetBase := filepath.Join(home, "AppData", "Local", "Microsoft", "WinGet")
+	local := envDir("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
+	programFiles := envDir("ProgramFiles", `C:\Program Files`)
+	programData := envDir("ProgramData", `C:\ProgramData`)
+	scoop := envDir("SCOOP", filepath.Join(home, "scoop"))
+	scoopGlobal := envDir("SCOOP_GLOBAL", filepath.Join(programData, "scoop"))
+	wingetBase := filepath.Join(local, "Microsoft", "WinGet")
 
 	// winget 有**两套**落点：用户级与机器级（`--scope machine`）。
 	// 只覆盖用户级会让"用管理员装"的用户被判为缺失。
-	machineBase := filepath.Join(`C:\Program Files`, "WinGet")
+	machineBase := filepath.Join(programFiles, "WinGet")
 
 	dirs := []string{
-		`C:\ProgramData\chocolatey\bin`,
-		`C:\Program Files\yt-dlp`,
-		`C:\Program Files (x86)\yt-dlp`,
+		filepath.Join(envDir("ChocolateyInstall", filepath.Join(programData, "chocolatey")), "bin"),
+		filepath.Join(programFiles, "yt-dlp"),
+		filepath.Join(envDir("ProgramFiles(x86)", `C:\Program Files (x86)`), "yt-dlp"),
 		`C:\ffmpeg\bin`,
-		`C:\Program Files\ffmpeg\bin`,
-		filepath.Join(home, "scoop", "shims"),
-		filepath.Join(home, "scoop", "apps", "yt-dlp", "current"),
-		filepath.Join(home, "scoop", "apps", "ffmpeg", "current", "bin"),
+		filepath.Join(programFiles, "ffmpeg", "bin"),
+		filepath.Join(scoop, "shims"),
+		filepath.Join(scoop, "apps", "yt-dlp", "current"),
+		filepath.Join(scoop, "apps", "ffmpeg", "current", "bin"),
+		filepath.Join(scoopGlobal, "shims"),
+		filepath.Join(scoopGlobal, "apps", "yt-dlp", "current"),
+		filepath.Join(scoopGlobal, "apps", "ffmpeg", "current", "bin"),
 		// 用户级 winget
 		filepath.Join(wingetBase, "Links"),
 		// 机器级 winget（--scope machine）
 		filepath.Join(machineBase, "Links"),
-		filepath.Join(home, "AppData", "Local", "Microsoft", "WindowsApps"),
+		filepath.Join(local, "Microsoft", "WindowsApps"),
 	}
 
 	// Packages 下的目录名含随机哈希，只能展开通配；用户级与机器级都要展开
@@ -487,6 +536,13 @@ func windowsInstallDirs(home string) []string {
 	dirs = append(dirs, expandWindowsGlobs(machineBase, WindowsPackagePatterns)...)
 
 	return dirs
+}
+
+func envDir(key, fallback string) string {
+	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+		return value
+	}
+	return fallback
 }
 
 // WindowsPackagePatterns 是 WinGet\Packages 下需要展开的通配模式。

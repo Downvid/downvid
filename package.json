@@ -26,6 +26,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:runtime:windows": "node scripts/test-runtime-windows.mjs",
     "deps:build": "bash scripts/build-backend.sh",
     "deps:manifest": "node scripts/gen-deps-manifest.mjs",
     "deps:manifest:check": "node scripts/gen-deps-manifest.mjs --check",

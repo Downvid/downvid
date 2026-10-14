@@ -129,6 +129,7 @@ func TestExpandWindowsGlobsMatchesRealWingetLayout(t *testing.T) {
 // 用例照样通过（实测：注入该变异后 0 个用例失败）。
 func TestWindowsInstallDirsExpandsFakeWingetTree(t *testing.T) {
 	home := t.TempDir()
+	t.Setenv("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
 
 	bin := filepath.Join(home, "AppData", "Local", "Microsoft", "WinGet",
 		"Packages", "yt-dlp.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe",
@@ -142,6 +143,34 @@ func TestWindowsInstallDirsExpandsFakeWingetTree(t *testing.T) {
 
 	if !strings.Contains(joined, "win64-gpl/bin") {
 		t.Errorf("windowsInstallDirs 未把 WinGet\\Packages 展开进来（忘了调用展开？）。实际：\n%s", joined)
+	}
+}
+
+func TestWindowsInstallDirsHonorEnvironment(t *testing.T) {
+	root := t.TempDir()
+	local := filepath.Join(root, "relocated-local")
+	programFiles := filepath.Join(root, "programs")
+	scoop := filepath.Join(root, "scoop-custom")
+	scoopGlobal := filepath.Join(root, "scoop-global")
+	chocolatey := filepath.Join(root, "choco-custom")
+	t.Setenv("LOCALAPPDATA", local)
+	t.Setenv("ProgramFiles", programFiles)
+	t.Setenv("SCOOP", scoop)
+	t.Setenv("SCOOP_GLOBAL", scoopGlobal)
+	t.Setenv("ChocolateyInstall", chocolatey)
+	winget := filepath.Join(local, "Microsoft", "WinGet", "Packages", "yt-dlp.yt-dlp_test")
+	if err := os.MkdirAll(winget, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dirs := windowsInstallDirs(filepath.Join(root, "home"))
+	for _, want := range []string{winget, filepath.Join(programFiles, "WinGet", "Links"), filepath.Join(scoop, "shims"), filepath.Join(scoopGlobal, "shims"), filepath.Join(chocolatey, "bin")} {
+		found := false
+		for _, dir := range dirs {
+			found = found || dir == want
+		}
+		if !found {
+			t.Errorf("未使用实际安装目录 %s", want)
+		}
 	}
 }
 

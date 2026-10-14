@@ -32,6 +32,28 @@ func TestScanFindsBinaryInNestedDir(t *testing.T) {
 	}
 }
 
+func TestScanContinuesAfterRejectedCopy(t *testing.T) {
+	root := t.TempDir()
+	name := BinaryName(KindFFprobe)
+	var valid string
+	for _, sub := range []string{"a-broken", "b-valid"} {
+		dir := filepath.Join(root, sub)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		file := filepath.Join(dir, name)
+		if err := os.WriteFile(file, []byte("fixture"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		valid = file
+	}
+	resetScanBudget()
+	got := scanDirMatching(root, name, 0, func(file string) bool { return file == valid })
+	if got != valid {
+		t.Fatalf("拒绝第一个副本后未继续扫描：%q，期望 %q", got, valid)
+	}
+}
+
 // 深度限制必须生效：过深的目录不该被遍历
 func TestScanRespectsMaxDepth(t *testing.T) {
 	root := t.TempDir()
