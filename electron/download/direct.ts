@@ -1,19 +1,9 @@
 import fs from 'node:fs'
 import { isKuaishouUrl } from '../utils/platform'
 import { formatBytes, formatEta } from './progress'
-
-/**
- * 直链下载：抖音/快手解析器拿到 CDN 地址后不再走 yt-dlp，直接 fetch。
- *
- * 这条路径存在的理由是那些 CDN 地址有效期很短，走 yt-dlp 会二次请求平台接口，
- * 容易拿不到同一份地址。
- */
+import { canResumeDirect, createDirectSegments, matchesDirectRange, type DirectCheckpoint, type DirectResource } from './direct-state'
 
 const DIRECT_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-/** 分段数：CDN 常对单连接限速，并行 4 段可成倍提速 */
-const DIRECT_SEGMENTS = 4
-/** 小于此大小不值得分段 */
-const DIRECT_MIN_SEGMENT = 2 * 1024 * 1024
 const DIRECT_RETRIES = 3
 
 function directHeaders(pageUrl: string, extra: Record<string, string> = {}) {
@@ -21,16 +11,20 @@ function directHeaders(pageUrl: string, extra: Record<string, string> = {}) {
   return { 'User-Agent': DIRECT_UA, 'Referer': referer, ...extra }
 }
 
-/** 探测是否支持 Range 以及文件总大小 */
 async function probeDirect(url: string, pageUrl: string, signal: AbortSignal) {
   try {
     const res = await fetch(url, { headers: directHeaders(pageUrl, { Range: 'bytes=0-0' }), signal })
     const total = parseInt(res.headers.get('content-range')?.split('/')[1] || '0')
+    const resource: DirectResource = {
+      url, total, etag: res.headers.get('etag') || '', lastModified: res.headers.get('last-modified') || '',
+    }
+    const rangeSupported = res.status === 206 && Number.isSafeInteger(total) && total > 0
+      && matchesDirectRange(res.headers.get('content-range'), 0, 1, total)
     await res.body?.cancel()
-    return { rangeSupported: res.status === 206 && total > 0, total }
+    return { rangeSupported, resource }
   } catch (e) {
     if (signal.aborted) throw e
-    return { rangeSupported: false, total: 0 }
+    return { rangeSupported: false, resource: { url, total: 0, etag: '', lastModified: '' } }
   }
 }
 
@@ -39,99 +33,131 @@ export interface DirectDownloadParams {
   pageUrl: string
   outputPath: string
   signal: AbortSignal
-  /** 上报进度；节流由调用方统一处理 */
   report: (data: { percent: number; totalSize: string; speed: string; eta: string }) => void
 }
 
+/** 抖音/快手直链：暂停保留分段检查点，恢复只请求尚未写入的范围。 */
 export async function downloadDirectFile(params: DirectDownloadParams): Promise<void> {
   const { url, pageUrl, outputPath, signal, report } = params
   const startTime = Date.now()
   let downloaded = 0
+  let resumed = 0
   let total = 0
-
-  report({ percent: 0, totalSize: '', speed: '', eta: '计算中...' })
-
   const emit = () => {
     const elapsed = (Date.now() - startTime) / 1000
-    const speed = elapsed > 0 ? downloaded / elapsed : 0
-    report({
-      percent: total > 0 ? (downloaded / total) * 100 : 0,
-      totalSize: formatBytes(total),
+    const speed = elapsed > 0 ? (downloaded - resumed) / elapsed : 0
+    report({ percent: total > 0 ? downloaded / total * 100 : 0, totalSize: formatBytes(total),
       speed: speed > 0 ? `${formatBytes(speed)}/s` : '',
-      eta: speed > 0 && total > 0 ? formatEta((total - downloaded) / speed) : '',
-    })
+      eta: speed > 0 && total > 0 ? formatEta((total - downloaded) / speed) : '' })
   }
-
+  report({ percent: 0, totalSize: '', speed: '', eta: '计算中...' })
   const probe = await probeDirect(url, pageUrl, signal)
-  total = probe.total
+  signal.throwIfAborted()
+  total = probe.resource.total
   const tempPath = `${outputPath}.part`
+  const checkpointPath = `${tempPath}.json`
 
-  /** 单连接流式下载：遵守写入背压，避免大文件把内存撑爆 */
   async function singleStream() {
+    // 不支持 Range 的服务器无法安全续传，必须重新下载。
+    fs.rmSync(checkpointPath, { force: true })
     const res = await fetch(url, { headers: directHeaders(pageUrl), signal })
     if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}: ${res.statusText}`)
-    total = total || parseInt(res.headers.get('content-length') || '0')
-    const writer = fs.createWriteStream(tempPath)
-    try {
-      const reader = res.body.getReader()
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-        downloaded += value.length
-        if (!writer.write(value)) await new Promise(r => writer.once('drain', r))
-        emit()
-      }
-    } finally {
-      await new Promise<void>((resolve, reject) => writer.end((err?: Error | null) => err ? reject(err) : resolve()))
-    }
-  }
-
-  /** 多连接分段下载：CDN 常对单连接限速，分段并行可成倍提速 */
-  async function segmented() {
-    const segmentCount = Math.max(1, Math.min(DIRECT_SEGMENTS, Math.floor(total / DIRECT_MIN_SEGMENT)))
-    const segmentSize = Math.ceil(total / segmentCount)
+    total = parseInt(res.headers.get('content-length') || '0')
     const handle = await fs.promises.open(tempPath, 'w')
     try {
-      await handle.truncate(total)
-      await Promise.all(Array.from({ length: segmentCount }, async (_, i) => {
-        const start = i * segmentSize
-        const end = Math.min(total, start + segmentSize) - 1
-        let offset = start
-        for (let attempt = 0; ; attempt++) {
+      for await (const value of streamChunks(res.body)) {
+        await writeAll(handle, value, downloaded)
+        downloaded += value.length
+        emit()
+      }
+      signal.throwIfAborted()
+      if (total && downloaded !== total) throw new Error('下载数据不完整')
+    } finally { await handle.close() }
+  }
+
+  async function segmented() {
+    let state: DirectCheckpoint = { ...probe.resource, segments: createDirectSegments(total) }
+    let resume = false
+    try {
+      const saved: unknown = JSON.parse(fs.readFileSync(checkpointPath, 'utf8'))
+      if (canResumeDirect(saved, probe.resource, fs.statSync(tempPath).size)) { state = saved; resume = true }
+    } catch {}
+    const handle = await fs.promises.open(tempPath, resume ? 'r+' : 'w+')
+    const controller = new AbortController()
+    const abort = () => controller.abort(signal.reason)
+    signal.addEventListener('abort', abort, { once: true })
+    if (signal.aborted) abort()
+    try {
+      if (!resume) await handle.truncate(total)
+      downloaded = resumed = state.segments.reduce((sum, segment) => sum + segment.offset - segment.start, 0)
+      emit()
+      // 等待所有分段结束后才关闭文件、保存进度，避免暂停确认时还有写入。
+      const results = await Promise.allSettled(state.segments.map(async segment => {
+        for (let attempt = 0; segment.offset < segment.end; attempt++) {
           try {
-            const res = await fetch(url, { headers: directHeaders(pageUrl, { Range: `bytes=${offset}-${end}` }), signal })
-            if (res.status !== 206 || !res.body) throw new Error(`HTTP ${res.status}`)
-            const reader = res.body.getReader()
-            while (true) {
-              const { done, value } = await reader.read()
-              if (done) break
-              await handle.write(value, 0, value.length, offset)
-              offset += value.length
+            const extra: Record<string, string> = { Range: `bytes=${segment.offset}-${segment.end - 1}` }
+            const validator = state.etag && !state.etag.startsWith('W/') ? state.etag : state.lastModified
+            if (validator) extra['If-Range'] = validator
+            const res = await fetch(url, { headers: directHeaders(pageUrl, extra), signal: controller.signal })
+            if (res.status !== 206 || !res.body || !matchesDirectRange(res.headers.get('content-range'), segment.offset, segment.end, total)) {
+              await res.body?.cancel()
+              throw new Error('服务器未返回请求的下载范围')
+            }
+            for await (const value of streamChunks(res.body)) {
+              if (segment.offset + value.length > segment.end) throw new Error('分段数据超出请求范围')
+              await writeAll(handle, value, segment.offset)
+              segment.offset += value.length
               downloaded += value.length
               emit()
             }
-            if (offset <= end) throw new Error('分段数据不完整')
-            return
+            if (segment.offset !== segment.end) throw new Error('分段数据不完整')
           } catch (e) {
-            // 断点续传：从本段已写入的位置重试
-            if (signal.aborted || attempt >= DIRECT_RETRIES) throw e
-            await new Promise(r => setTimeout(r, 1000 * (attempt + 1)))
+            if (controller.signal.aborted || attempt >= DIRECT_RETRIES) {
+              controller.abort()
+              throw e
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)))
           }
         }
       }))
+      const failed = results.find(result => result.status === 'rejected')
+      if (failed?.status === 'rejected') throw failed.reason
+      signal.throwIfAborted()
     } finally {
-      await handle.close()
+      signal.removeEventListener('abort', abort)
+      try { await handle.sync() } finally { await handle.close() }
+      fs.writeFileSync(`${checkpointPath}.tmp`, JSON.stringify(state))
+      fs.renameSync(`${checkpointPath}.tmp`, checkpointPath)
     }
   }
 
-  try {
-    if (probe.rangeSupported && total >= DIRECT_MIN_SEGMENT * 2) await segmented()
-    else await singleStream()
-    fs.renameSync(tempPath, outputPath)
-  } catch (e) {
-    fs.rmSync(tempPath, { force: true })
-    throw e
-  }
-
+  if (probe.rangeSupported) await segmented()
+  else await singleStream()
+  signal.throwIfAborted()
+  fs.renameSync(tempPath, outputPath)
+  fs.rmSync(checkpointPath, { force: true })
   emit()
+}
+
+async function writeAll(handle: fs.promises.FileHandle, value: Uint8Array, position: number) {
+  let written = 0
+  while (written < value.length) {
+    const result = await handle.write(value, written, value.length - written, position + written)
+    if (!result.bytesWritten) throw new Error('文件写入失败')
+    written += result.bytesWritten
+  }
+}
+
+async function* streamChunks(body: ReadableStream<Uint8Array>) {
+  const reader = body.getReader()
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) return
+      yield value
+    }
+  } finally {
+    await reader.cancel().catch(() => {})
+    reader.releaseLock()
+  }
 }

@@ -7,7 +7,7 @@ import { parseWithYtdlp } from '../parsers/ytdlp'
 import { activeDownloads } from '../store'
 import { downloadDirectFile } from '../download/direct'
 import { runYtdlpDownload, pauseDownload } from '../download/ytdlp'
-import { sendDownloadProgress, throttledProgress } from '../download/progress'
+import { sendDownloadProgress, throttledProgress, clearProgressThrottle } from '../download/progress'
 import type { DownloadOptions } from '../download/ytdlp'
 
 /**
@@ -56,11 +56,14 @@ export function registerDownloadIpc() {
       const controller = new AbortController()
       let paused = false
 
-      activeDownloads.set(options.taskId, {
+      let finish!: () => void
+      const entry = {
         abort: () => { paused = true; controller.abort() },
+        stopped: new Promise<void>(resolve => { finish = resolve }),
         options,
         status: 'downloading',
-      })
+      }
+      activeDownloads.set(options.taskId, entry)
 
       try {
         await downloadDirectFile({
@@ -81,7 +84,11 @@ export function registerDownloadIpc() {
         if (paused) return { filePath: outputPath, paused: true }
         // 直链失败时回退到 yt-dlp：CDN 地址可能已过期
       } finally {
-        activeDownloads.delete(options.taskId)
+        if (activeDownloads.get(options.taskId) === entry) {
+          activeDownloads.delete(options.taskId)
+          clearProgressThrottle(options.taskId)
+        }
+        finish()
       }
     }
 

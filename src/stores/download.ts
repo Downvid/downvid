@@ -3,6 +3,7 @@ import { ref, computed } from 'vue'
 import type { VideoInfo, VideoFormat, DownloadTask, AudioFormat, AudioTrack } from '../types'
 import { useDepsStore, readMissingKinds, stripDepMarkers } from './deps'
 import { shouldIgnoreProgress, statusAfterResult, shouldRecordHistory } from './download-rules'
+import { readSettings } from './settings'
 
 /**
  * 把任意值转成"可被 structured clone"的普通数据。
@@ -76,6 +77,7 @@ export const useDownloadStore = defineStore('download', () => {
   const downloadDir = ref('')
   const pausedTasks = new Set<string>()
   const pauseRequests = new Map<string, Promise<unknown>>()
+  const taskExecutions = new Map<string, Promise<void>>()
   const taskProgressCleanups = new Map<string, () => void>()
 
   // Computed
@@ -186,9 +188,11 @@ export const useDownloadStore = defineStore('download', () => {
   async function resumeTask(task: DownloadTask) {
     // 前一次子进程完全退出后才能复用 taskId，避免旧调用清理新任务。
     await pauseRequests.get(task.id)
+    // 暂停 IPC 和下载结果是独立通道，旧结果与监听必须先完成收尾。
+    await taskExecutions.get(task.id)
     pauseRequests.delete(task.id)
     const idx = downloadTasks.value.findIndex(t => t.id === task.id)
-    if (idx === -1) return
+    if (idx === -1 || downloadTasks.value[idx].status !== 'paused') return
 
     // 必须先脱离 'downloading'：processDownload 开头的守卫会拒绝状态已是
     // downloading/merging 的任务，否则"继续下载"会被自己挡回去——任务被标成
@@ -198,7 +202,16 @@ export const useDownloadStore = defineStore('download', () => {
     processDownload(downloadTasks.value[idx])
   }
 
-  async function processDownload(task: DownloadTask) {
+  function processDownload(task: DownloadTask) {
+    if (taskExecutions.has(task.id)) return
+    const execution = executeDownload(task)
+    taskExecutions.set(task.id, execution)
+    void execution.finally(() => {
+      if (taskExecutions.get(task.id) === execution) taskExecutions.delete(task.id)
+    })
+  }
+
+  async function executeDownload(task: DownloadTask) {
     const taskIndex = downloadTasks.value.findIndex(t => t.id === task.id)
     if (taskIndex === -1) return
     if (downloadTasks.value[taskIndex].status === 'downloading' || downloadTasks.value[taskIndex].status === 'merging') return
@@ -360,6 +373,8 @@ export const useDownloadStore = defineStore('download', () => {
     }
 
     isDownloading.value = true
+    // 只更新新任务目录；暂停任务继续使用原目录，不能丢失已有片段。
+    downloadDir.value = readSettings().downloadDir || downloadDir.value
     const taskId = Date.now().toString()
 
     if (downloadMode.value === 'subtitle') {
