@@ -31,8 +31,9 @@ pnpm test:runtime:windows                       # Windows 原生 exe 集成回�
 pnpm test:download:integration                  # 本地 HTTP / 文件 / Store 下载集成回归
 pnpm test:acceleration                          # 加速基准；外部引擎见 docs/download-acceleration.md
 pnpm lint:ipc                                  # IPC 契约静态校验（三处同步 + 产物命名 + 仓库坐标一致）
+pnpm lint:icons                                # 图标名是否有效（写错会静默渲染成文字）
 pnpm deps:manifest:check                       # 依赖清单是否落后上游
-cd backend && gofmt -l . && go vet ./... && go test ./...   # Go 侧车
+cd backend && gofmt -l . && go vet ./... && go test -shuffle=on ./...   # Go 侧车
 pnpm build                                     # 端到端：vue-tsc + vite build + electron-builder
 ```
 
@@ -45,6 +46,20 @@ pnpm build                                     # 端到端：vue-tsc + vite buil
 - 新增测试请针对「曾经出过问题的分支」各留一个用例，**不追覆盖率数字**。
 - **写完必须做变异验证**：把被测逻辑改坏，确认用例会失败。不会失败的测试等于没有测试。
 - 前端纯逻辑单测刻意不引入 jsdom：`environment: 'node'`，见 `vitest.config.ts`。
+
+### CI 工作流分工
+
+测试按职责拆成独立 job（`.github/workflows/test.yml`），失败时一眼能看出是哪一层：
+
+| job | 内容 |
+| --- | --- |
+| `backend` | gofmt / vet / `go test -shuffle=on` / **5 平台交叉编译** |
+| `frontend` | 类型检查 / IPC 契约 / 图标名 / 纯逻辑单测 |
+| `integration` | 下载集成回归 / 加速基准（三平台）/ Windows 原生运行依赖回归 |
+| `build` | 依赖清单校验 / 构建 / 打包校验 / 清单与 Release 正文脚本自检 |
+
+**新增测试脚本必须挂到对应 job 上** —— 曾经 `test:acceleration` 加了脚本却没接进 CI，
+加速逻辑长期没有自动化验证。
 
 ### 关于格式化
 

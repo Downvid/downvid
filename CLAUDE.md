@@ -19,6 +19,7 @@ pnpm test:runtime:windows    # native Windows exe integration regression (requir
 pnpm test:download:integration # local HTTP/file/store integration regression
 pnpm test:acceleration      # acceleration benchmark; see docs/download-acceleration.md
 pnpm lint:ipc               # static check of the hand-maintained IPC wiring
+pnpm lint:icons             # icon names must be valid (a typo renders as literal text)
 pnpm deps:manifest:check    # is the dependency manifest behind upstream?
 pnpm build                  # vue-tsc && vite build && electron-builder (current platform)
 pnpm build:mac:arm64        # also :mac:x64 :win :linux:x64 :linux:arm64
