@@ -131,6 +131,17 @@ interface Window {
       speed?: number
       message?: string
     }) => void) => () => void
+    /** 后台刷新到新的贡献者列表时通知（避免界面停留在旧数据） */
+    onContributorsUpdated: (callback: (data: Array<{
+      login: string
+      avatarUrl: string
+      htmlUrl: string
+      contributions: number
+      isBot: boolean
+      isAI?: boolean
+      isDeveloper: boolean
+    }>) => void) => () => void
+
     // 菜单事件监听
     onMenuShowAbout: (callback: () => void) => () => void
     /** macOS 菜单里的「设置…」⌘, */

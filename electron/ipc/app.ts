@@ -3,6 +3,7 @@ import { APP } from '../constants'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fetchAllContributors } from '../utils/contributors'
+import { broadcast } from '../store'
 import { checkForUpdates, downloadUpdate, installUpdate } from '../updater'
 
 // 贡献者内存缓存
@@ -70,6 +71,9 @@ export function registerAppIpc() {
           contributorsCache = data
           contributorsCacheTime = Date.now()
           writeFileCache(data)
+          // 必须广播：否则界面拿到的还是本次返回的旧列表，用户要重启应用
+          // 才能看到新贡献者（文件缓存 TTL 有 7 天，等它自然过期更不现实）
+          broadcast('contributors:updated', data)
         })
         .catch(() => {})
 

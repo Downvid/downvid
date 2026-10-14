@@ -26,10 +26,10 @@
         </div>
       </div>
 
-      <!-- Description -->
-      <div class="bg-surface-container-low rounded-xl p-5 mb-6 border border-outline-variant/10">
-        <p class="text-sm text-on-surface-variant leading-relaxed">
-          DownVid 是一款开源的视频下载工具，基于 YT-DLP 开发，支持抖音、B站、YouTube 等多个平台的视频下载。
+      <!-- Description：一句话说明即可，详细能力在 README 与文档里 -->
+      <div class="bg-surface-container-low rounded-xl px-4 py-3 mb-6 border border-outline-variant/10">
+        <p class="text-xs text-on-surface-variant leading-relaxed">
+          开源视频下载工具，基于 yt-dlp，支持抖音、B站、YouTube 等平台。
         </p>
       </div>
 
@@ -62,40 +62,6 @@
           </div>
           <MaterialIcon name="arrow_forward_ios" :size="14" class="text-on-surface-variant" />
         </button>
-      </div>
-
-      <!-- Tech Stack -->
-      <div class="mb-6">
-        <h3 class="text-xs font-medium text-on-surface-variant uppercase tracking-wider mb-3">技术栈</h3>
-        <div class="flex flex-wrap gap-2">
-          <span
-            v-for="tech in techStack"
-            :key="tech.name"
-            class="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-surface-container-low rounded-lg text-on-surface border border-outline-variant/10"
-            :title="tech.note || tech.name"
-          >
-            <MaterialIcon v-if="tech.icon" :name="tech.icon" :size="14" class="text-on-surface-variant" />
-            {{ tech.name }}
-          </span>
-        </div>
-      </div>
-
-      <!-- 开源组件致谢：Material Symbols 是 Apache-2.0，随应用分发需保留声明 -->
-      <div class="mb-6">
-        <h3 class="text-xs font-medium text-on-surface-variant uppercase tracking-wider mb-3">开源组件</h3>
-        <div class="bg-surface-container-low rounded-xl p-4 border border-outline-variant/10 flex flex-col gap-2">
-          <div v-for="item in ossCredits" :key="item.name" class="flex items-baseline justify-between gap-3 text-xs">
-            <span class="text-on-surface">{{ item.name }}</span>
-            <span class="text-on-surface-variant text-right">
-              {{ item.license }}
-              <a
-                v-if="item.url"
-                class="text-tertiary hover:underline underline-offset-2 ml-1"
-                @click="openExternal(item.url)"
-              >主页</a>
-            </span>
-          </div>
-        </div>
       </div>
 
       <!-- Contributors -->
@@ -172,6 +138,40 @@
         </div>
       </div>
 
+      <!-- 开源组件致谢：Material Symbols 是 Apache-2.0，随应用分发需保留声明 -->
+      <div class="mb-6">
+        <h3 class="text-xs font-medium text-on-surface-variant uppercase tracking-wider mb-3">开源组件</h3>
+        <div class="bg-surface-container-low rounded-xl p-4 border border-outline-variant/10 flex flex-col gap-2">
+          <div v-for="item in ossCredits" :key="item.name" class="flex items-baseline justify-between gap-3 text-xs">
+            <span class="text-on-surface">{{ item.name }}</span>
+            <span class="text-on-surface-variant text-right">
+              {{ item.license }}
+              <a
+                v-if="item.url"
+                class="text-tertiary hover:underline underline-offset-2 ml-1"
+                @click="openExternal(item.url)"
+              >主页</a>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tech Stack -->
+      <div class="mb-6">
+        <h3 class="text-xs font-medium text-on-surface-variant uppercase tracking-wider mb-3">技术栈</h3>
+        <div class="flex flex-wrap gap-2">
+          <span
+            v-for="tech in techStack"
+            :key="tech.name"
+            class="flex items-center gap-1.5 text-xs px-3 py-1.5 bg-surface-container-low rounded-lg text-on-surface border border-outline-variant/10"
+            :title="tech.note || tech.name"
+          >
+            <MaterialIcon v-if="tech.icon" :name="tech.icon" :size="14" class="text-on-surface-variant" />
+            {{ tech.name }}
+          </span>
+        </div>
+      </div>
+
       <!-- License -->
       <div class="flex items-center justify-between py-4 border-t border-outline-variant/20">
         <div class="flex items-center gap-2">
@@ -223,7 +223,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import MaterialIcon from './icons/MaterialIcon.vue'
 import GitHubIcon from './icons/GitHubIcon.vue'
 import UpdateModal from './UpdateModal.vue'
@@ -297,14 +297,33 @@ async function loadContributors() {
   }
 }
 
+// 主进程会在后台静默刷新贡献者（首次返回的是本地缓存），
+// 刷新成功后通过广播推过来——不订阅的话，界面会一直停留在旧列表，
+// 用户得重启应用才能看到新贡献者。
+let unsubscribeContributors: (() => void) | null = null
+
 onMounted(async () => {
   try {
     const version = await window.electronAPI?.app?.getVersion?.()
     if (version) appVersion.value = version
   } catch {}
 
+  if (window.electronAPI?.onContributorsUpdated) {
+    unsubscribeContributors = window.electronAPI.onContributorsUpdated((data) => {
+      if (Array.isArray(data) && data.length) {
+        contributors.value = data as Contributor[]
+        contributorsWarning.value = ''
+      }
+    })
+  }
+
   // 加载贡献者
   loadContributors()
+})
+
+onUnmounted(() => {
+  unsubscribeContributors?.()
+  unsubscribeContributors = null
 })
 
 async function openExternal(url: string) {
