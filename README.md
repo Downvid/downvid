@@ -1,25 +1,13 @@
-<img src="https://socialify.git.ci/yxxbc/downvid/image?font=JetBrains+Mono&forks=1&issues=1&language=1&logo=https%3A%2F%2Fraw.githubusercontent.com%2Fyxxbc%2Fdownvid%2Fmain%2Fsrc%2Fassets%2Flogo.png&name=1&owner=1&pattern=Brick+Wall&pulls=1&stargazers=1&theme=Auto" alt="DownVid" width="100%" />
-
 <div align="center">
 
-# DownVid
-
-**现代化的开源视频下载工具 — 一键下载全网无水印高清视频**
+<img src="./docs/assets/readme-hero.svg" alt="DownVid — 开源跨平台视频下载工具" width="100%" />
 
 <p>
-  <a href="https://github.com/yxxbc/downvid/releases"><img src="https://img.shields.io/github/downloads/yxxbc/downvid/total?color=369eff&labelColor=black&logo=github&label=Downloads&style=for-the-badge" alt="Downloads" /></a>
-  <a href="https://github.com/yxxbc/downvid/releases/latest"><img src="https://img.shields.io/github/v/release/yxxbc/downvid?color=369eff&labelColor=black&logo=github&label=Release&style=for-the-badge" alt="Latest Release" /></a>
-  <a href="https://github.com/yxxbc/downvid/stargazers"><img src="https://img.shields.io/github/stars/yxxbc/downvid?color=ffcb2f&labelColor=black&logo=github&label=Stars&style=for-the-badge" alt="Stars" /></a>
-  <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue?labelColor=black&style=for-the-badge" alt="License" /></a>
+  <a href="https://github.com/yxxbc/downvid/stargazers">Stars</a>
+  · <a href="https://github.com/yxxbc/downvid/releases">Downloads</a>
+  · <a href="https://github.com/yxxbc/downvid/releases/latest">Latest Release</a>
+  · <a href="./LICENSE">MIT License</a>
 </p>
-
-
-
-<br />
-
-<img src="src/assets/screen.png" alt="DownVid Screenshot" width="98%" />
-
-<br />
 
 </div>
 
@@ -61,6 +49,10 @@
 **DownVid** 是一款现代化的开源视频下载工具，让你可以从抖音、小红书、B站、YouTube、Instagram 等网站下载无水印高清视频。
 
 基于 **Electron** 构建跨平台桌面应用，使用 **yt-dlp** 作为下载引擎，DownVid 提供了简洁直观的界面和强大的功能，满足你的所有下载需求。
+
+<p align="center">
+  <img src="src/assets/screen.png" alt="DownVid 实际应用界面预览" width="100%" />
+</p>
 
 > ⚠️ DownVid 目前正在积极开发中，欢迎反馈任何 [问题](https://github.com/yxxbc/downvid/issues)。
 
