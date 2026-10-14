@@ -101,6 +101,18 @@ git tag -d v1.3.0 && git push origin :refs/tags/v1.3.0
 
 为什么不直接用 electron-builder 各自生成的清单：5 个架构在各自 job 中构建，每个 job 都会产出一份 `latest*.yml` 并互相覆盖，最终清单与实际上传的文件对不上。因此 `release.yml` 的做法是——各 job 只上传产物与自己的清单，最后统一由该脚本按真实文件重新生成。
 
+## 发布后可选：补充外部徽章
+
+README 顶部目前有 Downloads / Release / Stars / License / Product Hunt。以下徽章需要**外部平台先满足条件**，
+不要提前加上去（会显示成破损图片）：
+
+| 徽章 | 条件 | 地址 |
+| --- | --- | --- |
+| [Trendshift](https://trendshift.io/repositories/180707) | 进入 Trendshift **Top 25** 后徽章 API 才会生成 | `https://trendshift.io/api/badge/repositories/180707` |
+
+判断方法：访问徽章地址，返回 **200** 说明已可用、**404** 说明还没生成
+（对照：已进榜的仓库返回 200）。加的时候同步更新 `README.md` 与 `README.zh-CN.md` 两份。
+
 ## 如何统计真实的下载量 / 装机量
 
 **不要用 release 资源下载量的总和**——它同时被三种因素放大，会得出严重偏高的结论：

@@ -5,11 +5,11 @@
     <td width="30%" align="center" valign="middle">
       <img src="src/assets/logo.png" alt="DownVid Logo" width="116" />
       <h1>DownVid</h1>
-      <p><strong>把喜欢的视频，轻松保存到本地。</strong></p>
-      <p>开源 · 跨平台 · 简洁易用</p>
+      <p><strong>Save the videos you like, locally.</strong></p>
+      <p>Open source · Cross-platform · Simple</p>
     </td>
     <td width="70%" align="center" valign="middle">
-      <img src="src/assets/screen.png" alt="DownVid 桌面应用界面预览" width="100%" />
+      <img src="src/assets/screen.png" alt="DownVid desktop app preview" width="100%" />
     </td>
   </tr>
 </table>
@@ -22,11 +22,19 @@
 </p>
 
 <p>
-  <a href="https://github.com/yxxbc/downvid/releases">下载 DownVid</a>
+  <a href="https://www.producthunt.com/products/github-460eee39-2e5c-447d-b207-531e944feebd?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-github-48115ca5-a95c-4dad-9887-1c9e47f4a589" target="_blank" rel="noopener noreferrer"><img alt="GitHub - Download the video | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1280091&amp;theme=light&amp;t=1791972383042"></a>
+</p>
+
+<p>
+  <a href="https://github.com/yxxbc/downvid/releases">Download</a>
   ·
-  <a href="https://github.com/yxxbc/downvid/issues">反馈问题</a>
+  <a href="https://github.com/yxxbc/downvid/issues">Report an issue</a>
   ·
-  <a href="./docs/installation.md">安装指南</a>
+  <a href="./docs/installation.md">Installation guide</a>
+</p>
+
+<p>
+  <a href="./README.zh-CN.md">简体中文</a> | <strong>English</strong>
 </p>
 
 </div>
@@ -34,172 +42,186 @@
 ---
 
 > [!IMPORTANT]
-> 本项目是 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 的图形界面封装，不包含破解或绕过技术保护措施的代码。请遵守当地法律法规、平台规则及内容版权要求，使用者需自行承担使用责任。
+> This project is a graphical front end for [yt-dlp](https://github.com/yt-dlp/yt-dlp). It contains no code for
+> cracking or circumventing technical protection measures. Please follow your local laws, platform terms and
+> copyright requirements; you are responsible for how you use it.
 
-## 目录
+## Contents
 
-- [项目简介](#项目简介)
-- [功能特性](#功能特性)
-- [支持的网站](#支持的网站)
-- [下载安装](#下载安装)
-- [从源码构建](#从源码构建)
-- [文档](#文档)
-- [技术栈与架构](#技术栈与架构)
-- [项目结构](#项目结构)
-- [常见问题](#常见问题)
-- [参与贡献](#参与贡献)
-- [Star History](#star-history)
-- [开源协议与致谢](#开源协议与致谢)
+- [About](#about)
+- [Features](#features)
+- [Supported sites](#supported-sites)
+- [Install](#install)
+- [Build from source](#build-from-source)
+- [Documentation](#documentation)
+- [Tech stack and architecture](#tech-stack-and-architecture)
+- [Project layout](#project-layout)
+- [FAQ](#faq)
+- [Contributing](#contributing)
+- [Star history](#star-history)
+- [License and credits](#license-and-credits)
 
-## 项目简介
+## About
 
-**DownVid** 是一款面向 macOS、Windows 和 Linux 的开源桌面视频下载工具。它使用 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 作为下载引擎，并通过简洁的图形界面降低使用门槛。
+**DownVid** is an open-source desktop video downloader for macOS, Windows and Linux. It uses
+[yt-dlp](https://github.com/yt-dlp/yt-dlp) as its download engine and puts a clean graphical interface on top,
+so you don't have to remember command-line flags.
 
-项目仍在积极开发中。遇到问题或有功能建议，欢迎提交 [Issue](https://github.com/yxxbc/downvid/issues)。
+The project is under active development. If you hit a problem or have a suggestion, please
+[open an issue](https://github.com/yxxbc/downvid/issues).
 
-## 功能特性
+## Features
 
-| 功能 | 说明 |
+| Feature | Description |
 | --- | --- |
-| 多平台解析 | 基于 yt-dlp 支持 1000+ 个视频和音频网站；抖音、快手另有专属解析器 |
-| 清晰度与格式 | 支持 360P 至 4K、仅音频（MP3）、仅字幕（SRT）及 YouTube 多音轨选择 |
-| 下载管理 | 队列管理、暂停、恢复、重试、下载进度、速度、剩余时间与文件大小 |
-| 下载加速 | 直链使用小块工作队列（默认 8 路、上限 16 路），可选 aria2 多连接；HLS/DASH 分片并发 |
-| 登录内容 | 支持读取已安装浏览器的登录状态，也可以手动导入 `cookies.txt` |
-| 运行依赖管理 | 自动识别系统中的 yt-dlp / FFmpeg；缺失时可以在应用内下载 |
-| 下载历史 | 自动保存最近 100 条下载记录 |
-| 自动更新 | 通过 GitHub Releases 更新；macOS 使用应用内校验与替换流程 |
+| Wide site support | 1000+ video and audio sites via yt-dlp; Douyin and Kuaishou have dedicated parsers |
+| Quality and formats | 360P through 4K, audio-only (MP3), subtitles-only (SRT), YouTube multi-audio-track selection |
+| Download management | Queue, pause, resume, retry, live progress with speed, ETA and file size |
+| Download acceleration | Direct links use a small-chunk worker queue (8 by default, up to 16); optional aria2 multi-connection; concurrent HLS/DASH fragments |
+| Logged-in content | Reads cookies from installed browsers, or import a `cookies.txt` manually |
+| Runtime dependencies | Detects yt-dlp / FFmpeg already on your machine; downloads them in-app if missing |
+| Download history | Keeps the last 100 downloads |
+| Auto update | Updates through GitHub Releases; macOS verifies and swaps the app bundle in place |
 
-## 支持的网站
+## Supported sites
 
-DownVid 通过 yt-dlp 支持 **1000+ 个**视频和音频网站。以下是常见平台示例：
+DownVid supports **1000+** video and audio sites through yt-dlp. A few common ones:
 
-| 国内平台 | 国际平台 |
+| China | International |
 | --- | --- |
-| 抖音、小红书、快手、西瓜视频、哔哩哔哩（B 站） | YouTube、TikTok、Instagram、X（Twitter）、Facebook |
+| Douyin, Xiaohongshu, Kuaishou, Xigua, Bilibili | YouTube, TikTok, Instagram, X (Twitter), Facebook |
 
-其他网站请参考 [yt-dlp 支持的网站列表](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md)。平台可用性可能随网站变化而变化。
+For everything else see the [yt-dlp supported sites list](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md).
+Availability can change as sites change.
 
-## 下载安装
+## Install
 
-前往 [**GitHub Releases**](https://github.com/yxxbc/downvid/releases) 下载最新版本，并按操作系统选择对应安装包。
+Download the latest build from [**GitHub Releases**](https://github.com/yxxbc/downvid/releases) and pick the
+package for your OS.
 
-| 平台 | 安装包 |
+| Platform | Package |
 | --- | --- |
-| macOS | `.dmg`（ARM64 / x64） |
-| Windows | `.exe`（x64） |
-| Linux | `.AppImage` / `.deb`（x64 / ARM64，具体产物以 Release 页面为准） |
+| macOS | `.dmg` (ARM64 / x64) |
+| Windows | `.exe` (x64) |
+| Linux | `.AppImage` / `.deb` (x64 / ARM64; check the Release page for the exact artifacts) |
 
-安装步骤与常见问题见 [安装指南](./docs/installation.md)。
+Step-by-step instructions and common issues are in the [installation guide](./docs/installation.md).
 
-## 从源码构建
+## Build from source
 
-### 环境要求
+### Requirements
 
 - Node.js ≥ 22
 - pnpm ≥ 8
 - Go ≥ 1.24
 
-yt-dlp 和 FFmpeg **无需预先安装**。运行时会优先探测并复用系统已有版本；缺失时可在应用内下载安装。
+yt-dlp and FFmpeg do **not** need to be installed beforehand. At runtime DownVid detects and reuses whatever
+is already on your machine, and can download them in-app when missing.
 
-### 构建步骤
+### Steps
 
 ```bash
 git clone https://github.com/yxxbc/downvid.git
 cd downvid
 pnpm install
-pnpm dev       # 开发模式
-pnpm build     # 构建当前平台安装包
+pnpm dev       # development
+pnpm build     # package for the current platform
 ```
 
-更多平台构建命令、依赖说明及排错步骤请查看 [从源码构建指南](./docs/build-from-source.md)。
+Per-platform build commands, dependency notes and troubleshooting are in the
+[build from source guide](./docs/build-from-source.md).
 
-## 文档
+## Documentation
 
-| 文档 | 内容 |
+| Document | Contents |
 | --- | --- |
-| [安装指南](./docs/installation.md) | macOS、Windows、Linux 的安装说明 |
-| [从源码构建](./docs/build-from-source.md) | 开发环境、依赖与构建流程 |
-| [故障排除](./docs/troubleshooting.md) | 常见错误与排查步骤 |
-| [常见问题（FAQ）](./docs/faq.md) | 使用问题与解答 |
-| [架构说明](./docs/architecture.html) | 进程结构、IPC 通信与下载流程 |
-| [项目结构](./docs/project-structure.md) | 目录说明与代码维护位置 |
-| [仓库规范](./docs/standards.md) | 分支、提交、Issue 与 PR 规范 |
-| [发布流程](./docs/release.md) | 版本与发布产物维护 |
-| [贡献指南](./CONTRIBUTING.md) | 如何参与项目开发 |
-| [安全政策](./SECURITY.md) | 安全问题的报告方式与处理范围 |
-| [贡献者行为准则](./CODE_OF_CONDUCT.md) | 社区参与规范 |
+| [Installation](./docs/installation.md) | Install instructions for macOS, Windows and Linux |
+| [Build from source](./docs/build-from-source.md) | Development environment, dependencies and build flow |
+| [Troubleshooting](./docs/troubleshooting.md) | Common errors and how to diagnose them |
+| [FAQ](./docs/faq.md) | Usage questions and answers |
+| [Architecture](./docs/architecture.html) | Process structure, IPC and download flow |
+| [Project structure](./docs/project-structure.md) | Directory guide and where to make changes |
+| [Repository standards](./docs/standards.md) | Branch, commit, issue and PR conventions |
+| [Release process](./docs/release.md) | Versioning and release artifact maintenance |
+| [Contributing](./CONTRIBUTING.md) | How to contribute |
+| [Security policy](./SECURITY.md) | How to report security issues |
+| [Code of conduct](./CODE_OF_CONDUCT.md) | Community expectations |
 
-## 技术栈与架构
+> The in-depth docs are currently written in Chinese. Contributions that translate them are very welcome.
 
-### 技术栈
+## Tech stack and architecture
 
-| 技术 | 用途 |
+### Tech stack
+
+| Technology | Purpose |
 | --- | --- |
-| [Electron](https://www.electronjs.org/) | 跨平台桌面应用框架 |
-| [Vue 3](https://vuejs.org/) | 用户界面 |
-| [TypeScript](https://www.typescriptlang.org/) | 类型安全 |
-| [Tailwind CSS](https://tailwindcss.com/) | 界面样式 |
-| [Vite](https://vitejs.dev/) | 开发与构建 |
-| [Pinia](https://pinia.vuejs.org/) | 状态管理 |
-| [Go](https://go.dev/) | 探测与安装 yt-dlp / FFmpeg 的依赖边车 |
-| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | 视频与音频解析引擎 |
-| [FFmpeg](https://ffmpeg.org/) | 音视频合并与转码 |
-| [Vitest](https://vitest.dev/) | 纯逻辑单元测试 |
+| [Electron](https://www.electronjs.org/) | Cross-platform desktop shell |
+| [Vue 3](https://vuejs.org/) | User interface |
+| [TypeScript](https://www.typescriptlang.org/) | Type safety |
+| [Tailwind CSS](https://tailwindcss.com/) | Styling |
+| [Vite](https://vitejs.dev/) | Development and build |
+| [Pinia](https://pinia.vuejs.org/) | State management |
+| [Go](https://go.dev/) | Dependency sidecar that detects and installs yt-dlp / FFmpeg |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Video and audio extraction engine |
+| [FFmpeg](https://ffmpeg.org/) | Merging and transcoding |
+| [Vitest](https://vitest.dev/) | Pure-logic unit tests |
 
-### 架构概览
+### Architecture overview
 
 ```mermaid
 flowchart LR
-    UI["渲染进程<br/>Vue 3"] <-->|"IPC"| Main["主进程<br/>Electron / Node.js"]
-    Main <-->|"NDJSON"| Sidecar["Go 依赖边车"]
+    UI["Renderer<br/>Vue 3"] <-->|"IPC"| Main["Main process<br/>Electron / Node.js"]
+    Main <-->|"NDJSON"| Sidecar["Go dependency sidecar"]
     Main --> Engine["yt-dlp"]
     Main --> Media["FFmpeg"]
 ```
 
-交互式架构图及详细说明见 [架构文档](./docs/architecture.html)。
+An interactive diagram with more detail is in the [architecture doc](./docs/architecture.html).
 
-## 项目结构
+## Project layout
 
-| 目录 | 作用 |
+| Directory | Purpose |
 | --- | --- |
-| `backend/` | Go 依赖边车，探测并安装运行依赖 |
-| `electron/` | 主进程、IPC、下载实现、平台解析器与更新逻辑 |
-| `src/` | Vue 3 渲染进程与界面 |
-| `shared/` | 仓库坐标与外部链接的共享定义 |
-| `tests/` | 自动化单元测试 |
-| `scripts/` | 构建、清单生成及校验脚本 |
-| `docs/` | 安装、构建、架构、维护与发布文档 |
+| `backend/` | Go dependency sidecar: detects and installs runtime dependencies |
+| `electron/` | Main process, IPC, download implementations, site parsers, updater |
+| `src/` | Vue 3 renderer and UI |
+| `shared/` | Repository coordinates and shared external links |
+| `tests/` | Automated unit tests |
+| `scripts/` | Build, manifest generation and validation scripts |
+| `docs/` | Installation, build, architecture, maintenance and release docs |
 
-完整目录说明见 [项目结构文档](./docs/project-structure.md)。
+See the [project structure doc](./docs/project-structure.md) for the full tree.
 
-## 常见问题
+## FAQ
 
 <details>
-<summary><strong>提示缺少 yt-dlp 或 FFmpeg，怎么办？</strong></summary>
+<summary><strong>It says yt-dlp or FFmpeg is missing. What now?</strong></summary>
 
-安装包不会预置这两个工具。应用启动时会先探测系统中的可用版本；若未找到，可在提示窗口中下载安装，或前往「设置 → 运行依赖」管理。
+The installer does not bundle them. DownVid looks for a usable copy already on your system at startup; if it
+cannot find one, you can download it from the prompt, or manage it later under Settings → Runtime dependencies.
 </details>
 
 <details>
-<summary><strong>macOS 提示无法验证开发者，怎么办？</strong></summary>
+<summary><strong>macOS says the developer cannot be verified. What now?</strong></summary>
 
-首次打开时，可在 Finder 中右键点击应用并选择「打开」，或前往「系统设置 → 隐私与安全性」确认打开。若仍遇到问题，请参考 [故障排除指南](./docs/troubleshooting.md)。
+The first time you open it, right-click the app in Finder and choose **Open**, or allow it under
+System Settings → Privacy & Security. If it still fails, see the [troubleshooting guide](./docs/troubleshooting.md).
 </details>
 
 <details>
-<summary><strong>某些视频下载失败，怎么办？</strong></summary>
+<summary><strong>Some videos fail to download. What now?</strong></summary>
 
-部分网站要求用户登录。请确认你有权访问该内容，并尝试在设置中读取浏览器登录状态或导入 `cookies.txt`。网站变更也可能影响解析成功率。
+Many sites require you to be signed in. Make sure you are allowed to access the content, then let DownVid read
+your browser session or import a `cookies.txt`. Site changes can also affect extraction success.
 </details>
 
-更多问题见 [FAQ](./docs/faq.md) 与 [故障排除指南](./docs/troubleshooting.md)。
+More in the [FAQ](./docs/faq.md) and [troubleshooting guide](./docs/troubleshooting.md).
 
-## 参与贡献
+## Contributing
 
-欢迎提交 Issue、改进文档或发起 Pull Request。
+Issues, documentation improvements and pull requests are all welcome.
 
-提交前建议运行：
+Before submitting, please run:
 
 ```bash
 pnpm vue-tsc --noEmit
@@ -207,9 +229,9 @@ pnpm test
 pnpm lint:ipc
 ```
 
-更多流程请查看 [贡献指南](./CONTRIBUTING.md) 和 [仓库规范](./docs/standards.md)。
+See the [contributing guide](./CONTRIBUTING.md) and [repository standards](./docs/standards.md) for the rest.
 
-## Star History
+## Star history
 
 <a href="https://www.star-history.com/?repos=yxxbc%2Fdownvid&type=date&legend=bottom-right">
   <picture>
@@ -219,28 +241,30 @@ pnpm lint:ipc
   </picture>
 </a>
 
-## 开源协议与致谢
+## License and credits
 
-DownVid 基于 [MIT License](./LICENSE) 开源。
+DownVid is released under the [MIT License](./LICENSE).
 
-DownVid 最初基于 [Videdown](https://github.com/cshuangyy/videdown) 开发，之后经过了大量修改、重构与功能扩展。感谢原作者 cshuangyy 的开源工作；原项目的版权与许可声明保留在 [LICENSE](./LICENSE) 中。
+DownVid started from [Videdown](https://github.com/cshuangyy/videdown) and has since been substantially
+modified, refactored and extended. Thanks to cshuangyy for the original work; the original copyright and
+license notice is preserved in [LICENSE](./LICENSE).
 
-感谢社区贡献者与项目依赖的维护者：
+Thanks also to the community contributors and to the maintainers of the projects we depend on:
 
-- [Videdown](https://github.com/cshuangyy/videdown) — 原始项目
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) — 下载解析引擎
-- [FFmpeg](https://ffmpeg.org/) — 音视频处理
-- [Electron](https://www.electronjs.org/) · [Vue.js](https://vuejs.org/) · [Tailwind CSS](https://tailwindcss.com/) — 应用开发技术
-- [Claude Code](https://www.anthropic.com/claude) — AI 编程助手
+- [Videdown](https://github.com/cshuangyy/videdown) — the original project
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) — extraction engine
+- [FFmpeg](https://ffmpeg.org/) — audio and video processing
+- [Electron](https://www.electronjs.org/) · [Vue.js](https://vuejs.org/) · [Tailwind CSS](https://tailwindcss.com/) — app stack
+- [Claude Code](https://www.anthropic.com/claude) — AI coding assistant
 
-### 支持项目
+### Supporting the project
 
-如果 DownVid 对你有帮助，欢迎请作者喝杯咖啡。微信赞赏码：
+If DownVid is useful to you, you can buy the author a coffee. WeChat tip code:
 
 <details>
-<summary>展开赞赏码</summary>
+<summary>Show tip code</summary>
 
-<img src="src/assets/donate.jpg" alt="微信赞赏码" width="240" />
+<img src="src/assets/donate.jpg" alt="WeChat tip code" width="240" />
 </details>
 
 ---
