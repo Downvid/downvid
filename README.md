@@ -67,7 +67,7 @@
 | 清晰度与格式 | 支持 360P 至 4K、仅音频（MP3）、仅字幕（SRT）及 YouTube 多音轨选择 |
 | 下载管理 | 队列管理、暂停、恢复、重试、下载进度、速度、剩余时间与文件大小 |
 | 分段下载 | 直链支持多连接分段下载；HLS/DASH 支持分片并发下载 |
-| 登录内容 | 支持读取已安装浏览器的登录状态，也可以手动导入 \`cookies.txt\` |
+| 登录内容 | 支持读取已安装浏览器的登录状态，也可以手动导入 `cookies.txt` |
 | 运行依赖管理 | 自动识别系统中的 yt-dlp / FFmpeg；缺失时可以在应用内下载 |
 | 下载历史 | 自动保存最近 100 条下载记录 |
 | 自动更新 | 通过 GitHub Releases 更新；macOS 使用应用内校验与替换流程 |
@@ -88,9 +88,9 @@ DownVid 通过 yt-dlp 支持 **1000+ 个**视频和音频网站。以下是常�
 
 | 平台 | 安装包 |
 | --- | --- |
-| macOS | \`.dmg\`（ARM64 / x64） |
-| Windows | \`.exe\`（x64） |
-| Linux | \`.AppImage\` / \`.deb\`（x64 / ARM64，具体产物以 Release 页面为准） |
+| macOS | `.dmg`（ARM64 / x64） |
+| Windows | `.exe`（x64） |
+| Linux | `.AppImage` / `.deb`（x64 / ARM64，具体产物以 Release 页面为准） |
 
 安装步骤与常见问题见 [安装指南](./docs/installation.md)。
 
@@ -106,13 +106,13 @@ yt-dlp 和 FFmpeg **无需预先安装**。运行时会优先探测并复用系�
 
 ### 构建步骤
 
-\`\`\`bash
+```bash
 git clone https://github.com/yxxbc/downvid.git
 cd downvid
 pnpm install
 pnpm dev       # 开发模式
 pnpm build     # 构建当前平台安装包
-\`\`\`
+```
 
 更多平台构建命令、依赖说明及排错步骤请查看 [从源码构建指南](./docs/build-from-source.md)。
 
@@ -151,13 +151,13 @@ pnpm build     # 构建当前平台安装包
 
 ### 架构概览
 
-\`\`\`mermaid
+```mermaid
 flowchart LR
     UI["渲染进程<br/>Vue 3"] <-->|"IPC"| Main["主进程<br/>Electron / Node.js"]
     Main <-->|"NDJSON"| Sidecar["Go 依赖边车"]
     Main --> Engine["yt-dlp"]
     Main --> Media["FFmpeg"]
-\`\`\`
+```
 
 交互式架构图及详细说明见 [架构文档](./docs/architecture.html)。
 
@@ -165,13 +165,13 @@ flowchart LR
 
 | 目录 | 作用 |
 | --- | --- |
-| \`backend/\` | Go 依赖边车，探测并安装运行依赖 |
-| \`electron/\` | 主进程、IPC、下载实现、平台解析器与更新逻辑 |
-| \`src/\` | Vue 3 渲染进程与界面 |
-| \`shared/\` | 仓库坐标与外部链接的共享定义 |
-| \`tests/\` | 自动化单元测试 |
-| \`scripts/\` | 构建、清单生成及校验脚本 |
-| \`docs/\` | 安装、构建、架构、维护与发布文档 |
+| `backend/` | Go 依赖边车，探测并安装运行依赖 |
+| `electron/` | 主进程、IPC、下载实现、平台解析器与更新逻辑 |
+| `src/` | Vue 3 渲染进程与界面 |
+| `shared/` | 仓库坐标与外部链接的共享定义 |
+| `tests/` | 自动化单元测试 |
+| `scripts/` | 构建、清单生成及校验脚本 |
+| `docs/` | 安装、构建、架构、维护与发布文档 |
 
 完整目录说明见 [项目结构文档](./docs/project-structure.md)。
 
@@ -192,7 +192,7 @@ flowchart LR
 <details>
 <summary><strong>某些视频下载失败，怎么办？</strong></summary>
 
-部分网站要求用户登录。请确认你有权访问该内容，并尝试在设置中读取浏览器登录状态或导入 \`cookies.txt\`。网站变更也可能影响解析成功率。
+部分网站要求用户登录。请确认你有权访问该内容，并尝试在设置中读取浏览器登录状态或导入 `cookies.txt`。网站变更也可能影响解析成功率。
 </details>
 
 更多问题见 [FAQ](./docs/faq.md) 与 [故障排除指南](./docs/troubleshooting.md)。
@@ -203,11 +203,11 @@ flowchart LR
 
 提交前建议运行：
 
-\`\`\`bash
+```bash
 pnpm vue-tsc --noEmit
 pnpm test
 pnpm lint:ipc
-\`\`\`
+```
 
 更多流程请查看 [贡献指南](./CONTRIBUTING.md) 和 [仓库规范](./docs/standards.md)。
 
