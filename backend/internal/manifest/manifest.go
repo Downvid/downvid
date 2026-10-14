@@ -63,9 +63,6 @@ func nodeArch(goarch string) string {
 	}
 }
 
-// GoPlatform 便于排查时展示真实的 GOOS/GOARCH
-func GoPlatform() string { return goruntime.GOOS + "/" + goruntime.GOARCH }
-
 // Tasks 生成当前平台的下载任务；only 为空表示全部依赖。
 func Tasks(managedDir string, only []string) ([]fetch.Task, error) {
 	return TasksFor(CurrentPlatform(), managedDir, only)

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -97,8 +98,11 @@ func runDetect(args []string) {
 	results := rt.FindAll(opts)
 
 	payload := map[string]any{
-		"event":      "detect",
-		"platform":   manifest.CurrentPlatform(),
+		"event":    "detect",
+		"platform": manifest.CurrentPlatform(),
+		// 同时给出 Go 的命名，便于排查"平台键对不上资产表"这类问题
+		// （曾经因此让所有 x64 平台的依赖下载失效，见 issue #40）
+		"goPlatform": runtime.GOOS + "/" + runtime.GOARCH,
 		"managedDir": *managedDir,
 		"results":    results,
 	}
