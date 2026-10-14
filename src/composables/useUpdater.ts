@@ -1,6 +1,7 @@
 import { ref, computed, onUnmounted, watch } from 'vue'
 import { marked } from 'marked'
 import { RELEASES_URL } from '../../shared/app'
+import { t } from '../i18n'
 
 /**
  * 应用内更新的状态机。
@@ -89,9 +90,9 @@ export function useUpdater(options: UseUpdaterOptions) {
   const errorPhase = ref<UpdateErrorPhase>('check')
 
   const errorTitle = computed(() => ({
-    check: '检查失败',
-    download: '下载失败',
-    install: '安装失败',
+    check: t('update.errCheck'),
+    download: t('update.errDownload'),
+    install: t('update.errInstall'),
   })[errorPhase.value])
 
   let unsubscribe: (() => void) | null = null
@@ -135,33 +136,33 @@ export function useUpdater(options: UseUpdaterOptions) {
         currentVersion.value = result?.currentVersion || currentVersion.value
       }
     } catch {
-      fail('check', '检查更新失败，请检查网络连接')
+      fail('check', t('update.errCheckNetwork'))
     }
   }
 
   async function downloadUpdate() {
     status.value = 'downloading'
     downloadPercent.value = 0
-    downloadSpeed.value = '准备下载...'
+    downloadSpeed.value = t('update.preparing')
     try {
       const result = await window.electronAPI?.downloadUpdate?.()
       if (result && !result.success) {
-        fail('download', result.error || '下载更新失败')
+        fail('download', result.error || t('update.errDownload'))
       } else if (status.value === 'downloading') {
         // 不依赖 update:status 事件，下载完成即进入可安装状态
         status.value = 'downloaded'
       }
     } catch {
-      fail('download', '下载更新失败')
+      fail('download', t('update.errDownload'))
     }
   }
 
   async function installUpdate() {
     try {
       const result = await window.electronAPI?.installUpdate?.()
-      if (result && !result.success) fail('install', result.error || '安装更新失败')
+      if (result && !result.success) fail('install', result.error || t('update.errInstall'))
     } catch {
-      fail('install', '安装更新失败')
+      fail('install', t('update.errInstall'))
     }
   }
 
@@ -193,7 +194,7 @@ export function useUpdater(options: UseUpdaterOptions) {
           break
         case 'error':
           // 下载中报错应归类为 download 阶段，否则重试按钮会跳回检查
-          fail(status.value === 'downloading' ? 'download' : errorPhase.value, data.message || '更新失败')
+          fail(status.value === 'downloading' ? 'download' : errorPhase.value, data.message || t('update.errGeneric'))
           break
       }
     }) ?? null

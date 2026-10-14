@@ -83,13 +83,15 @@ describe('DepPanel 源码约束', () => {
   it('「更新」按钮必须走 isOutdated，而不是只看 managed', () => {
     // 回归防线：早先「更新」按钮的条件就是 v-else-if="dep.managed"，
     // 与版本无关，于是版本一致时也显示更新。
-    expect(src).toMatch(/v-else-if="isOutdated\(dep\)"[\s\S]{0,400}?>更新</)
+    // 文案已迁到 i18n（t('deps.update')），所以这里断言**词条键**而不是中文字面量：
+    // 断言字面量会在切换语言时假失败，断言键才能一直守住这条契约。
+    expect(src).toMatch(/v-else-if="isOutdated\(dep\)"[\s\S]{0,400}?t\('deps\.update'\)/)
     // managed 仍可用于「已是最新」这类纯展示，但不得再作为「更新」按钮的条件
     const managedBranches = [...src.matchAll(/v-else-if="dep\.managed"[^>]*>([^<]*)</g)].map((m) => m[1].trim())
-    expect(managedBranches).not.toContain('更新')
+    expect(managedBranches).not.toContain("t('deps.update')")
   })
 
   it('版本一致时应显示「已是最新」而不是空白', () => {
-    expect(src).toContain('已是最新')
+    expect(src).toContain("t('deps.upToDate')")
   })
 })

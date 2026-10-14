@@ -2,6 +2,7 @@ import { ref, computed } from 'vue'
 import { defineStore } from 'pinia'
 import type { DepKind, DepStatus, DepsProgress, RuntimeStatus } from '../types/deps'
 import { readSettings } from './settings'
+import { t } from '../i18n'
 
 /**
  * 去掉错误信息里的依赖标记与 Electron 的 IPC 前缀，只留给人看的部分。
@@ -83,7 +84,7 @@ export const useDepsStore = defineStore('deps', () => {
     return Math.min(100, (downloaded.value / total.value) * 100)
   })
   const sizeText = computed(() => {
-    if (!total.value) return formatBytes(downloaded.value) ? `已下载 ${formatBytes(downloaded.value)}` : ''
+    if (!total.value) return formatBytes(downloaded.value) ? t('deps.downloadedSize', { size: formatBytes(downloaded.value) }) : ''
     return `${formatBytes(downloaded.value)} / ${formatBytes(total.value)}`
   })
 
@@ -99,7 +100,7 @@ export const useDepsStore = defineStore('deps', () => {
           downloaded.value = 0
           total.value = 0
           transferring.value = true
-          notice.value = `正在下载 ${data.tool}...`
+          notice.value = t('depsPrompt.downloading', { tool: data.tool })
           break
         case 'progress':
           if (data.tool && data.tool !== activeTool.value) {
@@ -111,17 +112,17 @@ export const useDepsStore = defineStore('deps', () => {
           transferring.value = true
           break
         case 'retry':
-          notice.value = data.message ? `${data.tool}：${data.message}` : '网络不稳定，正在重试...'
+          notice.value = data.message ? `${data.tool}: ${data.message}` : t('deps.retrying')
           break
         case 'installed':
           transferring.value = false
-          notice.value = `${data.tool} 安装完成`
+          notice.value = t('deps.installedNotice', { tool: data.tool })
           break
         case 'warn':
           notice.value = data.message || ''
           break
         case 'error':
-          error.value = data.message || '依赖下载失败'
+          error.value = data.message || t('deps.downloadFailed')
           transferring.value = false
           break
       }
@@ -145,7 +146,7 @@ export const useDepsStore = defineStore('deps', () => {
         error.value = res.error
       }
     } catch (e: any) {
-      error.value = e?.message || '依赖检测失败'
+      error.value = e?.message || t('deps.checkFailed')
     } finally {
       checking.value = false
     }
@@ -173,16 +174,16 @@ export const useDepsStore = defineStore('deps', () => {
       })
       if (res.success && res.status) {
         status.value = res.status
-        notice.value = '依赖已就绪'
+        notice.value = t('deps.readyNotice')
         // 下载成功后关闭引导弹窗：用户原本要做的操作现在可以继续了
         promptVisible.value = false
         promptKinds.value = []
         return true
       }
-      error.value = res.error || '依赖下载失败'
+      error.value = res.error || t('deps.downloadFailed')
       return false
     } catch (e: any) {
-      error.value = e?.message || '依赖下载失败'
+      error.value = e?.message || t('deps.downloadFailed')
       return false
     } finally {
       downloading.value = false

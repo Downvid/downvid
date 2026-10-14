@@ -17,7 +17,7 @@
         <div class="relative bg-surface-container rounded-xl shadow-2xl border border-outline-variant/20 w-full max-w-3xl h-[80vh] max-h-[720px] flex flex-col overflow-hidden">
           <!-- Header -->
           <div class="flex items-center justify-between px-6 py-4 border-b border-outline-variant/15">
-            <h2 class="font-headline text-lg font-bold text-on-surface">设置</h2>
+            <h2 class="font-headline text-lg font-bold text-on-surface">{{ t('settings.title') }}</h2>
             <button class="p-2 rounded-lg hover:bg-surface-container-highest transition-colors" @click="close">
               <MaterialIcon name="close" :size="20" class="text-on-surface-variant" />
             </button>
@@ -43,8 +43,24 @@
             <div class="flex-1 overflow-y-auto px-6 py-5">
               <!-- 下载设置 -->
               <div v-show="activeSection === 'download'" class="flex flex-col gap-5">
+                <!-- 界面语言：放在第一个分区的最上面——海外用户装上应用第一件事
+                     就是找它，藏进二级面板等于没做。 -->
                 <div class="flex flex-col gap-2">
-                  <label class="text-sm font-medium text-on-surface">默认下载目录</label>
+                  <label class="text-sm font-medium text-on-surface">{{ t('settings.language') }}</label>
+                  <select
+                    v-model="settings.language"
+                    class="px-3 py-2 bg-surface-container-highest border border-outline-variant/20 rounded-md text-sm text-on-surface focus:outline-hidden focus:border-primary/40"
+                    @change="onLanguageChange"
+                  >
+                    <option value="auto">{{ t('settings.languageAuto') }}</option>
+                    <option value="zh-CN">简体中文</option>
+                    <option value="en-US">English</option>
+                  </select>
+                  <p class="text-[11px] text-on-surface-variant">{{ t('settings.languageHint') }}</p>
+                </div>
+
+                <div class="flex flex-col gap-2">
+                  <label class="text-sm font-medium text-on-surface">{{ t('settings.downloadDir') }}</label>
                   <div class="flex gap-2">
                     <input 
                       :value="abbreviatePath(settings.downloadDir)"
@@ -57,24 +73,24 @@
                       class="px-4 py-2 bg-surface-container-highest text-on-surface rounded-md text-sm font-medium hover:bg-surface-variant transition-colors border border-outline-variant/20"
                       @click="selectDownloadDir"
                     >
-                      选择
+                      {{ t('common.select') }}
                     </button>
                   </div>
                 </div>
 
                 <div class="flex flex-col gap-2">
-                  <label class="text-sm font-medium text-on-surface">文件名模板</label>
+                  <label class="text-sm font-medium text-on-surface">{{ t('settings.filenameTemplate') }}</label>
                   <input 
                     v-model="settings.filenameTemplate"
                     type="text"
                     class="px-3 py-2 bg-surface-container-highest border border-outline-variant/20 rounded-md text-sm text-on-surface focus:outline-hidden focus:border-primary/40 font-mono"
                     placeholder="%(title)s.%(ext)s"
                   />
-                  <p class="text-[11px] text-on-surface-variant">%(title)s 标题 · %(id)s ID · %(uploader)s 上传者</p>
+                  <p class="text-[11px] text-on-surface-variant">{{ t('settings.filenameTemplateHint') }}</p>
                 </div>
 
                 <div class="flex flex-col gap-2">
-                  <label class="text-sm font-medium text-on-surface">画质偏好</label>
+                  <label class="text-sm font-medium text-on-surface">{{ t('settings.quality') }}</label>
                   <div class="flex flex-col gap-1.5">
                     <label 
                       v-for="q in qualityOptions" 
@@ -96,35 +112,35 @@
 
               <div v-show="activeSection === 'acceleration'" class="flex flex-col gap-5">
                 <label class="flex items-center justify-between gap-3 text-sm font-medium text-on-surface">
-                  下载加速
+                  {{ t('accel.title') }}
                   <input v-model="settings.acceleration.enabled" type="checkbox" class="size-4 accent-primary" />
                 </label>
                 <div class="flex flex-col gap-2">
                   <label for="download-connections" class="flex justify-between gap-3 text-sm text-on-surface">
-                    每个任务的最大连接数
+                    {{ t('accel.maxConnections') }}
                     <output class="w-6 text-right tabular-nums">{{ settings.acceleration.enabled ? settings.acceleration.maxConnections : 1 }}</output>
                   </label>
                   <input id="download-connections" v-model.number="settings.acceleration.maxConnections" type="range" min="1" max="16" step="1" :disabled="!settings.acceleration.enabled" class="w-full accent-primary" />
                 </div>
                 <div class="flex flex-col gap-2">
-                  <label class="text-sm font-medium text-on-surface">aria2c 路径</label>
+                  <label class="text-sm font-medium text-on-surface">{{ t('accel.aria2Path') }}</label>
                   <div class="flex gap-2 min-w-0">
-                    <input v-model="settings.acceleration.aria2Path" placeholder="自动检测" class="min-w-0 flex-1 px-3 py-2 bg-surface-container-highest border border-outline-variant/20 rounded-md text-sm text-on-surface" />
-                    <button title="选择 aria2c" class="size-9 shrink-0 flex items-center justify-center rounded-md hover:bg-surface-container-highest" @click="selectAria2">
+                    <input v-model="settings.acceleration.aria2Path" :placeholder="t('accel.aria2Auto')" class="min-w-0 flex-1 px-3 py-2 bg-surface-container-highest border border-outline-variant/20 rounded-md text-sm text-on-surface" />
+                    <button :title="t('accel.selectAria2')" class="size-9 shrink-0 flex items-center justify-center rounded-md hover:bg-surface-container-highest" @click="selectAria2">
                       <MaterialIcon name="folder_open" :size="18" />
                     </button>
-                    <button title="检测 aria2c" :disabled="checkingAria2" class="size-9 shrink-0 flex items-center justify-center rounded-md hover:bg-surface-container-highest" @click="checkAria2">
+                    <button :title="t('accel.detectAria2')" :disabled="checkingAria2" class="size-9 shrink-0 flex items-center justify-center rounded-md hover:bg-surface-container-highest" @click="checkAria2">
                       <MaterialIcon name="refresh" :size="18" />
                     </button>
                   </div>
-                  <p class="text-xs text-on-surface-variant break-words" role="status">{{ checkingAria2 ? '检测中...' : aria2Status }}</p>
+                  <p class="text-xs text-on-surface-variant break-words" role="status">{{ checkingAria2 ? t('deps.checking') : aria2Status }}</p>
                 </div>
               </div>
 
               <!-- Cookies -->
               <div v-show="activeSection === 'cookies'" class="flex flex-col gap-5">
                 <div class="flex flex-col gap-2">
-                  <label class="text-sm font-medium text-on-surface">Cookie 模式</label>
+                  <label class="text-sm font-medium text-on-surface">{{ t('cookies.mode') }}</label>
                   <div class="flex flex-col gap-1.5">
                     <label class="flex items-center gap-3 p-3 rounded-md cursor-pointer transition-colors hover:bg-surface-container-highest">
                       <div class="size-4 rounded-full border-2 flex items-center justify-center" :class="settings.cookieMode === 'auto' ? 'border-primary' : 'border-outline-variant'">
@@ -132,8 +148,8 @@
                       </div>
                       <input v-model="settings.cookieMode" type="radio" value="auto" class="hidden" />
                       <div class="flex flex-col">
-                        <span class="text-sm text-on-surface font-medium">自动读取浏览器 Cookie</span>
-                        <span class="text-[11px] text-on-surface-variant">从 Chrome/Edge/Safari 自动读取登录状态</span>
+                        <span class="text-sm text-on-surface font-medium">{{ t('cookies.autoTitle') }}</span>
+                        <span class="text-[11px] text-on-surface-variant">{{ t('cookies.autoHint') }}</span>
                       </div>
                     </label>
                     <label class="flex items-center gap-3 p-3 rounded-md cursor-pointer transition-colors hover:bg-surface-container-highest">
@@ -142,39 +158,39 @@
                       </div>
                       <input v-model="settings.cookieMode" type="radio" value="manual" class="hidden" />
                       <div class="flex flex-col">
-                        <span class="text-sm text-on-surface font-medium">手动导入 Cookie 文件</span>
-                        <span class="text-[11px] text-on-surface-variant">使用 Get cookies.txt 扩展导出</span>
+                        <span class="text-sm text-on-surface font-medium">{{ t('cookies.manualTitle') }}</span>
+                        <span class="text-[11px] text-on-surface-variant">{{ t('cookies.manualHint') }}</span>
                       </div>
                     </label>
                   </div>
                 </div>
 
                 <div v-if="settings.cookieMode === 'manual'" class="flex flex-col gap-2">
-                  <label class="text-sm font-medium text-on-surface">Cookie 文件</label>
+                  <label class="text-sm font-medium text-on-surface">{{ t('cookies.file') }}</label>
                   <div class="flex gap-2">
                     <input 
                       v-model="settings.cookiesFile"
                       type="text"
                       readonly
-                      placeholder="选择 cookies.txt"
+                      :placeholder="t('cookies.filePlaceholder')"
                       class="flex-1 px-3 py-2 bg-surface-container-highest border border-outline-variant/20 rounded-md text-sm text-on-surface focus:outline-hidden focus:border-primary/40"
                     />
                     <button class="px-3 py-2 bg-surface-container-highest text-on-surface rounded-md text-sm font-medium hover:bg-surface-variant transition-colors border border-outline-variant/20" @click="selectCookiesFile">
-                      选择
+                      {{ t('common.select') }}
                     </button>
                     <button v-if="settings.cookiesFile" class="px-3 py-2 bg-error-container text-on-error-container rounded-md text-sm font-medium hover:bg-error hover:text-on-error transition-colors border border-outline-variant/20" @click="clearCookiesFile">
-                      清除
+                      {{ t('common.clear') }}
                     </button>
                   </div>
                 </div>
 
-                <p class="text-[11px] text-on-surface-variant">用于抖音、B站、YouTube 等需要登录的平台</p>
+                <p class="text-[11px] text-on-surface-variant">{{ t('cookies.usage') }}</p>
               </div>
 
               <!-- 代理 -->
               <div v-show="activeSection === 'proxy'" class="flex flex-col gap-5">
                 <div class="flex flex-col gap-2">
-                  <label class="text-sm font-medium text-on-surface">代理地址</label>
+                  <label class="text-sm font-medium text-on-surface">{{ t('proxy.label') }}</label>
                   <div class="flex gap-2">
                     <input 
                       v-model="settings.proxy"
@@ -192,10 +208,10 @@
                       <MaterialIcon v-else-if="proxyTestResult === 'success'" name="check_circle" :size="14" />
                       <MaterialIcon v-else-if="proxyTestResult === 'fail'" name="error" :size="14" />
                       <MaterialIcon v-else name="wifi_find" :size="14" />
-                      {{ proxyTesting ? '测试中' : proxyTestResult === 'success' ? `${proxyTestLatency}ms` : proxyTestResult === 'fail' ? '失败' : '测试' }}
+                      {{ proxyTesting ? t('common.testing') : proxyTestResult === 'success' ? `${proxyTestLatency}ms` : proxyTestResult === 'fail' ? t('common.failed') : t('common.test') }}
                     </button>
                   </div>
-                  <p class="text-[11px] text-on-surface-variant">支持 http/https/socks5。保存后立即生效，无需重启。</p>
+                  <p class="text-[11px] text-on-surface-variant">{{ t('proxy.hint') }}</p>
                 </div>
               </div>
 
@@ -205,10 +221,9 @@
                   <label class="flex items-start gap-3 p-3 rounded-md cursor-pointer transition-colors hover:bg-surface-container-highest">
                     <input v-model="settings.autoCheckUpdate" type="checkbox" class="mt-0.5 size-4 accent-primary" />
                     <div class="flex flex-col gap-0.5">
-                      <span class="text-sm font-medium text-on-surface">启动时自动检查更新</span>
+                      <span class="text-sm font-medium text-on-surface">{{ t('updateSettings.autoCheck') }}</span>
                       <span class="text-[11px] text-on-surface-variant leading-relaxed">
-                        启动 3 秒后向后请求一次 GitHub Releases。关闭后不再自动检查，
-                        也不会在退出时自动安装；「关于」页的手动「检查更新」仍然可用。
+                        {{ t('updateSettings.autoCheckHint') }}
                       </span>
                     </div>
                   </label>
@@ -224,17 +239,16 @@
                       :disabled="!settings.autoCheckUpdate"
                     />
                     <div class="flex flex-col gap-0.5">
-                      <span class="text-sm font-medium text-on-surface">发现新版本时自动下载</span>
+                      <span class="text-sm font-medium text-on-surface">{{ t('updateSettings.autoDownload') }}</span>
                       <span class="text-[11px] text-on-surface-variant leading-relaxed">
-                        开启后自动下载安装包（仍需你点「立即安装」）。关闭时只提示有新版本，
-                        下载由你决定 —— 移动网络或计费流量下建议关闭。
+                        {{ t('updateSettings.autoDownloadHint') }}
                       </span>
                     </div>
                   </label>
                 </div>
 
                 <p class="text-[11px] text-on-surface-variant leading-relaxed">
-                  手动检查更新在「关于软件」页 —— 那里已有入口，不在此重复。
+                  {{ t('updateSettings.manualHint') }}
                 </p>
               </div>
 
@@ -252,7 +266,7 @@
               @click="saveSettings"
             >
               <MaterialIcon name="save" :size="16" />
-              保存
+              {{ t('common.save') }}
             </button>
           </div>
         </div>
@@ -263,6 +277,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
+import { t, setLocale, resolveLocale } from '../i18n'
 import MaterialIcon from './icons/MaterialIcon.vue'
 import DepPanel from './DepPanel.vue'
 import { useErrorModal } from '../composables/useErrorModal'
@@ -281,12 +296,12 @@ function close() { emit('update:visible', false) }
 
 const activeSection = ref('download')
 const sections = [
-  { key: 'download', icon: 'download', label: '下载' },
-  { key: 'acceleration', icon: 'speed', label: '加速' },
-  { key: 'cookies', icon: 'cookie', label: 'Cookies' },
-  { key: 'proxy', icon: 'language', label: '代理' },
-  { key: 'deps', icon: 'extension', label: '运行依赖' },
-  { key: 'update', icon: 'system_update', label: '更新' },
+  { key: 'download', icon: 'download', get label() { return t('settings.tabDownload') } },
+  { key: 'acceleration', icon: 'speed', get label() { return t('settings.tabAcceleration') } },
+  { key: 'cookies', icon: 'cookie', get label() { return t('settings.tabCookies') } },
+  { key: 'proxy', icon: 'language', get label() { return t('settings.tabProxy') } },
+  { key: 'deps', icon: 'extension', get label() { return t('settings.tabDeps') } },
+  { key: 'update', icon: 'system_update', get label() { return t('settings.tabUpdate') } },
 ]
 
 interface Settings {
@@ -299,6 +314,7 @@ interface Settings {
   acceleration: AccelerationSettings
   autoCheckUpdate: boolean
   autoDownloadUpdate: boolean
+  language: 'auto' | 'zh-CN' | 'en-US'
 }
 
 const settings = ref<Settings>({
@@ -311,13 +327,14 @@ const settings = ref<Settings>({
   acceleration: normalizeAcceleration(),
   autoCheckUpdate: true,
   autoDownloadUpdate: false,
+  language: 'auto',
 })
 
 const qualityOptions = [
-  { value: 'best', label: '最佳画质（推荐）' },
-  { value: '1080p', label: '1080P 高清' },
-  { value: '720p', label: '720P 标清' },
-  { value: '480p', label: '480P 流畅' },
+  { value: 'best', get label() { return t('settings.qualityBest') } },
+  { value: '1080p', get label() { return t('settings.quality1080') } },
+  { value: '720p', get label() { return t('settings.quality720') } },
+  { value: '480p', get label() { return t('settings.quality480') } },
 ]
 
 const proxyTesting = ref(false)
@@ -330,7 +347,7 @@ async function checkAria2() {
   try {
     const result = await window.electronAPI.ytdlp.accelerationStatus(settings.value.acceleration.aria2Path)
     aria2Status.value = result.found ? `aria2 ${result.version} · ${result.path}` : result.reason
-  } catch { aria2Status.value = '检测失败，使用内置下载器' }
+  } catch { aria2Status.value = t('accel.detectFailed') }
   finally { checkingAria2.value = false }
 }
 
@@ -342,7 +359,7 @@ const proxyTestResult = ref<'success' | 'fail' | ''>('')
 const proxyTestLatency = ref(0)
 
 async function testProxy() {
-  if (!settings.value.proxy) { showInfo('请先输入代理地址'); return }
+  if (!settings.value.proxy) { showInfo(t('settings.enterProxyFirst')); return }
   proxyTesting.value = true
   proxyTestResult.value = ''
   try {
@@ -354,11 +371,11 @@ async function testProxy() {
       if (result.warning) showInfo(result.warning)
     } else {
       proxyTestResult.value = 'fail'
-      showError('代理不可用', undefined, result.error)
+      showError(t('settings.proxyUnavailable'), undefined, result.error)
     }
   } catch (e) {
     proxyTestResult.value = 'fail'
-    showError(`测试失败: ${e instanceof Error ? e.message : '未知错误'}`)
+    showError(t('settings.proxyTestFailed', { message: e instanceof Error ? e.message : t('download.unknownError') }))
   } finally { proxyTesting.value = false }
 }
 
@@ -377,6 +394,17 @@ function clearCookiesFile() {
   updateSettings({ cookiesFile: '' })
 }
 
+/**
+ * 切换语言：立即生效并持久化。
+ *
+ * 不走「保存」按钮——语言是**预览型**设置，用户改完要马上看到结果，
+ * 否则他会以为切换失败而反复点。
+ */
+function onLanguageChange() {
+  updateSettings({ language: settings.value.language })
+  setLocale(resolveLocale(settings.value.language))
+}
+
 function saveSettings() {
   // 合并写入：SettingsView 不管 depPaths，整体覆盖会把 DepPanel 存的手动路径抹掉
   updateSettings({ ...settings.value })
@@ -386,7 +414,7 @@ function saveSettings() {
     autoCheck: settings.value.autoCheckUpdate,
     autoDownload: settings.value.autoDownloadUpdate,
   })
-  showInfo('设置已保存')
+  showInfo(t('settings.saved'))
   close()
 }
 
@@ -403,6 +431,7 @@ async function loadSettings() {
     acceleration: { ...saved.acceleration },
     autoCheckUpdate: saved.autoCheckUpdate,
     autoDownloadUpdate: saved.autoDownloadUpdate,
+    language: saved.language,
   }
   if (!settings.value.downloadDir) {
     settings.value.downloadDir = await window.electronAPI.app.getDefaultDownloadDir()

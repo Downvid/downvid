@@ -7,7 +7,7 @@
         @input="store.url = ($event.target as HTMLTextAreaElement).value"
         aria-label="Paste video URL here"
         class="w-full h-24 bg-surface-container-highest rounded-md p-3 text-on-surface placeholder:text-outline-variant resize-none font-body text-sm border-2 border-transparent focus:border-primary focus:outline-hidden transition-all"
-        placeholder="在此处粘贴需要解析的视频链接..."
+        :placeholder="t('url.placeholder')"
         @contextmenu.prevent="showContextMenu"
       />
       <!-- Context Menu -->
@@ -33,7 +33,7 @@
         @click="pasteUrl"
       >
         <MaterialIcon name="content_paste" :size="18" />
-        <span>粘贴链接</span>
+        <span>{{ t('url.paste') }}</span>
       </button>
       <button
         class="flex-[1.5] flex items-center justify-center gap-2 rounded-md h-10 font-headline font-semibold text-sm transition-all border-2 bg-tertiary-container/40 text-tertiary border-tertiary/30 hover:bg-tertiary-container/60 hover:border-tertiary/50 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -42,7 +42,7 @@
       >
         <MaterialIcon v-if="store.isParsing" name="sync" :size="18" class="animate-spin" />
         <MaterialIcon v-else name="bolt" :size="18" />
-        <span>{{ store.isParsing ? '解析中...' : '解析视频信息' }}</span>
+        <span>{{ store.isParsing ? t('url.parsing') : t('url.parse') }}</span>
       </button>
     </div>
 
@@ -51,17 +51,17 @@
       <div class="flex items-start gap-3">
         <MaterialIcon name="info" :size="20" class="text-tertiary shrink-0 mt-0.5" />
         <div class="flex-1">
-          <p class="text-sm font-medium text-on-surface">YouTube 视频需要 Cookie 才能下载</p>
+          <p class="text-sm font-medium text-on-surface">{{ t('url.youtubeCookieTitle') }}</p>
           <p class="text-xs text-on-surface-variant mt-1 leading-relaxed">
-            由于 YouTube 的限制，需安装 Chrome 插件
+            {{ t('url.youtubeCookieBody') }}
             <span class="font-medium text-tertiary">Get cookies.txt LOCALLY</span>
-            导出 cookies 文件命名为 cookies.txt，然后在设置中导入并且需要经常更新cookies.txt。
+            {{ t('url.youtubeCookieSteps') }}
           </p>
           <button
             @click="openCookieHelp"
             class="mt-2 text-xs text-tertiary hover:text-tertiary/80 underline underline-offset-2 transition-colors"
           >
-            查看详细教程
+            {{ t('url.viewTutorial') }}
           </button>
         </div>
       </div>
@@ -72,16 +72,16 @@
       <div class="flex items-start gap-3">
         <MaterialIcon name="info" :size="20" class="text-tertiary shrink-0 mt-0.5" />
         <div class="flex-1">
-          <p class="text-sm font-medium text-on-surface">B站视频需要 Cookie 才能下载</p>
+          <p class="text-sm font-medium text-on-surface">{{ t('url.bilibiliCookieTitle') }}</p>
           <p class="text-xs text-on-surface-variant mt-1 leading-relaxed">
-            由于 B站的限制，需要导入 cookies.txt 文件才能下载完整视频。
+            {{ t('url.bilibiliCookieBody') }}
           </p>
           <button
             @click="goToSettings"
             class="mt-2 flex items-center gap-1 text-xs text-tertiary hover:text-tertiary/80 underline underline-offset-2 transition-colors"
           >
             <MaterialIcon name="settings" :size="14" />
-            <span>去设置导入 Cookie</span>
+            <span>{{ t('url.goImportCookie') }}</span>
           </button>
         </div>
       </div>
@@ -96,6 +96,7 @@ import { ref, watch, onMounted, onUnmounted } from 'vue'
 import MaterialIcon from './icons/MaterialIcon.vue'
 import CookieGuide from './CookieGuide.vue'
 import { useDownloadStore } from '../stores/download'
+import { t } from '../i18n'
 /** Cookie 使用引导浮窗（不再跳转到仓库 wiki） */
 const showCookieGuide = ref(false)
 
@@ -108,12 +109,13 @@ defineEmits<{
 const urlInput = ref<HTMLTextAreaElement | null>(null)
 
 
+// 用 getter 而不是固定值：右键菜单在打开时读一次，语言切换后下次打开即为新语言
 const contextMenuItems = [
-  { action: 'cut', label: '剪切', icon: 'content_cut' },
-  { action: 'copy', label: '复制', icon: 'content_copy' },
-  { action: 'paste', label: '粘贴', icon: 'content_paste' },
-  { action: 'delete', label: '删除', icon: 'delete' },
-  { action: 'selectAll', label: '全选', icon: 'select_all' },
+  { action: 'cut', get label() { return t('ctx.cut') }, icon: 'content_cut' },
+  { action: 'copy', get label() { return t('ctx.copy') }, icon: 'content_copy' },
+  { action: 'paste', get label() { return t('ctx.paste') }, icon: 'content_paste' },
+  { action: 'delete', get label() { return t('ctx.delete') }, icon: 'delete' },
+  { action: 'selectAll', get label() { return t('ctx.selectAll') }, icon: 'select_all' },
 ]
 
 const contextMenuVisible = ref(false)

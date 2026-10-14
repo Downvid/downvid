@@ -3,7 +3,7 @@
     <div class="max-w-2xl mx-auto px-6 py-8">
       <!-- Header -->
       <div class="mb-8">
-        <h1 class="font-headline text-2xl font-bold text-on-surface">关于</h1>
+        <h1 class="font-headline text-2xl font-bold text-on-surface">{{ t('about.title') }}</h1>
       </div>
 
       <!-- App Info Card -->
@@ -21,7 +21,7 @@
             @click="showUpdateDrawer = true"
           >
             <MaterialIcon name="update" :size="16" />
-            <span>检查更新</span>
+            <span>{{ t('about.checkUpdate') }}</span>
           </button>
         </div>
       </div>
@@ -29,7 +29,7 @@
       <!-- Description：一句话说明即可，详细能力在 README 与文档里 -->
       <div class="bg-surface-container-low rounded-xl px-4 py-3 mb-6 border border-outline-variant/10">
         <p class="text-xs text-on-surface-variant leading-relaxed">
-          开源视频下载工具，基于 yt-dlp，支持抖音、B站、YouTube 等平台。
+          {{ t('about.intro') }}
         </p>
       </div>
 
@@ -57,8 +57,8 @@
             <MaterialIcon name="feedback" :size="18" class="text-on-surface" />
           </div>
           <div class="flex-1 min-w-0">
-            <p class="text-sm font-medium text-on-surface">问题反馈</p>
-            <p class="text-xs text-on-surface-variant">提交建议或报告问题</p>
+            <p class="text-sm font-medium text-on-surface">{{ t('about.feedback') }}</p>
+            <p class="text-xs text-on-surface-variant">{{ t('about.feedbackHint') }}</p>
           </div>
           <MaterialIcon name="arrow_forward_ios" :size="14" class="text-on-surface-variant" />
         </button>
@@ -66,7 +66,7 @@
 
       <!-- 贡献者：固定名单（不请求 API、不显示提交次数） -->
       <div class="mb-6">
-        <h3 class="text-xs font-medium text-on-surface-variant uppercase tracking-wider mb-3">贡献者</h3>
+        <h3 class="text-xs font-medium text-on-surface-variant uppercase tracking-wider mb-3">{{ t('about.contributors') }}</h3>
         <ul class="m-0 list-none p-0 grid grid-cols-2 sm:grid-cols-3 gap-3">
           <li v-for="member in CONTRIBUTORS" :key="member.login" class="min-w-0">
             <a
@@ -105,7 +105,7 @@
 
       <!-- 开源组件致谢：Material Symbols 是 Apache-2.0，随应用分发需保留声明 -->
       <div class="mb-6">
-        <h3 class="text-xs font-medium text-on-surface-variant uppercase tracking-wider mb-3">开源组件</h3>
+        <h3 class="text-xs font-medium text-on-surface-variant uppercase tracking-wider mb-3">{{ t('about.openSource') }}</h3>
         <div class="bg-surface-container-low rounded-xl p-4 border border-outline-variant/10 flex flex-col gap-2">
           <div v-for="item in ossCredits" :key="item.name" class="flex items-baseline justify-between gap-3 text-xs">
             <span class="text-on-surface">{{ item.name }}</span>
@@ -115,7 +115,7 @@
                 v-if="item.url"
                 class="text-tertiary hover:underline underline-offset-2 ml-1"
                 @click="openExternal(item.url)"
-              >主页</a>
+              >{{ t('about.homepage') }}</a>
             </span>
           </div>
         </div>
@@ -123,7 +123,7 @@
 
       <!-- Tech Stack -->
       <div class="mb-6">
-        <h3 class="text-xs font-medium text-on-surface-variant uppercase tracking-wider mb-3">技术栈</h3>
+        <h3 class="text-xs font-medium text-on-surface-variant uppercase tracking-wider mb-3">{{ t('about.techStack') }}</h3>
         <div class="flex flex-wrap gap-2">
           <span
             v-for="tech in techStack"
@@ -141,7 +141,7 @@
       <div class="flex items-center justify-between py-4 border-t border-outline-variant/20">
         <div class="flex items-center gap-2">
           <MaterialIcon name="gavel" :size="16" class="text-on-surface-variant" />
-          <span class="text-sm text-on-surface-variant">开源协议</span>
+          <span class="text-sm text-on-surface-variant">{{ t('about.license') }}</span>
         </div>
         <span class="text-xs font-medium text-primary bg-primary/10 px-3 py-1 rounded-full">MIT License</span>
       </div>
@@ -150,27 +150,27 @@
       <div class="mt-6 p-4 rounded-xl bg-surface-container-low border border-outline-variant/10">
         <div class="flex items-center gap-2 mb-3">
           <MaterialIcon name="favorite" :size="18" class="text-primary" />
-          <p class="text-sm font-medium text-on-surface">支持 DownVid</p>
+          <p class="text-sm font-medium text-on-surface">{{ t('about.support') }}</p>
         </div>
         <p class="text-xs text-on-surface-variant leading-relaxed mb-3">
-          如果这个工具对你有帮助，欢迎请作者喝杯咖啡 ☕
+          {{ t('about.supportHint') }}
         </p>
         <button
           class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-surface-container-high hover:bg-surface-container-highest transition-colors border border-outline-variant/15"
           @click="showDonate = !showDonate"
         >
           <MaterialIcon :name="showDonate ? 'expand_less' : 'qr_code_2'" :size="18" class="text-on-surface-variant" />
-          <span class="text-sm font-medium text-on-surface">{{ showDonate ? '收起赞赏码' : '显示赞赏码' }}</span>
+          <span class="text-sm font-medium text-on-surface">{{ showDonate ? t('about.hideDonate') : t('about.showDonate') }}</span>
         </button>
 
         <Transition name="donate">
           <div v-if="showDonate" class="mt-3 flex flex-col items-center gap-2">
             <img
               src="../assets/donate.jpg"
-              alt="微信赞赏码"
+              :alt="t('about.donateAlt')"
               class="w-52 rounded-lg border border-outline-variant/15"
             />
-            <p class="text-[11px] text-on-surface-variant">微信扫码赞赏 — 给 Black Cat 赞赏</p>
+            <p class="text-[11px] text-on-surface-variant">{{ t('about.donateCaption') }}</p>
           </div>
         </Transition>
       </div>
@@ -189,6 +189,7 @@
 
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
+import { t } from '../i18n'
 import MaterialIcon from './icons/MaterialIcon.vue'
 import GitHubIcon from './icons/GitHubIcon.vue'
 import UpdateModal from './UpdateModal.vue'
@@ -228,9 +229,9 @@ const techStack = [
   { name: 'Tailwind CSS', icon: 'palette' },
   { name: 'Vite', icon: 'bolt' },
   { name: 'Pinia', icon: 'database' },
-  { name: 'Go', icon: 'memory', note: '依赖边车：探测并复用系统已安装的 yt-dlp / ffmpeg' },
-  { name: 'yt-dlp', icon: 'download', note: '不随安装包分发，运行时解析' },
-  { name: 'FFmpeg', icon: 'movie', note: '不随安装包分发，运行时解析' },
+  { name: 'Go', icon: 'memory', get note() { return t('about.techGo') } },
+  { name: 'yt-dlp', icon: 'download', get note() { return t('about.techNotBundled') } },
+  { name: 'FFmpeg', icon: 'movie', get note() { return t('about.techNotBundled') } },
 ]
 
 /**

@@ -32,6 +32,7 @@
 
 <script setup lang="ts">
 import MaterialIcon from './icons/MaterialIcon.vue'
+import { t } from '../i18n'
 import type { VideoInfo, VideoFormat } from '../types'
 
 defineProps<{
@@ -47,8 +48,8 @@ function formatDuration(seconds?: number): string {
 }
 
 function formatFileSize(bytes?: number): string {
-  if (bytes === undefined || bytes === null) return '未知'
-  if (bytes === 0) return '大小未知'
+  if (bytes === undefined || bytes === null) return t('common.unknown')
+  if (bytes === 0) return t('formats.sizeUnknown')
   const mb = bytes / 1024 / 1024
   if (mb < 1024) return `${mb.toFixed(1)} MB`
   return `${(mb / 1024).toFixed(2)} GB`

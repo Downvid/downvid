@@ -21,13 +21,13 @@
             <MaterialIcon name="system_update" :size="24" class="text-primary" />
           </div>
           <div class="flex-1 min-w-0">
-            <h2 class="font-headline text-lg font-bold text-on-surface">软件更新</h2>
+            <h2 class="font-headline text-lg font-bold text-on-surface">{{ t('update.title') }}</h2>
             <p class="text-xs text-on-surface-variant mt-0.5">
               <template v-if="status === 'available'">
-                新版本 v{{ newVersion }} 可用 · 当前 v{{ currentVersion }}
+                {{ t('update.available', { new: newVersion, current: currentVersion }) }}
               </template>
               <template v-else>
-                当前版本 v{{ currentVersion }}
+                {{ t('update.current', { current: currentVersion }) }}
               </template>
             </p>
           </div>
@@ -46,7 +46,7 @@
             <div class="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center mb-3">
               <MaterialIcon name="sync" :size="26" class="text-primary animate-spin" />
             </div>
-            <p class="text-sm text-on-surface-variant">正在检查更新...</p>
+            <p class="text-sm text-on-surface-variant">{{ t('update.checking') }}</p>
           </div>
 
           <!-- Latest -->
@@ -54,8 +54,8 @@
             <div class="w-14 h-14 rounded-full bg-green-500/10 flex items-center justify-center mb-3">
               <MaterialIcon name="check_circle" :size="32" class="text-green-500" />
             </div>
-            <p class="text-base font-semibold text-on-surface mb-1">已是最新版本</p>
-            <p class="text-sm text-on-surface-variant">DownVid v{{ currentVersion }} 暂无更新</p>
+            <p class="text-base font-semibold text-on-surface mb-1">{{ t('update.upToDate') }}</p>
+            <p class="text-sm text-on-surface-variant">{{ t('update.noUpdate', { current: currentVersion }) }}</p>
           </div>
 
           <!-- Error -->
@@ -70,13 +70,13 @@
                 class="px-4 py-2 rounded-lg bg-primary text-on-primary text-sm font-medium hover:bg-primary/90 transition-colors"
                 @click="retry"
               >
-                重试
+                {{ t('common.retry') }}
               </button>
               <button
                 class="px-4 py-2 rounded-lg text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
                 @click="openReleasePage"
               >
-                前往下载页手动更新
+                {{ t('update.goToDownload') }}
               </button>
             </div>
           </div>
@@ -89,14 +89,14 @@
               <div class="flex-1 min-w-0">
                 <p class="text-sm font-semibold text-on-surface">DownVid v{{ newVersion }}</p>
                 <p class="text-xs text-on-surface-variant mt-0.5">
-                  {{ manual ? manualReason || '当前安装方式不支持自动更新，请前往发布页下载' : '建议更新以获得最新功能和安全修复' }}
+                  {{ manual ? manualReason || t('update.manualReason') : t('update.manualSuggestion') }}
                 </p>
               </div>
             </div>
 
             <!-- Release Notes -->
             <div class="flex flex-col gap-2">
-              <h3 class="text-xs font-bold text-outline uppercase tracking-wider">更新内容</h3>
+              <h3 class="text-xs font-bold text-outline uppercase tracking-wider">{{ t('update.whatsNew') }}</h3>
               <div
                 v-if="releaseNotes"
                 class="release-notes bg-surface rounded-xl p-4 border border-outline-variant/10 text-sm text-on-surface-variant leading-relaxed"
@@ -106,7 +106,7 @@
                 v-else
                 class="bg-surface rounded-xl p-4 border border-outline-variant/10 text-sm text-on-surface-variant"
               >
-                暂无更新说明
+                {{ t('update.noNotes') }}
               </div>
             </div>
           </div>
@@ -116,7 +116,7 @@
             <div class="flex items-center gap-3 p-3.5 bg-primary/5 rounded-xl border border-primary/10">
               <MaterialIcon name="download" :size="22" class="text-primary shrink-0" />
               <div class="flex-1 min-w-0">
-                <p class="text-sm font-semibold text-on-surface">正在下载 v{{ newVersion }}</p>
+                <p class="text-sm font-semibold text-on-surface">{{ t('update.downloading', { new: newVersion }) }}</p>
                 <p class="text-xs text-on-surface-variant mt-0.5">{{ downloadSpeed }}</p>
               </div>
               <span class="text-sm font-bold text-primary font-mono">{{ Math.round(downloadPercent) }}%</span>
@@ -130,7 +130,7 @@
               />
             </div>
 
-            <p class="text-xs text-on-surface-variant text-center">下载过程中请勿关闭应用</p>
+            <p class="text-xs text-on-surface-variant text-center">{{ t('update.doNotClose') }}</p>
           </div>
 
           <!-- Downloaded -->
@@ -138,12 +138,12 @@
             <div class="w-14 h-14 rounded-full bg-green-500/10 flex items-center justify-center mb-3">
               <MaterialIcon name="download_done" :size="32" class="text-green-500" />
             </div>
-            <p class="text-base font-semibold text-on-surface mb-1">下载完成</p>
+            <p class="text-base font-semibold text-on-surface mb-1">{{ t('update.downloaded') }}</p>
             <p class="text-sm text-on-surface-variant text-center mb-2">
-              新版本 v{{ newVersion }} 已准备就绪
+              {{ t('update.ready', { new: newVersion }) }}
             </p>
             <p class="text-xs text-on-surface-variant/70 text-center">
-              点击“重启并安装”完成更新，应用将自动重新打开
+              {{ t('update.readyHint') }}
             </p>
           </div>
         </div>
@@ -158,7 +158,7 @@
               class="px-5 py-2 rounded-lg text-sm font-medium text-on-surface-variant hover:bg-surface-container-highest transition-colors"
               @click="close"
             >
-              稍后
+              {{ t('update.later') }}
             </button>
             <button
               v-if="manual"
@@ -166,7 +166,7 @@
               @click="openReleasePage"
             >
               <MaterialIcon name="open_in_new" :size="16" />
-              <span>前往下载页</span>
+              <span>{{ t('update.goToDownload') }}</span>
             </button>
             <button
               v-else
@@ -174,7 +174,7 @@
               @click="downloadUpdate"
             >
               <MaterialIcon name="download" :size="16" />
-              <span>下载更新</span>
+              <span>{{ t('update.downloadUpdate') }}</span>
             </button>
           </template>
 
@@ -183,14 +183,14 @@
               class="px-5 py-2 rounded-lg text-sm font-medium text-on-surface-variant hover:bg-surface-container-highest transition-colors"
               @click="close"
             >
-              稍后重启
+              {{ t('update.restartLater') }}
             </button>
             <button
               class="flex items-center gap-2 px-5 py-2 rounded-lg bg-primary text-on-primary text-sm font-semibold hover:bg-primary/90 transition-colors shadow-md"
               @click="installUpdate"
             >
               <MaterialIcon name="restart_alt" :size="16" />
-              <span>重启并安装</span>
+              <span>{{ t('update.restartAndInstall') }}</span>
             </button>
           </template>
 
@@ -199,7 +199,7 @@
               class="px-5 py-2 rounded-lg bg-primary text-on-primary text-sm font-semibold hover:bg-primary/90 transition-colors shadow-md"
               @click="close"
             >
-              完成
+              {{ t('update.done') }}
             </button>
           </template>
         </div>
@@ -210,6 +210,7 @@
 
 <script setup lang="ts">
 import { onMounted } from 'vue'
+import { t } from '../i18n'
 import MaterialIcon from './icons/MaterialIcon.vue'
 import { useUpdater } from '../composables/useUpdater'
 

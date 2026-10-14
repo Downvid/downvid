@@ -70,8 +70,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import MaterialIcon from './icons/MaterialIcon.vue'
+import { t } from '../i18n'
 import type { TabType } from '../types'
 
 defineProps<{
@@ -100,9 +101,9 @@ onMounted(async () => {
   }
 })
 
-const tabs = [
-  { key: 'download' as TabType, label: '解析下载' },
-  { key: 'history' as TabType, label: '下载历史' },
-  { key: 'about' as TabType, label: '关于软件' },
-]
+const tabs = computed(() => [
+  { key: 'download' as TabType, label: t('nav.download') },
+  { key: 'history' as TabType, label: t('nav.history') },
+  { key: 'about' as TabType, label: t('nav.about') },
+])
 </script>

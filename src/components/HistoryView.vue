@@ -4,8 +4,8 @@
       <!-- Header -->
       <div class="flex items-center justify-between">
         <div>
-          <h1 class="font-headline text-2xl font-bold leading-tight text-on-surface">下载历史</h1>
-          <p class="text-on-surface-variant text-sm mt-1">查看和管理已下载的视频</p>
+          <h1 class="font-headline text-2xl font-bold leading-tight text-on-surface">{{ t('history.title') }}</h1>
+          <p class="text-on-surface-variant text-sm mt-1">{{ t('history.subtitle') }}</p>
         </div>
         <button 
           v-if="history.length > 0"
@@ -13,7 +13,7 @@
           @click="clearAllHistory"
         >
           <MaterialIcon name="delete_sweep" :size="18" />
-          <span>清空历史</span>
+          <span>{{ t('history.clearAll') }}</span>
         </button>
       </div>
       
@@ -21,8 +21,8 @@
       <div class="flex-1 overflow-y-auto pr-2">
         <div v-if="history.length === 0" class="flex flex-col items-center justify-center py-20 text-on-surface-variant">
           <MaterialIcon name="history" :size="64" class="mb-4 opacity-20" />
-          <p class="text-lg font-medium">暂无下载记录</p>
-          <p class="text-sm mt-2 opacity-70">下载的视频将显示在这里</p>
+          <p class="text-lg font-medium">{{ t('history.empty') }}</p>
+          <p class="text-sm mt-2 opacity-70">{{ t('history.emptyHint') }}</p>
         </div>
         
         <div v-else class="grid grid-cols-1 gap-4">
@@ -41,7 +41,7 @@
                   class="opacity-0 group-hover:opacity-100 transition-opacity p-2 bg-primary/90 rounded-full text-on-primary"
                   @click="openFile(item)"
                   :disabled="item.fileExists === false"
-                  :title="item.fileExists === false ? '本地文件不存在' : '播放文件'"
+                  :title="item.fileExists === false ? t('history.fileMissing') : t('history.playFile')"
                   :class="{ 'opacity-40 cursor-not-allowed': item.fileExists === false }"
                 >
                   <MaterialIcon name="play_arrow" :size="20" />
@@ -56,7 +56,7 @@
                 <p class="text-xs text-on-surface-variant mt-1 font-mono">{{ item.url }}</p>
               </div>
               <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-on-surface-variant">
-                <span v-if="item.fileExists === false" class="text-error">本地文件不存在</span>
+                <span v-if="item.fileExists === false" class="text-error">{{ t('history.fileMissing') }}</span>
                 <span class="flex items-center gap-1">
                   <!-- 注意：`high_definition` 不是有效的 Symbols 名（会渲染成文字），正确名是 `hd` -->
                   <MaterialIcon name="hd" :size="14" />
@@ -73,7 +73,7 @@
             <div class="flex flex-col gap-2 justify-center">
               <button 
                 class="p-2 text-on-surface-variant hover:text-primary hover:bg-primary-container/20 rounded-md transition-colors"
-                :title="item.fileExists === false ? '本地文件不存在' : '打开文件'"
+                :title="item.fileExists === false ? t('history.fileMissing') : t('history.openFile')"
                 :disabled="item.fileExists === false"
                 :class="{ 'opacity-40 cursor-not-allowed': item.fileExists === false }"
                 @click="openFile(item)"
@@ -82,14 +82,14 @@
               </button>
               <button 
                 class="p-2 text-on-surface-variant hover:text-primary hover:bg-primary-container/20 rounded-md transition-colors"
-                title="打开所在文件夹"
+                :title="t('history.openFolder')"
                 @click="openFolder(item)"
               >
                 <MaterialIcon name="folder_open" :size="20" />
               </button>
               <button 
                 class="p-2 text-on-surface-variant hover:text-error hover:bg-error-container/20 rounded-md transition-colors"
-                title="删除记录"
+                :title="t('history.deleteRecord')"
                 @click="deleteHistory(item.id)"
               >
                 <MaterialIcon name="delete" :size="20" />
@@ -105,6 +105,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import MaterialIcon from './icons/MaterialIcon.vue'
+import { t } from '../i18n'
 import type { HistoryRecord } from '../types'
 
 const history = ref<HistoryRecord[]>([])
@@ -142,7 +143,7 @@ async function deleteHistory(id: string) {
 }
 
 async function clearAllHistory() {
-  if (!confirm('确定要清空所有下载历史吗？')) return
+  if (!confirm(t('history.confirmClear'))) return
   
   try {
     for (const item of history.value) {

@@ -1,13 +1,13 @@
 <template>
   <div class="flex flex-col gap-4">
-    <h3 class="font-headline text-sm font-bold text-on-surface border-b border-outline-variant/20 pb-2">解析结果预览</h3>
+    <h3 class="font-headline text-sm font-bold text-on-surface border-b border-outline-variant/20 pb-2">{{ t('formats.title') }}</h3>
 
     <!-- Video Info Card -->
     <VideoInfoCard :video-info="videoInfo" :selected-format="selectedFormat" />
 
     <!-- Video Formats -->
     <div class="flex flex-col gap-2">
-      <span class="text-[11px] font-bold text-outline uppercase tracking-wider">视频格式 (MP4) - 共 {{ videoInfo.formats?.length || 0 }} 个</span>
+      <span class="text-[11px] font-bold text-outline uppercase tracking-wider">{{ t('formats.videoHeader', { count: videoInfo.formats?.length || 0 }) }}</span>
       <div class="grid grid-cols-2 gap-2">
         <label
           v-for="format in videoInfo.formats"
@@ -23,14 +23,14 @@
             />
             <span class="text-xs font-semibold" :class="selectedFormat?.formatId === format.formatId ? 'text-on-surface' : 'text-on-surface font-medium'">{{ format.quality }}</span>
           </div>
-          <span class="text-[10px] font-mono text-on-surface-variant">{{ format.filesize ? formatFileSize(format.filesize) : '未知大小' }}</span>
+          <span class="text-[10px] font-mono text-on-surface-variant">{{ format.filesize ? formatFileSize(format.filesize) : t('formats.unknownSize') }}</span>
         </label>
       </div>
     </div>
 
     <!-- YouTube Audio Formats -->
     <div v-if="videoInfo.isYoutube && videoInfo.audioFormats?.length" class="flex flex-col gap-2">
-      <span class="text-[11px] font-bold text-outline uppercase tracking-wider">纯音频格式 - 共 {{ videoInfo.audioFormats.length }} 个</span>
+      <span class="text-[11px] font-bold text-outline uppercase tracking-wider">{{ t('formats.audioHeader', { count: videoInfo.audioFormats.length }) }}</span>
       <div class="grid grid-cols-2 gap-2">
         <label
           v-for="format in videoInfo.audioFormats"
@@ -43,14 +43,14 @@
             <div class="size-4 rounded-full border-4 shrink-0" :class="selectedAudioFormat?.formatId === format.formatId ? 'border-primary bg-surface' : 'border-outline-variant bg-surface'" />
             <span class="text-xs font-semibold">{{ format.quality }}</span>
           </div>
-          <span class="text-[10px] font-mono text-on-surface-variant">{{ format.filesize ? formatFileSize(format.filesize) : '未知大小' }}</span>
+          <span class="text-[10px] font-mono text-on-surface-variant">{{ format.filesize ? formatFileSize(format.filesize) : t('formats.unknownSize') }}</span>
         </label>
       </div>
     </div>
 
     <!-- YouTube Audio Tracks -->
     <div v-if="videoInfo.isYoutube && videoInfo.audioTracks?.length" class="flex flex-col gap-2">
-      <span class="text-[11px] font-bold text-outline uppercase tracking-wider">音频轨道 - 共 {{ videoInfo.audioTracks.length }} 个</span>
+      <span class="text-[11px] font-bold text-outline uppercase tracking-wider">{{ t('formats.trackHeader', { count: videoInfo.audioTracks.length }) }}</span>
       <div class="grid grid-cols-2 gap-2">
         <label
           v-for="track in videoInfo.audioTracks"
@@ -70,7 +70,7 @@
 
     <!-- YouTube Subtitles -->
     <div v-if="videoInfo.isYoutube && videoInfo.subtitles?.length" class="flex flex-col gap-2">
-      <span class="text-[11px] font-bold text-outline uppercase tracking-wider">字幕 - 共 {{ videoInfo.subtitles.length }} 个</span>
+      <span class="text-[11px] font-bold text-outline uppercase tracking-wider">{{ t('formats.subtitleHeader', { count: videoInfo.subtitles.length }) }}</span>
       <div class="flex flex-wrap gap-2">
         <label
           v-for="sub in videoInfo.subtitles"
@@ -93,7 +93,7 @@
     >
       <MaterialIcon v-if="isDownloading" name="sync" :size="24" class="animate-spin" />
       <MaterialIcon v-else name="download" :size="24" />
-      <span>{{ isDownloading ? '正在下载...' : (downloadMode === 'audio' ? '下载纯音频' : (downloadMode === 'subtitle' ? '下载字幕' : '立即下载所选资源')) }}</span>
+      <span>{{ isDownloading ? t('download.downloading') : (downloadMode === 'audio' ? t('download.downloadAudio') : (downloadMode === 'subtitle' ? t('download.downloadSubtitle') : t('download.startDownload'))) }}</span>
     </button>
   </div>
 </template>
@@ -101,6 +101,7 @@
 <script setup lang="ts">
 import MaterialIcon from './icons/MaterialIcon.vue'
 import VideoInfoCard from './VideoInfoCard.vue'
+import { t } from '../i18n'
 import type { VideoInfo, VideoFormat, AudioFormat, AudioTrack } from '../types'
 
 defineProps<{
@@ -122,8 +123,8 @@ defineEmits<{
 }>()
 
 function formatFileSize(bytes?: number): string {
-  if (bytes === undefined || bytes === null) return '未知'
-  if (bytes === 0) return '大小未知'
+  if (bytes === undefined || bytes === null) return t('common.unknown')
+  if (bytes === 0) return t('formats.sizeUnknown')
   const mb = bytes / 1024 / 1024
   if (mb < 1024) return `${mb.toFixed(1)} MB`
   return `${(mb / 1024).toFixed(2)} GB`

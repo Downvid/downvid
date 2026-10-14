@@ -54,6 +54,15 @@ export interface AppSettings {
    * 关闭时只提示有新版本，下载由用户决定——移动网络/计费流量下更友好。
    */
   autoDownloadUpdate: boolean
+
+  /**
+   * 界面语言。
+   *
+   * 'auto' = 跟随系统（默认）；其余为明确的 locale。
+   * 之所以默认 'auto' 而不是固定中文：README 以英文为默认、官网双语、
+   * 有相当比例的海外用户，固定中文会让他们的首次体验完全看不懂。
+   */
+  language: 'auto' | 'zh-CN' | 'en-US'
 }
 
 export const SETTINGS_KEY = 'settings'
@@ -69,6 +78,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   depPaths: {},
   autoCheckUpdate: true,
   autoDownloadUpdate: false,
+  language: 'auto',
 }
 
 /**
@@ -91,6 +101,16 @@ export function normalizeDepPaths(value: unknown): AppSettings['depPaths'] {
 }
 
 /**
+ * 清洗 language：只接受三个合法值，其余一律回退 'auto'。
+ *
+ * 存档数据可能被手工改坏，或来自未来版本。非法值直接当成 'auto'，
+ * 而不是原样保留——否则界面语言会变成"没有语言"（t() 全部回退中文）。
+ */
+export function normalizeLanguage(value: unknown): AppSettings['language'] {
+  return value === 'zh-CN' || value === 'en-US' || value === 'auto' ? value : 'auto'
+}
+
+/**
  * 读取设置，并用默认值补齐缺失字段。
  *
  * 必须补默认值：老用户存的是旧形状，直接读会拿到 `undefined`。
@@ -105,6 +125,7 @@ export function readSettings(): AppSettings {
       acceleration: normalizeAcceleration(raw?.acceleration),
       // depPaths 需要单独兜：旧数据里可能没有、不是对象，或类型不对
       depPaths: normalizeDepPaths(raw?.depPaths),
+      language: normalizeLanguage(raw?.language),
     }
   } catch {
     return { ...DEFAULT_SETTINGS, acceleration: normalizeAcceleration() }

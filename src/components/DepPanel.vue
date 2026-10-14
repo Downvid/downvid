@@ -11,22 +11,22 @@
                     :class="store.ready ? 'text-primary' : 'text-amber'" />
       <div class="flex-1 min-w-0">
         <p class="text-sm font-medium text-on-surface">
-          {{ store.ready ? '运行依赖已就绪' : '缺少必需的运行依赖' }}
+          {{ store.ready ? t('deps.ready') : t('deps.missing') }}
         </p>
         <p class="text-[11px] text-on-surface-variant mt-0.5 leading-relaxed">
           <template v-if="store.ready">
-            正在复用本机已安装的组件，无需内置二进制。
-            <span v-if="store.managedCount">其中 {{ store.managedCount }} 项由 DownVid 下载托管。</span>
+            {{ t('deps.reusing') }}
+            <span v-if="store.managedCount">{{ t('deps.managedCount', { count: store.managedCount }) }}</span>
           </template>
           <template v-else>
-            DownVid 会优先使用系统已安装的版本，找不到时由你点击按钮下载。
+            {{ t('deps.willDownload') }}
           </template>
         </p>
       </div>
       <button
         class="shrink-0 p-1.5 rounded-md text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest transition-colors disabled:opacity-40"
         :disabled="store.checking || store.downloading"
-        :title="'重新检测'"
+        :title="t('deps.recheck')"
         @click="store.refresh(true)"
       >
         <MaterialIcon name="refresh" :size="16" :class="store.checking ? 'animate-spin' : ''" />
@@ -58,11 +58,11 @@
               class="text-[10px] px-1.5 py-0.5 rounded font-medium"
               :class="sourceClass(dep.source)"
             >{{ sourceLabel(dep.source) }}</span>
-            <span v-if="dep.optional" class="text-[10px] text-on-surface-variant">可选</span>
+            <span v-if="dep.optional" class="text-[10px] text-on-surface-variant">{{ t('deps.optional') }}</span>
           </div>
           <!-- 路径：有就显示，没有就显示缺失原因 -->
           <p class="text-[11px] text-on-surface-variant mt-0.5 truncate font-mono" :title="dep.path || dep.reason">
-            {{ dep.found ? dep.path : (dep.reason || '未找到') }}
+            {{ dep.found ? dep.path : (dep.reason || t('deps.notFound')) }}
           </p>
           <!-- 该依赖正在下载 -->
           <div v-if="store.activeTool === dep.kind && store.downloading" class="mt-1.5">
@@ -83,9 +83,9 @@
             v-if="!dep.found"
             class="px-2.5 py-1.5 rounded-md text-xs font-medium bg-primary text-on-primary hover:opacity-90 transition-opacity disabled:opacity-40"
             :disabled="store.downloading"
-            :title="dep.stale ? `版本过旧，将下载 ${dep.requiredVersion}` : '下载并安装到 DownVid 托管目录'"
+            :title="dep.stale ? t('deps.outdatedHint', { version: dep.requiredVersion }) : t('deps.installHint')"
             @click="store.download([dep.kind])"
-          >{{ dep.stale ? '更新' : '下载' }}</button>
+          >{{ dep.stale ? t('deps.update') : t('deps.download') }}</button>
           <!-- 托管副本确实落后于清单：才给「更新」。
                早先只看 dep.managed，于是版本与清单一致时也显示「更新」，
                用户点下去白下 37MB —— 这是「明明版本一样还提示更新」的根因。 -->
@@ -93,11 +93,11 @@
             v-else-if="isOutdated(dep)"
             class="px-2.5 py-1.5 rounded-md text-xs font-medium bg-primary text-on-primary hover:opacity-90 transition-opacity disabled:opacity-40"
             :disabled="store.downloading"
-            :title="`当前 ${dep.version}，清单要求 ${dep.requiredVersion}`"
+            :title="t('deps.versionHint', { current: dep.version, required: dep.requiredVersion })"
             @click="store.download([dep.kind], true)"
-          >更新</button>
-          <span v-else-if="dep.managed" class="text-[10px] text-on-surface-variant px-1.5">已是最新</span>
-          <span v-else class="text-[10px] text-on-surface-variant px-1.5">系统自带</span>
+          >{{ t('deps.update') }}</button>
+          <span v-else-if="dep.managed" class="text-[10px] text-on-surface-variant px-1.5">{{ t('deps.upToDate') }}</span>
+          <span v-else class="text-[10px] text-on-surface-variant px-1.5">{{ t('deps.system') }}</span>
         </div>
       </div>
     </div>
@@ -110,22 +110,22 @@
         :disabled="store.downloading"
         @click="store.downloadMissing()"
       >
-        {{ store.downloading ? '下载中...' : '下载缺失的依赖' }}
+        {{ store.downloading ? t('deps.downloading') : t('deps.downloadMissing') }}
       </button>
       <button
         class="px-3 py-2 rounded-md text-sm font-medium bg-surface-container-highest text-on-surface border border-outline-variant/20 hover:bg-surface-variant transition-colors disabled:opacity-40"
         :disabled="store.checking || store.downloading"
         @click="store.refresh(true)"
-      >{{ store.checking ? '检测中...' : '重新检测' }}</button>
+      >{{ store.checking ? t('deps.checking') : t('deps.recheck') }}</button>
       <button
         v-if="store.downloading"
         class="px-3 py-2 rounded-md text-sm font-medium bg-error-container text-on-error-container hover:bg-error hover:text-on-error transition-colors"
         @click="store.cancel()"
-      >取消下载</button>
+      >{{ t('deps.cancelDownload') }}</button>
       <button
         class="px-3 py-2 rounded-md text-sm font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest transition-colors"
         @click="store.openManagedDir()"
-      >打开安装目录</button>
+      >{{ t('deps.openInstallDir') }}</button>
     </div>
 
     <!-- 错误 -->
@@ -137,11 +137,11 @@
     <!-- 手动指定路径 -->
     <details class="rounded-lg border border-outline-variant/15 overflow-hidden">
       <summary class="px-3 py-2.5 text-sm font-medium text-on-surface cursor-pointer hover:bg-surface-container-highest transition-colors">
-        手动指定可执行文件（进阶）
+        {{ t('deps.manualTitle') }}
       </summary>
       <div class="px-3 pb-3 flex flex-col gap-3">
         <p class="text-[11px] text-on-surface-variant leading-relaxed">
-          自动检测不到，或想固定使用某个版本时，可在此指定绝对路径。留空则自动检测。
+          {{ t('deps.manualHint') }}
         </p>
         <div v-for="kind in kinds" :key="kind" class="flex flex-col gap-1.5">
           <label class="text-xs font-medium text-on-surface">{{ kind }}</label>
@@ -150,25 +150,25 @@
               :value="paths[kind] || ''"
               type="text"
               class="flex-1 px-3 py-2 bg-surface-container-highest border border-outline-variant/20 rounded-md text-xs text-on-surface font-mono focus:outline-hidden focus:border-primary/40"
-              :placeholder="'留空则自动检测'"
+              :placeholder="t('deps.manualPlaceholder')"
               @input="onPathInput(kind, ($event.target as HTMLInputElement).value)"
             />
             <button
               class="px-3 py-2 bg-surface-container-highest text-on-surface rounded-md text-xs font-medium hover:bg-surface-variant transition-colors border border-outline-variant/20"
               @click="pick(kind)"
-            >选择</button>
+            >{{ t('common.select') }}</button>
             <button
               v-if="paths[kind]"
               class="px-3 py-2 bg-surface-container-highest text-on-surface-variant rounded-md text-xs font-medium hover:bg-surface-variant transition-colors border border-outline-variant/20"
               @click="clear(kind)"
-            >清除</button>
+            >{{ t('common.clear') }}</button>
           </div>
         </div>
         <button
           class="self-start px-3 py-2 rounded-md text-sm font-medium bg-surface-container-highest text-on-surface border border-outline-variant/20 hover:bg-surface-variant transition-colors disabled:opacity-40"
           :disabled="store.checking || store.downloading"
           @click="store.refresh(true)"
-        >应用并重新检测</button>
+        >{{ t('deps.applyAndRecheck') }}</button>
       </div>
     </details>
   </div>
@@ -178,6 +178,7 @@
 import { ref, onMounted } from 'vue'
 import MaterialIcon from './icons/MaterialIcon.vue'
 import { useDepsStore } from '../stores/deps'
+import { t } from '../i18n'
 import { readDepPaths, updateDepPaths } from '../stores/settings'
 import type { DepStatus } from '../types/deps'
 
@@ -237,10 +238,10 @@ async function clear(kind: DepKind) {
 }
 
 function sourceLabel(source?: DepSource): string {
-  if (source === 'system') return '系统安装'
-  if (source === 'managed') return 'DownVid 托管'
-  if (source === 'manual') return '手动指定'
-  if (source === 'scanned') return '扫描发现'
+  if (source === 'system') return t('deps.sourceSystem')
+  if (source === 'managed') return t('deps.sourceManaged')
+  if (source === 'manual') return t('deps.sourceManual')
+  if (source === 'scanned') return t('deps.sourceScanned')
   return ''
 }
 

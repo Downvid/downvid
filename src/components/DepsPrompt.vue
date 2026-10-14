@@ -13,10 +13,9 @@
               <MaterialIcon name="download_for_offline" :size="20" class="text-amber" />
             </div>
             <div class="flex-1 min-w-0">
-              <h3 class="font-headline text-base font-bold text-on-surface">需要下载运行依赖</h3>
+              <h3 class="font-headline text-base font-bold text-on-surface">{{ t('depsPrompt.title') }}</h3>
               <p class="text-xs text-on-surface-variant mt-1 leading-relaxed">
-                DownVid 不再内置 yt-dlp / ffmpeg，会优先使用本机已安装的版本。
-                当前缺少：
+                {{ t('depsPrompt.body') }}
                 <span class="font-mono text-on-surface">{{ missingText }}</span>
               </p>
             </div>
@@ -39,7 +38,7 @@
                 />
               </div>
               <div class="flex justify-between text-[11px] text-on-surface-variant">
-                <span>{{ store.notice || `正在下载 ${store.activeTool || ''}...` }}</span>
+                <span>{{ store.notice || t('depsPrompt.downloading', { tool: store.activeTool || '' }) }}</span>
                 <span>{{ store.sizeText }}</span>
               </div>
             </div>
@@ -50,7 +49,7 @@
             </div>
 
             <p class="text-[11px] text-on-surface-variant leading-relaxed">
-              也可以自行安装后点「重新检测」：
+              {{ t('depsPrompt.orInstall') }}
               <span class="font-mono">{{ installHint }}</span>
             </p>
           </div>
@@ -59,22 +58,22 @@
             <button
               class="px-3 py-2 rounded-md text-sm font-medium text-on-surface-variant hover:text-on-surface hover:bg-surface-container-highest transition-colors"
               @click="store.openManagedDir()"
-            >打开安装目录</button>
+            >{{ t('depsPrompt.openDir') }}</button>
             <button
               v-if="store.downloading"
               class="px-4 py-2 rounded-md text-sm font-medium bg-error-container text-on-error-container hover:bg-error hover:text-on-error transition-colors"
               @click="store.cancel()"
-            >取消</button>
+            >{{ t('common.cancel') }}</button>
             <template v-else>
               <button
                 class="px-3 py-2 rounded-md text-sm font-medium bg-surface-container-highest text-on-surface border border-outline-variant/20 hover:bg-surface-variant transition-colors disabled:opacity-40"
                 :disabled="store.checking"
                 @click="store.refresh(true)"
-              >{{ store.checking ? '检测中...' : '重新检测' }}</button>
+              >{{ store.checking ? t('deps.checking') : t('deps.recheck') }}</button>
               <button
                 class="px-4 py-2 rounded-md text-sm font-medium bg-primary text-on-primary hover:opacity-90 transition-opacity"
                 @click="store.download(store.promptKinds.length ? store.promptKinds : undefined)"
-              >下载并继续</button>
+              >{{ t('depsPrompt.downloadAndContinue') }}</button>
             </template>
           </div>
         </div>
@@ -87,6 +86,7 @@
 import { computed } from 'vue'
 import MaterialIcon from './icons/MaterialIcon.vue'
 import { useDepsStore } from '../stores/deps'
+import { t } from '../i18n'
 
 const store = useDepsStore()
 
