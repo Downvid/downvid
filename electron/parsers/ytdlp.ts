@@ -1,7 +1,9 @@
 import { spawn } from 'node:child_process'
 import path from 'node:path'
 import { resolveDependency, checkJsRuntime } from '../utils/binary'
-import { getCookieAttempts, runWithCookies, cookieFailureHint } from '../utils/cookies'
+import { getCookieAttempts, runWithCookies, cookieFailureHint, isCookieError } from '../utils/cookies'
+import { classifyParseError, parseDiagnostic, PARSE_MESSAGES } from '../../shared/parse-error'
+import { nextYoutubeRetry, youtubeExtractorArgs, type YoutubeRetryState } from './youtube-retry'
 import { isTwitterUrl } from '../utils/platform'
 import { LANG_NAMES } from '../constants'
 import { buildVideoFormats } from './formats'
@@ -9,7 +11,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 
 // 解析结果缓存
-const PARSE_CACHE_VERSION = 4
+const PARSE_CACHE_VERSION = 5
 const parseCache = new Map<string, { data: any; time: number; ver: number }>()
 const PARSE_CACHE_TTL = 30 * 60 * 1000
 
@@ -21,25 +23,17 @@ export function getExtractorArgs(url: string): string[] {
 
 function buildBaseArgs(isYoutube: boolean): string[] {
   const args = [
-    '--no-playlist', '--playlist-items', '1', '--no-check-certificates', '--no-warnings', '--quiet',
+    '--ignore-config', '--no-playlist', '--playlist-items', '1', '--no-check-certificates', '--quiet',
     '--socket-timeout', '10', '--extractor-retries', '1',
     '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     '--add-header', 'Accept-Language:en-US,en;q=0.9',
   ]
-  if (isYoutube) args.push('--extractor-args', 'youtube:skip=hls,dash')
+  if (!isYoutube) args.push('--no-warnings')
   return args
 }
 
 function applyProxy(args: string[], proxy?: string) {
   if (proxy) args.push('--proxy', proxy)
-}
-
-function applyYoutubeRuntime(args: string[]) {
-  const runtime = checkJsRuntime()
-  // 依赖上面返回的 kind，而不是从路径猜运行时类型
-  if (runtime.path && runtime.kind) {
-    args.push('--js-runtimes', `${runtime.kind}:${runtime.path}`)
-  }
 }
 
 async function runYtdlp(args: string[]): Promise<{ code: number | null; stdout: string; stderr: string }> {
@@ -48,13 +42,13 @@ async function runYtdlp(args: string[]): Promise<{ code: number | null; stdout: 
   // resolveDependency 在 required=true 时不会返回 null；这里显式兜一次让类型收敛
   if (!ytdlpPath) throw new Error('未找到可用的 yt-dlp')
   return new Promise((resolve, reject) => {
-    const child = spawn(ytdlpPath, args, { cwd: path.dirname(ytdlpPath) })
+    const child = spawn(ytdlpPath, args, { cwd: path.dirname(ytdlpPath), windowsHide: true, timeout: args.includes('--version') ? 3000 : 90000 })
     let stdout = ''
     let stderr = ''
     child.stdout.on('data', (d: Buffer) => { stdout += d.toString() })
     child.stderr.on('data', (d: Buffer) => { stderr += d.toString() })
-    child.on('close', (code) => resolve({ code, stdout, stderr }))
-    child.on('error', reject)
+    child.on('close', (code, signal) => resolve({ code: code ?? 1, stdout, stderr: signal ? 'Connection timed out' : stderr }))
+    child.on('error', () => reject(new Error('无法启动 yt-dlp，请检查运行依赖')))
   })
 }
 
@@ -83,8 +77,28 @@ async function dumpInfo(url: string, cookiesFile: string | undefined, proxy: str
   const isYoutube = url.includes('youtube.com') || url.includes('youtu.be')
   const base = [...buildBaseArgs(isYoutube), '--dump-json', ...extraArgs]
   applyProxy(base, proxy)
-  if (isYoutube) applyYoutubeRuntime(base)
-  return runWithCookies(getCookieAttempts(cookiesFile), (cookieArgs) => runYtdlp([...base, ...cookieArgs, url]))
+  const runtime = isYoutube ? await checkJsRuntime() : null
+  if (runtime && (!runtime.available || !runtime.path || !runtime.kind)) {
+    throw new Error('[[parse-error:runtime-unavailable]]' + PARSE_MESSAGES['runtime-unavailable'])
+  }
+  if (runtime?.path && runtime.kind) base.push('--js-runtimes', `${runtime.kind}:${runtime.path}`)
+  const versionRun = isYoutube ? await runYtdlp(['--ignore-config', '--version']) : null
+  const version = versionRun?.code === 0 ? versionRun.stdout.trim() : ''
+  let state: YoutubeRetryState = { manifests: false, client: '' }
+  let retries = 0
+  const run = await runWithCookies(getCookieAttempts(cookiesFile), async (cookieArgs) => {
+    let result = await runYtdlp([...base, ...(isYoutube ? youtubeExtractorArgs(state) : []), ...cookieArgs, url])
+    // 重试在同一次 Cookie 生命周期内完成；临时快照尚未清理，登录来源不变。
+    while (isYoutube && result.code !== 0 && retries < 2 && !isCookieError(result.stderr)) {
+      const next = nextYoutubeRetry(result.stderr, state, version)
+      if (!next) break
+      state = next
+      retries++
+      result = await runYtdlp([...base, ...youtubeExtractorArgs(state), ...cookieArgs, url])
+    }
+    return result
+  })
+  return { ...run, state, version, runtimeVersion: runtime?.version && runtime.kind ? `${runtime.kind}@${runtime.version}` : '' }
 }
 
 async function parseViaCli(url: string, cookiesFile: string | undefined, proxy: string | undefined, cacheKey: string): Promise<any> {
@@ -98,7 +112,11 @@ async function parseViaCli(url: string, cookiesFile: string | undefined, proxy: 
     const fallback = await dumpInfo(url, cookiesFile, proxy, fallbackArgs)
     if (fallback.code === 0) { run = fallback; extraArgs = fallbackArgs }
   }
-  if (run.code !== 0) throw new Error((run.stderr || '解析失败') + cookieFailureHint(run.failedBrowsers))
+  if (run.code !== 0) {
+    const kind = classifyParseError(run.stderr)
+    throw new Error(`[[parse-error:${kind}]]` + parseDiagnostic(run.stderr, { ytdlp: run.version, runtime: run.runtimeVersion }) + cookieFailureHint(run.failedBrowsers))
+  }
+  if (isYoutube && run.state.client) extraArgs = youtubeExtractorArgs(run.state)
 
   if (extraArgs.length) extractorArgsByUrl.set(url, extraArgs)
   else extractorArgsByUrl.delete(url)
@@ -108,7 +126,7 @@ async function parseViaCli(url: string, cookiesFile: string | undefined, proxy: 
 
   try {
     const info = JSON.parse(output)
-    const formats = buildVideoFormats(info, isYoutube)
+    const formats = buildVideoFormats(info, isYoutube, run.state.manifests)
 
     // YouTube 多音轨
     const audioTracks: any[] = []
@@ -154,6 +172,8 @@ async function parseViaCli(url: string, cookiesFile: string | undefined, proxy: 
       id: info.id || '', title: info.title || '未知标题', description: info.description || '',
       thumbnail: info.thumbnail || '', duration: info.duration || 0, uploader: info.uploader || '',
       webpageUrl: info.webpage_url || url, formats, audioTracks, subtitles, audioFormats, isYoutube,
+      parseNotice: isYoutube && (run.state.manifests || run.state.client)
+        ? '已通过兼容解析重试恢复；本次重试使用的 Cookie 来源未改变。' : '',
     }
     // 保存原始 info JSON：下载时用 --load-info-json 跳过 yt-dlp 二次提取
     try {
@@ -163,8 +183,8 @@ async function parseViaCli(url: string, cookiesFile: string | undefined, proxy: 
     parseCache.set(cacheKey, { data: result, time: Date.now(), ver: PARSE_CACHE_VERSION })
     cleanupCache()
     return result
-  } catch (e: any) {
-    throw new Error('解析响应失败: ' + (e.message || '未知错误'))
+  } catch {
+    throw new Error('[[parse-error:unknown]]解析响应格式无效')
   }
 }
 

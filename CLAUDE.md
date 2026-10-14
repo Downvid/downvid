@@ -231,9 +231,13 @@ Resume re-spawns and continues from the `.part` file. **No cross-restart resume.
 
 - `--ffmpeg-location` takes a **directory**, not a file: yt-dlp looks for both ffmpeg and ffprobe
   there, which is what makes a managed-dir install work.
-- YouTube needs an installed Node / Deno; `checkJsRuntime()` in `utils/js-runtime.ts` must never
-  return the Electron binary. It checks WinGet, Scoop and the user's `.deno/bin` as well as PATH
+- YouTube needs an installed Node / Deno; `checkJsRuntime()` in `utils/js-runtime.ts` must never return the Electron binary.
+  It probes asynchronously, requiring Node >=22 / Deno >=2.3, with a six-second total budget and one second per candidate.
+  It checks WinGet, Scoop and the user's `.deno/bin` as well as PATH
   so a GUI process with an old PATH can still find the runtime. The sidecar does not install JS runtimes.
+- YouTube parsing keeps yt-dlp's default clients. Format/page-reload errors each allow one fallback, at most three rounds.
+  Retries share one Cookie lifecycle; downloads reuse successful client arguments and the UI displays a recovery notice.
+  `shared/parse-error.ts` emits only categories and validated versions; Issue drafts exclude raw output and environment details.
 - **Subtitle mode doesn't need ffmpeg** — it isn't resolved, and no `--ffmpeg-location` is passed.
 - Cookies go through `utils/cookies.ts` `runWithCookies`: manual file → none, or (auto) each installed
   browser → snapshot `userData/ytdlp-cookies/browser-cookies.txt` → none. It only moves to the next

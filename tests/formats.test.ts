@@ -11,6 +11,11 @@ import { buildVideoFormats } from '../electron/parsers/formats'
  * 因此针对这些回归点各留一个用例。
  */
 describe('buildVideoFormats', () => {
+  it('YouTube 流格式回退保留仅有的 HLS 清晰度', () => {
+    const info = { formats: [{ format_id: 'hls', vcodec: 'h264', acodec: 'aac', height: 720, protocol: 'm3u8_native' }] }
+    expect(buildVideoFormats(info, true, true)[0].formatId).toBe('hls')
+    expect(buildVideoFormats(info, true)[0].formatId).not.toBe('hls')
+  })
   it('保留没有 vcodec 的格式（X/Twitter 的 mp4）', () => {
     const info = {
       formats: [

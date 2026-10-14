@@ -102,6 +102,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { newIssueUrl } from '../../shared/app'
+import { safeIssueReport } from '../../shared/parse-error'
 
 const props = defineProps<{
   visible: boolean
@@ -127,12 +128,8 @@ const title = computed(() => props.title || {
 }[type.value])
 
 const issueUrl = computed(() => {
-  const body = [
-    '## 问题描述', '', props.message, '',
-    '## 错误详情', '', '```', props.detail || '无', '```', '',
-    '## 环境信息', '', `- 操作系统: ${navigator.platform}`, `- 用户代理: ${navigator.userAgent}`,
-  ].join('\n')
-  return newIssueUrl({ title: `[Bug] ${props.message}`, body, labels: 'bug' })
+  const report = safeIssueReport(props.message, props.detail || '')
+  return newIssueUrl({ ...report, labels: 'bug' })
 })
 
 function close() {

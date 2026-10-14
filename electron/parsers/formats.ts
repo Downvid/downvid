@@ -34,17 +34,17 @@ function cleanQualityLabel(raw: string): string {
   return ''
 }
 
-export function buildVideoFormats(info: any, isYoutube: boolean): any[] {
+export function buildVideoFormats(info: any, isYoutube: boolean, allowYoutubeManifests = false): any[] {
   const isM3u8 = (f: any) => (f.protocol || '').includes('m3u8')
   // 不要求 vcodec 字段存在：X/Twitter 等站点的 mp4 直链格式不带编解码信息（vcodec 为空）
   const videoFormats = (info.formats || []).filter((f: any) => f.vcodec !== 'none' && (f.height || 0) > 0)
   // 同一高度有直链时去掉 m3u8（直链下载更快更稳）；只有 m3u8 的清晰度保留（部分 X 视频、直播回放）。
-  // YouTube 维持原逻辑始终排除 m3u8
+  // YouTube 仅在流格式回退时开放 m3u8，仍优先同清晰度的直链。
   const directHeights = new Set(videoFormats.filter((f: any) => !isM3u8(f)).map((f: any) => f.height))
   const seenQuality = new Set<string>()
 
   let formats = videoFormats
-    .filter((f: any) => !isM3u8(f) || (!isYoutube && !directHeights.has(f.height)))
+    .filter((f: any) => !isM3u8(f) || ((!isYoutube || allowYoutubeManifests) && !directHeights.has(f.height)))
     .map((f: any) => {
       let filesize = f.filesize || f.filesize_approx || 0
       if (!filesize && info.duration) {

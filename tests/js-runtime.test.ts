@@ -1,6 +1,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import fs from 'node:fs'
-import { looksLikeNode, jsRuntimeCandidates, checkJsRuntime } from '../electron/utils/js-runtime'
+import { execFile } from 'node:child_process'
+import { looksLikeNode, jsRuntimeCandidates, checkJsRuntime, supportedJsVersion } from '../electron/utils/js-runtime'
+
+vi.mock('node:child_process', () => ({ execFile: vi.fn() }))
 
 /**
  * JS 运行时的候选判定。
@@ -57,7 +60,7 @@ describe('Windows JS 运行时目录兜底', () => {
     expect(candidates).toContainEqual({ kind: 'deno', path: 'G:\\scoop\\shims\\deno.exe' })
   })
 
-  it('旧 PATH 下仍能实际选择用户目录里的 Deno', () => {
+  it('旧 PATH 下仍能实际选择可运行的 Deno', async () => {
     vi.stubEnv('PATH', '')
     vi.spyOn(fs, 'readdirSync').mockReturnValue([])
     vi.spyOn(fs, 'statSync').mockImplementation(file => {
@@ -66,6 +69,36 @@ describe('Windows JS 运行时目录兜底', () => {
       }
       throw new Error('不存在')
     })
-    expect(checkJsRuntime()).toMatchObject({ available: true, kind: 'deno', name: 'Deno' })
+    vi.mocked(execFile).mockImplementation(((_file: unknown, _args: unknown, _options: unknown, done: Function) => done(null, 'deno 2.3.0\nv8 test')) as typeof execFile)
+    expect(await checkJsRuntime()).toMatchObject({ available: true, kind: 'deno', name: 'Deno', version: '2.3.0' })
+  })
+
+  it('文件存在但不能运行时不报告可用', async () => {
+    vi.spyOn(fs, 'readdirSync').mockReturnValue([])
+    vi.spyOn(fs, 'statSync').mockReturnValue({ isFile: () => true } as ReturnType<typeof fs.statSync>)
+    vi.mocked(execFile).mockImplementation(((_file: unknown, _args: unknown, _options: unknown, done: Function) => done(new Error('不能执行'), '')) as typeof execFile)
+    expect((await checkJsRuntime()).available).toBe(false)
+  })
+  it('跳过过旧的 Node，继续选择受支持的 Deno', async () => {
+    vi.spyOn(fs, 'readdirSync').mockReturnValue([])
+    vi.spyOn(fs, 'statSync').mockReturnValue({ isFile: () => true } as ReturnType<typeof fs.statSync>)
+    vi.mocked(execFile).mockImplementation(((file: unknown, _args: unknown, _options: unknown, done: Function) => {
+      done(null, /deno(?:\.exe)?$/.test(String(file)) ? 'deno 2.3.0' : 'v21.9.0')
+    }) as typeof execFile)
+    expect(await checkJsRuntime()).toMatchObject({ available: true, kind: 'deno', version: '2.3.0' })
+  })
+})
+
+describe('JS 运行时最低版本', () => {
+  it('只接受 Node 22+ 的真实版本输出', () => {
+    expect(supportedJsVersion('node', 'v21.9.0')).toBeNull()
+    expect(supportedJsVersion('node', 'v22.0.0')).toBe('22.0.0')
+    expect(supportedJsVersion('node', 'deno 2.3.0')).toBeNull()
+  })
+  it('只接受 Deno 2.3+，拒绝不匹配的程序输出', () => {
+    expect(supportedJsVersion('deno', 'deno 2.2.9')).toBeNull()
+    expect(supportedJsVersion('deno', 'deno 2.3.0 (stable)\nv8 test')).toBe('2.3.0')
+    expect(supportedJsVersion('deno', 'deno 3.0.0')).toBe('3.0.0')
+    expect(supportedJsVersion('deno', 'v22.0.0')).toBeNull()
   })
 })

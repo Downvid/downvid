@@ -266,14 +266,14 @@ async function executeYtdlpDownload(options: DownloadOptions, outputDir: string,
   const isSubtitleOnly = options.downloadMode === 'subtitle'
   const isYoutube = options.url.includes('youtube.com') || options.url.includes('youtu.be')
 
-  // YouTube 的提取需要 JS 运行时。打包应用用的是 Electron 自身，
-  // 因此这条分支主要覆盖非 Electron 场景；缺失时引导用户安装。
+  // 打包应用也必须使用独立且受支持的 Node/Deno，不能把 Electron 当成 CLI。
   let jsRuntime: JsRuntime | null = null
   if (isYoutube) {
-    const runtime = checkJsRuntime()
+    const runtime = await checkJsRuntime()
+    if (preparationPaused()) return pausedYtdlpResult()
     if (!runtime.available) {
       await promptNodeDownload()
-      throw new Error('需要安装 Node.js')
+      throw new Error('需要可运行的 Node.js 22+ 或 Deno 2.3+')
     }
     if (runtime.path && runtime.kind) jsRuntime = { path: runtime.path, kind: runtime.kind, name: runtime.name }
   }

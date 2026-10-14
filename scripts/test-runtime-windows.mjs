@@ -109,9 +109,10 @@ try {
     } },
     require: name => name === 'node:os' ? { ...os, homedir: () => jsHome } : require(name),
   })
-  const runtime = module.exports.checkJsRuntime()
+  const runtime = await module.exports.checkJsRuntime()
   assert.equal(runtime.kind, 'deno')
   assert.equal(runtime.path, deno)
+  assert.equal(runtime.version, '2.3.0')
   console.log('通过：winget-deno-old-path')
   check('slow-candidates', (home, env) => {
     const manual = binary(path.join(home, 'manual'), 'yt-dlp', 'slow')
