@@ -11,8 +11,9 @@ let contributorsCache: any[] | null = null
 let contributorsCacheTime = 0
 const MEMORY_CACHE_TTL = 1000 * 60 * 30 // 内存缓存 30 分钟
 const FILE_CACHE_TTL = 1000 * 60 * 60 * 24 * 7 // 文件缓存 7 天
-// 缓存格式版本：v2 起包含匿名作者与 Co-authored-by 共同作者，旧缓存不完整需丢弃
-const FILE_CACHE_VERSION = 2
+// 缓存格式版本：v2 起包含匿名作者与 Co-authored-by 共同作者；v3 起包含
+// isContributor（真人贡献者标记）。旧缓存缺字段会让新标不显示，因此必须升版本丢弃
+const FILE_CACHE_VERSION = 3
 
 // 本地缓存文件路径
 function getContributorsCachePath() {

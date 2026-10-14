@@ -109,13 +109,17 @@
                     />
                     <span v-else class="text-sm font-bold text-on-surface-variant">{{ c.login.slice(0, 1).toUpperCase() }}</span>
                   </div>
-                  <!-- Developer / Bot / AI tag -->
+                  <!--
+                    身份标：DEV（维护者）/ CONTRIBUTOR（真人贡献者）/ BOT / AI。
+                    此前只有 DEV、BOT、AI 三种，普通真人贡献者**没有任何标记** ——
+                    而他们恰恰是最该被看到的人。现在补上 CONTRIBUTOR。
+                  -->
                   <span
-                    v-if="c.isDeveloper || c.isBot"
+                    v-if="c.isDeveloper || c.isContributor || c.isBot"
                     class="absolute -top-1 -right-2 px-1 py-0.5 text-[8px] font-bold rounded-sm leading-none"
-                    :class="c.isDeveloper ? 'bg-primary text-on-primary' : c.isAI ? 'bg-secondary-container text-on-secondary-container' : 'bg-surface-container-highest text-on-surface-variant'"
+                    :class="badgeClass(c)"
                   >
-                    {{ c.isDeveloper ? 'DEV' : c.isAI ? 'AI' : 'BOT' }}
+                    {{ badgeLabel(c) }}
                   </span>
                 </div>
                 <span class="w-full text-center text-[11px] leading-tight text-on-surface wrap-anywhere">{{ c.login }}</span>
@@ -237,12 +241,30 @@ interface Contributor {
   isBot: boolean
   isAI?: boolean
   isDeveloper: boolean
+  /** 真人贡献者（非 Bot、非 AI） */
+  isContributor?: boolean
 }
 
 /** 界面展示用的仓库标识（去掉 https:// 前缀） */
 const repoLabel = `github.com/${REPO_SLUG}`
 
 const showDonate = ref(false)
+
+/** 身份标文案：DEV / CONTRIBUTOR / BOT / AI */
+function badgeLabel(c: Contributor): string {
+  if (c.isDeveloper) return 'DEV'
+  if (c.isBot) return c.isAI ? 'AI' : 'BOT'
+  return 'CONTRIBUTOR'
+}
+
+/** 身份标配色：真人贡献者用次要色，与 DEV 的主色区分开 */
+function badgeClass(c: Contributor): string {
+  if (c.isDeveloper) return 'bg-primary text-on-primary'
+  if (c.isBot) return c.isAI
+    ? 'bg-secondary-container text-on-secondary-container'
+    : 'bg-surface-container-highest text-on-surface-variant'
+  return 'bg-tertiary-container text-on-tertiary-container'
+}
 
 /** 技术栈：与 README、package.json 保持一致，改其一时同步另一处 */
 const techStack = [

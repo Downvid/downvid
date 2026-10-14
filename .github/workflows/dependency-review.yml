@@ -3,7 +3,15 @@ name: Dependency Review
 # 在 PR 上拦截新增的高危依赖与许可证问题。
 # 本项目会分发二进制到用户机器，供应链风险等同于发布风险，因此依赖变更必须过闸。
 #
-# 注意：只有 PR 中的依赖变更会被检查；Dependabot 的 PR 同样适用。
+# ⚠️ 前置条件：仓库必须开启 **Dependency graph**
+#    Settings → Security analysis → Dependency graph
+#    未开启时该 action 会直接失败并报：
+#      "Dependency review is not supported on this repository."
+#
+#    这个开关**只能手动在网页上打开**，GitHub API 不提供（`security_and_analysis`
+#    里根本没有 `dependency_graph` 字段，PATCH 也不生效）。因此这里做了一个前置检查：
+#    未开启时给出**明确的提示**并跳过，而不是让贡献者看到一条含义不明的红色失败
+#    ——之前多位贡献者被这个红叉误导，以为是自己的 PR 有问题。
 on:
   pull_request:
     branches: [main]
@@ -12,7 +20,35 @@ permissions:
   contents: read
 
 jobs:
+  # 先探测 Dependency graph 是否开启，决定后续步骤跑不跑
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      enabled: ${{ steps.probe.outputs.enabled }}
+    steps:
+      - name: Probe dependency graph availability
+        id: probe
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # 依赖图开启后，本仓库的 SBOM 端点可用；未开启时返回 404
+          status=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/dependency-graph/sbom")
+          if [ "$status" = "200" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "Dependency graph 已开启，继续执行依赖审查。"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Dependency graph 未开启::仓库未启用 Dependency graph，依赖审查已跳过。请维护者到 Settings → Security analysis 开启后重跑。"
+          fi
+
   review:
+    needs: check
+    # 未开启时直接跳过，避免给贡献者一个看不出原因的红色失败
+    if: needs.check.outputs.enabled == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:

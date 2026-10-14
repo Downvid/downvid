@@ -27,6 +27,8 @@ interface Window {
           isBot: boolean
           isAI?: boolean
           isDeveloper: boolean
+          /** 真人贡献者（非 Bot、非 AI） */
+          isContributor?: boolean
         }>
         error?: string
         fromCache?: boolean
@@ -140,6 +142,7 @@ interface Window {
       isBot: boolean
       isAI?: boolean
       isDeveloper: boolean
+      isContributor?: boolean
     }>) => void) => () => void
 
     // 菜单事件监听

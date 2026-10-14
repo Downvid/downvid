@@ -11,6 +11,8 @@ export interface Contributor {
   isBot: boolean
   isAI: boolean
   isDeveloper: boolean
+  /** 真人贡献者（非 Bot、非 AI）：界面据此打 CONTRIBUTOR 标 */
+  isContributor: boolean
 }
 
 
@@ -79,7 +81,7 @@ export async function fetchAllContributors(owner: string, repo: string): Promise
       if (existing) { existing.contributions += c.contributions; continue }
       byKey.set(key, {
         login, avatarUrl: '', htmlUrl: '', contributions: c.contributions,
-        isBot: false, isAI: false, isDeveloper: false,
+        isBot: false, isAI: false, isDeveloper: false, isContributor: true,
       })
       continue
     }
@@ -91,6 +93,8 @@ export async function fetchAllContributors(owner: string, repo: string): Promise
       isBot: c.type === 'Bot',
       isAI: false,
       isDeveloper: DEVELOPER_LOGINS.includes(c.login),
+      // 非 Bot 即真人（AI 共同作者在下面单独标出）
+      isContributor: c.type !== 'Bot',
     })
   }
 
@@ -109,7 +113,7 @@ export async function fetchAllContributors(owner: string, repo: string): Promise
           avatarUrl: `https://github.com/${ai.org}.png?size=112`,
           htmlUrl: ai.url,
           contributions: 1,
-          isBot: true, isAI: true, isDeveloper: false,
+          isBot: true, isAI: true, isDeveloper: false, isContributor: false,
         })
         continue
       }
@@ -125,11 +129,12 @@ export async function fetchAllContributors(owner: string, repo: string): Promise
         contributions: 1,
         isBot: /\[bot\]$/i.test(login || name), isAI: false,
         isDeveloper: !!login && DEVELOPER_LOGINS.includes(login),
+        isContributor: !/\[bot\]$/i.test(login || name),
       })
     }
   }
 
-  // 开发者 → 普通贡献者 → Bot → AI，各组内按贡献次数降序
+  // 开发者 → 真人贡献者 → Bot → AI，各组内按贡献次数降序
   const rank = (c: Contributor) => c.isDeveloper ? 0 : c.isAI ? 3 : c.isBot ? 2 : 1
   return [...byKey.values()].sort((a, b) => rank(a) - rank(b) || b.contributions - a.contributions)
 }
