@@ -10,6 +10,7 @@
           </div>
 
           <UrlInput @parse="parseVideo" />
+          <p v-if="store.videoInfo?.parseNotice" role="status" class="text-sm text-on-surface-variant">{{ store.videoInfo.parseNotice }}</p>
 
           <FormatSelector
             v-if="store.videoInfo"
@@ -65,6 +66,7 @@ import DownloadQueue from './DownloadQueue.vue'
 import { useDownloadStore } from '../stores/download'
 import { useDepsStore, readMissingKinds, stripDepMarkers } from '../stores/deps'
 import { useErrorModal } from '../composables/useErrorModal'
+import { classifyParseError, parseDiagnostic, PARSE_MESSAGES } from '../../shared/parse-error'
 
 const store = useDownloadStore()
 const { showError } = useErrorModal()
@@ -183,16 +185,8 @@ async function parseVideo() {
       store.isParsing = false
       return
     }
-    let errorMsg = stripDepMarkers(rawError)
-    if (errorMsg.includes('not a valid URL') || errorMsg.includes('Unsupported URL')) errorMsg = '请输入有效的链接'
-    else if (errorMsg.includes('not found') || errorMsg.includes('404')) errorMsg = '视频不存在或已被删除'
-    else if (errorMsg.includes('private') || errorMsg.includes('登录')) errorMsg = '该视频需要登录才能访问'
-    else if (errorMsg.includes('network') || errorMsg.includes('timeout')) errorMsg = '网络连接超时'
-    else if (errorMsg.includes('ffmpeg') || errorMsg.includes('FFmpeg')) errorMsg = 'FFmpeg 未找到'
-    else if (errorMsg.toLowerCase().includes('yt-dlp') && errorMsg.includes('not found')) errorMsg = 'yt-dlp 未找到'
-    else if (errorMsg.includes('No video formats found')) errorMsg = '未找到可下载的视频格式，可能需要 Cookie 或视频已失效'
-    else if (!errorMsg || errorMsg === '解析失败') errorMsg = '无法解析该链接'
-    showError('解析失败：' + errorMsg, rawError, hint)
+    const sanitized = stripDepMarkers(rawError)
+    showError('解析失败：' + PARSE_MESSAGES[classifyParseError(sanitized)], parseDiagnostic(sanitized), hint)
   } finally {
     store.isParsing = false
   }

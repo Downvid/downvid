@@ -245,4 +245,5 @@ try {
   await storeChecks()
   await ipcChecks()
   await preparingChecks()
+  await import('./test-parse-integration.mjs')
 } finally { fs.rmSync(temp, { recursive: true, force: true }) }

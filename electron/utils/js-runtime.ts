@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { execFile } from 'node:child_process'
 
 export type JsRuntimeKind = 'node' | 'deno'
 
@@ -9,6 +10,7 @@ export interface JsRuntimeInfo {
   path: string | null
   kind: JsRuntimeKind | null
   name: string
+  version?: string
 }
 
 interface Candidate {
@@ -74,17 +76,38 @@ export function jsRuntimeCandidates(
   return candidates
 }
 
-/** 只返回真正的 node/deno 文件，不能把 Electron 自身当作 CLI 运行时。 */
-export function checkJsRuntime(): JsRuntimeInfo {
+export function supportedJsVersion(kind: JsRuntimeKind, output: string): string | null {
+  const pattern = kind === 'node' ? /^v(\d+)\.(\d+)\.(\d+)\s*$/ : /^deno (\d+)\.(\d+)\.(\d+)(?:\s|$)/
+  const match = pattern.exec(output.trim())
+  if (!match) return null
+  const [, major, minor, patch] = match
+  const supported = kind === 'node' ? Number(major) >= 22 : Number(major) > 2 || Number(major) === 2 && Number(minor) >= 3
+  return supported ? `${major}.${minor}.${patch}` : null
+}
+
+/** 验证实际执行和版本，不能把 Electron 自身当作 CLI 运行时。 */
+export async function checkJsRuntime(): Promise<JsRuntimeInfo> {
+  const deadline = Date.now() + 6000
+  const checked = new Set<string>()
   for (const candidate of jsRuntimeCandidates()) {
     if (candidate.kind === 'node' && !looksLikeNode(candidate.path)) continue
+    if (checked.has(candidate.path)) continue
+    checked.add(candidate.path)
     try {
       if (fs.statSync(candidate.path).isFile()) {
+        if (Date.now() >= deadline) break
+        const version = await new Promise<string | null>(resolve => {
+          execFile(candidate.path, ['--version'], { windowsHide: true, timeout: Math.min(1000, deadline - Date.now()), maxBuffer: 16384 }, (error, stdout) => {
+            resolve(error ? null : supportedJsVersion(candidate.kind, stdout))
+          })
+        })
+        if (!version) continue
         return {
           available: true,
           path: candidate.path,
           kind: candidate.kind,
           name: candidate.kind === 'node' ? 'Node.js' : 'Deno',
+          version,
         }
       }
     } catch {}

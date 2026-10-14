@@ -263,8 +263,12 @@ aria2 临时片段隔离在输出目录 `.downvid-aria2` 中，同一暂停任�
 - `--ffmpeg-location` 传**目录**而非文件：yt-dlp 会在该目录里同时找 ffmpeg 与 ffprobe，
   托管目录安装时两者都能命中。
 - YouTube 需要实际安装的 Node / Deno；`utils/js-runtime.ts` 的 `checkJsRuntime()`
+  是异步执行探测，校验 Node >=22 / Deno >=2.3；总预算 6 秒，每个候选至多 1 秒。
   不得返回 Electron 二进制。除 PATH 外也查 WinGet、Scoop、用户 `.deno/bin` 等目录，
   避免 GUI 应用继承旧 PATH 时漏检；运行依赖侧车不会自动安装 JS 运行时。
+- YouTube 解析默认沿用 yt-dlp 客户端；格式/页面重载错误各允许一次回退，至多三轮。
+  回退在同一次 Cookie 生命周期内执行，下载沿用成功的客户端参数，界面显示恢复提示。
+  `shared/parse-error.ts` 仅输出类别和验证过的版本；Issue 草稿不包含原始输出或环境信息。
 - **字幕模式不需要 ffmpeg**，因此不强制解析它，也不传 `--ffmpeg-location`。
 - Cookie 经 `utils/cookies.ts` 的 `runWithCookies`：手动文件 → 无；自动模式依次尝试各已安装
   浏览器 → 快照 `userData/ytdlp-cookies/browser-cookies.txt` → 无。仅在 cookie **读取**错误
