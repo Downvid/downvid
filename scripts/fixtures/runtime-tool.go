@@ -4,15 +4,33 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
 
 func main() {
 	exe, _ := os.Executable()
+	if len(os.Args) > 1 && os.Args[1] == "--child" {
+		for i := 0; i < 200; i++ {
+			_ = os.WriteFile(filepath.Join(filepath.Dir(exe), "progress.txt"), []byte(strconv.Itoa(i)), 0o644)
+			time.Sleep(100 * time.Millisecond)
+		}
+		return
+	}
 	mode, _ := os.ReadFile(filepath.Join(filepath.Dir(exe), "mode.txt"))
 	switch strings.TrimSpace(string(mode)) {
+	case "tree":
+		child := exec.Command(exe, "--child")
+		child.Stdout, child.Stderr = os.Stdout, os.Stderr
+		if err := child.Start(); err != nil {
+			panic(err)
+		}
+		_ = os.WriteFile(filepath.Join(filepath.Dir(exe), "child-pid.txt"), []byte(strconv.Itoa(child.Process.Pid)), 0o644)
+		time.Sleep(20 * time.Second)
+		return
 	case "slow":
 		time.Sleep(20 * time.Second)
 		return
