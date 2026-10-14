@@ -51,6 +51,7 @@
 - [项目结构](#项目结构)
 - [常见问题](#常见问题)
 - [参与贡献](#参与贡献)
+- [Star History](#star-history)
 - [开源协议与致谢](#开源协议与致谢)
 
 ## 项目简介
@@ -210,6 +211,16 @@ pnpm lint:ipc
 ```
 
 更多流程请查看 [贡献指南](./CONTRIBUTING.md) 和 [仓库规范](./docs/standards.md)。
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=yxxbc%2Fdownvid&type=date&legend=bottom-right">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=yxxbc/downvid&type=date&theme=dark&legend=bottom-right" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=yxxbc/downvid&type=date&legend=bottom-right" />
+    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=yxxbc/downvid&type=date&legend=bottom-right" />
+  </picture>
+</a>
 
 ## 开源协议与致谢
 
