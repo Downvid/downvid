@@ -23,8 +23,48 @@ type asset struct {
 	SHA256 string
 }
 
-// CurrentPlatform 当前构建/运行平台，形如 darwin/arm64
-func CurrentPlatform() string { return goruntime.GOOS + "/" + goruntime.GOARCH }
+// CurrentPlatform 当前平台，键名与 electron-builder 的 ${platform}-${arch} 一致。
+//
+// **不能直接用 Go 的 GOOS/GOARCH**：Go 是 windows/amd64，electron-builder 是
+// win32/x64。资产表按后者命名，直接拼 Go 的值会在 Windows 上永远查不到表
+// （报"暂不支持 windows/amd64 平台的下载"），而 macOS/Linux 因为两种命名恰好
+// 一致所以看不出问题——这个 bug 只在 Windows 上出现。
+func CurrentPlatform() string {
+	return PlatformKey(goruntime.GOOS, goruntime.GOARCH)
+}
+
+// PlatformKey 把 Go 的 GOOS/GOARCH 映射为 electron-builder 的平台键。
+//
+// 做成接受参数的纯函数，是为了能**在 macOS 上测试 Windows 的映射**——
+// 之前把映射写成读全局 GOOS/GOARCH，用例只能 `if runtime.GOOS == "windows"`
+// 才断言，于是这个 Windows 专属 bug 在本地永远测不出来（实测：注入变异后
+// 用例照样通过）。
+func PlatformKey(goos, goarch string) string {
+	return nodePlatform(goos) + "/" + nodeArch(goarch)
+}
+
+// nodePlatform 把 GOOS 映射为 Node/electron-builder 的平台名
+func nodePlatform(goos string) string {
+	if goos == "windows" {
+		return "win32"
+	}
+	return goos
+}
+
+// nodeArch 把 GOARCH 映射为 Node/electron-builder 的架构名
+func nodeArch(goarch string) string {
+	switch goarch {
+	case "amd64":
+		return "x64"
+	case "386":
+		return "ia32"
+	default:
+		return goarch
+	}
+}
+
+// GoPlatform 便于排查时展示真实的 GOOS/GOARCH
+func GoPlatform() string { return goruntime.GOOS + "/" + goruntime.GOARCH }
 
 // Tasks 生成当前平台的下载任务；only 为空表示全部依赖。
 func Tasks(managedDir string, only []string) ([]fetch.Task, error) {

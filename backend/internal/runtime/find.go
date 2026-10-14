@@ -212,6 +212,22 @@ func loginShellPath() []string {
 	return filepath.SplitList(strings.TrimSpace(string(out)))
 }
 
+// expandWindowsGlobs 展开 WinGet\Packages 下的通配路径。
+//
+// 那里的目录名带随机哈希（yt-dlp.yt-dlp_Microsoft.Winget.Source_8wekyb3d8bbwe），
+// 无法写死，只能列出来再按前缀匹配。
+func expandWindowsGlobs(base string, patterns []string) []string {
+	var out []string
+	for _, pattern := range patterns {
+		matches, err := filepath.Glob(filepath.Join(base, pattern))
+		if err != nil {
+			continue
+		}
+		out = append(out, matches...)
+	}
+	return out
+}
+
 func commonInstallDirs() []string {
 	home, _ := os.UserHomeDir()
 	var dirs []string
@@ -236,6 +252,14 @@ func commonInstallDirs() []string {
 			"/app/bin", // Flatpak 沙箱内
 		}
 	case "windows":
+		// winget 的几种落点（都是实测出来的，不是猜的）：
+		//   - WinGet\Links：portable 包（yt-dlp.yt-dlp）会把 exe 软链到这里，
+		//     因此目录里的 yt-dlp.exe 可能是符号链接，需按文件解析
+		//   - WinGet\Packages：真正解压出来的目录，层级带包名与哈希，用通配匹配
+		//   - yt-dlp.FFmpeg 是 zip+nested portable，解压后是
+		//     <hash>\ffmpeg-N-xxxx-win64-gpl\bin\{ffmpeg,ffprobe}.exe
+		//   - DenoLand.Deno 提供 JS 运行时（yt-dlp 现在依赖它）
+		wingetBase := filepath.Join(home, "AppData", "Local", "Microsoft", "WinGet")
 		dirs = []string{
 			`C:\ProgramData\chocolatey\bin`,
 			`C:\Program Files\yt-dlp`,
@@ -245,9 +269,18 @@ func commonInstallDirs() []string {
 			filepath.Join(home, "scoop", "shims"),
 			filepath.Join(home, "scoop", "apps", "yt-dlp", "current"),
 			filepath.Join(home, "scoop", "apps", "ffmpeg", "current", "bin"),
-			filepath.Join(home, "AppData", "Local", "Microsoft", "WinGet", "Links"),
+			filepath.Join(wingetBase, "Links"),
 			filepath.Join(home, "AppData", "Local", "Microsoft", "WindowsApps"),
 		}
+		// WinGet\Packages 下的实际解压目录（含包名与随机哈希），只能展开通配
+		dirs = append(dirs, expandWindowsGlobs(wingetBase, []string{
+			`Packages\yt-dlp.yt-dlp_*`,
+			`Packages\yt-dlp.FFmpeg_*`,
+			`Packages\yt-dlp.FFmpeg_*\*\bin`,
+			`Packages\DenoLand.Deno_*`,
+			`Packages\Gyan.FFmpeg_*`,
+			`Packages\Gyan.FFmpeg_*\*\bin`,
+		})...)
 	}
 
 	if home != "" {
