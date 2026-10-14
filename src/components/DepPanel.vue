@@ -78,19 +78,25 @@
         </div>
 
         <div class="shrink-0 flex items-center gap-1">
+          <!-- 缺依赖：下载 -->
           <button
             v-if="!dep.found"
             class="px-2.5 py-1.5 rounded-md text-xs font-medium bg-primary text-on-primary hover:opacity-90 transition-opacity disabled:opacity-40"
             :disabled="store.downloading"
+            :title="dep.stale ? `版本过旧，将下载 ${dep.requiredVersion}` : '下载并安装到 DownVid 托管目录'"
             @click="store.download([dep.kind])"
-          >下载</button>
+          >{{ dep.stale ? '更新' : '下载' }}</button>
+          <!-- 托管副本确实落后于清单：才给「更新」。
+               早先只看 dep.managed，于是版本与清单一致时也显示「更新」，
+               用户点下去白下 37MB —— 这是「明明版本一样还提示更新」的根因。 -->
           <button
-            v-else-if="dep.managed"
-            class="px-2.5 py-1.5 rounded-md text-xs font-medium bg-surface-container-highest text-on-surface-variant hover:text-on-surface hover:bg-surface-variant transition-colors disabled:opacity-40"
+            v-else-if="isOutdated(dep)"
+            class="px-2.5 py-1.5 rounded-md text-xs font-medium bg-primary text-on-primary hover:opacity-90 transition-opacity disabled:opacity-40"
             :disabled="store.downloading"
-            :title="'重新下载并覆盖（用于升级）'"
+            :title="`当前 ${dep.version}，清单要求 ${dep.requiredVersion}`"
             @click="store.download([dep.kind], true)"
           >更新</button>
+          <span v-else-if="dep.managed" class="text-[10px] text-on-surface-variant px-1.5">已是最新</span>
           <span v-else class="text-[10px] text-on-surface-variant px-1.5">系统自带</span>
         </div>
       </div>
@@ -173,6 +179,31 @@ import { ref, onMounted } from 'vue'
 import MaterialIcon from './icons/MaterialIcon.vue'
 import { useDepsStore } from '../stores/deps'
 import { readDepPaths, updateDepPaths } from '../stores/settings'
+import type { DepStatus } from '../types/deps'
+
+/**
+ * 该依赖是否**确实**落后于清单要求。
+ *
+ * 只在两边都有版本号且前者更旧时才为 true。缺任一侧版本号时返回 false——
+ * 宁可少提示，也不要在版本一致时把「更新」按钮亮出来（用户点下去要白下
+ * 37MB，而且下完还是同一个版本）。
+ */
+function isOutdated(dep: DepStatus): boolean {
+  if (!dep.managed || !dep.version || !dep.requiredVersion) return false
+  return compareVersions(dep.version, dep.requiredVersion) < 0
+}
+
+/** 按数字段逐个比较版本号，与后端 probe.CompareVersions 的语义保持一致 */
+function compareVersions(a: string, b: string): number {
+  const parts = (v: string) => v.split(/[.\-+]/).map((n) => parseInt(n, 10)).filter((n) => !Number.isNaN(n))
+  const pa = parts(a)
+  const pb = parts(b)
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0)
+    if (d !== 0) return d < 0 ? -1 : 1
+  }
+  return 0
+}
 import type { DepKind, DepSource } from '../types/deps'
 
 const store = useDepsStore()

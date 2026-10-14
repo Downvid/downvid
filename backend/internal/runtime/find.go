@@ -70,6 +70,13 @@ type Result struct {
 	Source   string `json:"source,omitempty"`
 	Reason   string `json:"reason,omitempty"`
 	Managed  bool   `json:"managed,omitempty"` // 该依赖由 DownVid 托管，可安全覆盖更新
+	// RequiredVersion 是当前清单要求的最低版本。界面用它判断「是否真的该提示更新」：
+	// 早先只看 Managed 就显示「更新」按钮，于是**版本与清单一致时也显示更新**，
+	// 用户点了才发现白下 37MB。
+	RequiredVersion string `json:"requiredVersion,omitempty"`
+	// Stale 表示「找到了可用副本，但版本落后于清单」。Found=false + Stale=true
+	// 时界面才应该主动引导更新。
+	Stale bool `json:"stale,omitempty"`
 }
 
 // FindAll 依次探测全部依赖
@@ -106,28 +113,26 @@ func findOneContext(parent context.Context, kind Kind, opts Options) Result {
 	res := Result{Kind: string(kind), Optional: Optional[kind]}
 	// 重置扫描预算与时限：每个依赖独立计算，避免前一个把额度用光
 	resetScanBudget()
+	resetProbeBudget()
 
 	// 记录失败原因时**优先保留有信息量的那个**：
 	// 「版本过旧」远比「某个候选路径不存在」重要，而后者总是最后一个，
 	// 直接用 lastErr 会把前者覆盖掉（用户只看到 stat no such file）。
 	var staleErr error // 找到了文件但版本太旧
+	staleSeen := false // 至少有一个副本因版本过旧被拒
 	var probeErr error // 找到了文件但执行失败（损坏、无权限等）
 	var lastErr error  // 其它（路径不存在之类）
 	for _, c := range candidatesFor(kind, opts) {
 		if ctx.Err() != nil {
 			break
 		}
-		info, err := probeToolContext(ctx, kind, c.Path)
-		if err != nil {
-			// 超时重试一次：刚下载完的托管副本首次执行要暖机
-			// （ad-hoc 签名校验 + 页面缓存，实测最慢 12.4 秒），
-			// 第二次就降到 8～10 秒。没有这一步时，用户点完「下载」
-			// 会看到「执行超时」——而再点一次（此时已暖机）就好了，
-			// 这种「第二次才行」的体验等于坏掉。
-			if isProbeTimeout(err) {
-				info, err = probeToolContext(ctx, kind, c.Path)
-			}
+		// 卡死的候选会各自吃掉一个候选预算，若不加这道闸，十几个候选
+		// 最坏能把一个依赖拖上几分钟。超过总预算就收手，宁可漏报也不要
+		// 让界面一直转圈。
+		if probeBudgetExhausted() {
+			break
 		}
+		info, err := probeToolContext(ctx, kind, c.Path)
 		if err != nil {
 			if _, statErr := os.Stat(c.Path); statErr == nil {
 				probeErr = err // 文件存在但跑不起来，值得展示
@@ -138,6 +143,7 @@ func findOneContext(parent context.Context, kind Kind, opts Options) Result {
 		}
 		if !isAcceptableVersion(kind, info) {
 			staleErr = staleReason(kind, info)
+			staleSeen = true
 			continue
 		}
 		res.Found = true
@@ -145,6 +151,7 @@ func findOneContext(parent context.Context, kind Kind, opts Options) Result {
 		res.Version = info.Version
 		res.Source = string(c.Source)
 		res.Managed = c.Source == SourceManaged
+		res.RequiredVersion = requiredVersion(kind)
 		return res
 	}
 
@@ -170,6 +177,9 @@ func findOneContext(parent context.Context, kind Kind, opts Options) Result {
 		return res
 	}
 
+	res.RequiredVersion = requiredVersion(kind)
+	res.Stale = staleSeen
+
 	switch {
 	case ctx.Err() != nil:
 		res.Reason = "依赖检测达到时限，请手动指定可执行文件路径后重试"
@@ -186,6 +196,14 @@ func findOneContext(parent context.Context, kind Kind, opts Options) Result {
 	return res
 }
 
+// requiredVersion 返回该依赖当前要求的最低版本；未注入时为 ""。
+//
+// 单独抽出来是因为它要出现在**每一条**返回路径上：界面靠它判断
+// 「装了但版本不够」与「装的就是要求的版本」——后者不该提示更新。
+func requiredVersion(kind Kind) string {
+	return MinVersions[kind]
+}
+
 // isNotExist 判断错误是否只是"路径不存在"——这类原因没有诊断价值，
 // 展示出来只会把真正的原因（版本过旧、文件损坏）挤掉
 func isNotExist(err error) bool {
@@ -197,12 +215,37 @@ func isNotExist(err error) bool {
 // 也可能由上游 ctx 取消产生，两者都被包装成了 errors.New。
 const probeTimeoutMarker = "执行超时"
 
-// isProbeTimeout 判断错误是否为"执行超时"（而非损坏、无权限、格式不对）。
-//
-// 只有这一类值得重试：刚下载完的托管副本首次执行要暖机，而损坏或格式错误
-// 的文件重试多少次都一样，白等一个候选的预算。
+// isProbeTimeout 判断错误是否为"执行超时"（而非损坏、无权限、格式不对）
 func isProbeTimeout(err error) bool {
 	return err != nil && strings.Contains(err.Error(), probeTimeoutMarker)
+}
+
+// probeTimeLimit 是**一个依赖内**执行候选文件的总预算。
+//
+// 为什么需要这道闸：卡死的候选会各自吃掉一个候选预算（15 秒），而候选表里
+// 可能有十几个路径（PATH + 各平台常见安装目录），最坏情况能把一个依赖拖上
+// 几分钟。曾经用「超时后重试一次」来对付慢启动，结果每个卡死候选要 30 秒，
+// Windows 回归用例（两个卡死候选后才轮到正常副本）直接失败——重试是错的解法。
+//
+// 取值权衡：要能容下「托管副本 + 一两个慢候选」。托管副本是用户唯一会主动
+// 装的那个，必须给它留足（15 秒）；再留一点给慢候选。
+const probeTimeLimit = 35 * time.Second
+
+// probeDeadline 单次探测候选的 wall-clock 上限，由 findOne 在每次探测前设置。
+var probeDeadline time.Time
+
+// resetProbeBudget 重置候选执行总预算。与 resetScanBudget 一样是包级状态，
+// 抽成函数让测试能显式重置（否则用例之间会互相影响，见 scan 那边的教训）。
+func resetProbeBudget() {
+	probeDeadline = time.Now().Add(probeTimeLimit)
+}
+
+// probeBudgetExhausted 判断候选执行总预算是否已用尽。零值视为无期限。
+func probeBudgetExhausted() bool {
+	if probeDeadline.IsZero() {
+		return false
+	}
+	return time.Now().After(probeDeadline)
 }
 
 // scanForBinary 在常见根目录下有限度地搜索可执行文件。

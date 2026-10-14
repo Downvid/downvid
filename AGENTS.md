@@ -329,6 +329,9 @@ aria2 临时片段隔离在输出目录 `.downvid-aria2` 中，同一暂停任�
 | 运行依赖 | Pinia `src/stores/deps.ts` |
 
 - 运行依赖的界面是 `src/components/DepPanel.vue`（设置里的「运行依赖」板块）与
+  `DepsPrompt.vue`。**「更新」按钮必须走 `isOutdated()`（比对 `version` 与
+  `requiredVersion`），不能只看 `managed`**：只看 managed 时版本与清单一致也会显示
+  「更新」，用户点下去白下 37MB 且下完还是同一个版本。
   `DepsPrompt.vue`（缺依赖时的一键下载引导，挂在 `App.vue`）。
 - 无路由。`App.vue` 用 `v-show` 切换视图；跨组件导航用 `window` CustomEvent
   （`tab-changed`、`navigate-to-settings`）。

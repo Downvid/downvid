@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/yxxbc/downvid/backend/internal/probe"
 )
@@ -229,12 +230,15 @@ func TestScanTimeLimitOutlastsOneCandidate(t *testing.T) {
 	}
 }
 
-// TestSlowFirstRunIsRetriedOnce 回归「第一次超时、第二次才好」的体验问题。
+// TestHangingCandidatesDoNotStarveManagedCopy 回归 Windows 回归用例暴露的设计缺陷。
 //
-// 刚下载完的托管副本首次执行要暖机（ad-hoc 签名校验 + 页面缓存），实测最慢
-// 12.4 秒；探测在超时后会重试一次。没有重试时，用户点完「下载」看到的是
-// 「执行超时」——而手动再点一次就好了，这种「第二次才行」等于坏掉。
-func TestSlowFirstRunIsRetriedOnce(t *testing.T) {
+// 曾用「超时后重试一次」对付慢启动，结果每个**卡死**的候选要 30 秒
+// （15 秒 × 2），两个卡死候选就把一个依赖的 30 秒预算吃光，排在后面的
+// 正常副本永远轮不到。正确解法是给「一个依赖内执行候选的总时间」设闸，
+// 而不是给单个候选重试。
+//
+// 这里让两个候选彻底卡死（远超预算），断言后面的正常副本仍被采用。
+func TestHangingCandidatesDoNotStarveManagedCopy(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Windows 上无法用 shell 脚本模拟慢启动")
 	}
@@ -242,22 +246,46 @@ func TestSlowFirstRunIsRetriedOnce(t *testing.T) {
 		t.Skip("需要真实等待，short 模式跳过")
 	}
 	managed := t.TempDir()
-	// 首次 16 秒（超过 15 秒预算，必然触发第一次超时），之后立即返回
-	marker := filepath.Join(t.TempDir(), "warmed")
-	slow := filepath.Join(managed, BinaryName(KindYtDlp))
-	script := "#!/bin/sh\n" +
-		"if [ ! -f '" + marker + "' ]; then touch '" + marker + "'; sleep 16; fi\n" +
-		"echo '2026.10.10.233141'\n"
-	if err := os.WriteFile(slow, []byte(script), 0o755); err != nil {
+	// 托管副本卡死（模拟损坏/被杀死的进程），PATH 里的副本正常
+	hang := filepath.Join(managed, BinaryName(KindYtDlp))
+	if err := os.WriteFile(hang, []byte("#!/bin/sh\nsleep 300\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	good := fakeBinary(t, filepath.Join(t.TempDir(), "path-a"), BinaryName(KindYtDlp), "2026.10.10.233141")
+	t.Setenv("PATH", filepath.Dir(good))
 
+	start := time.Now()
 	res := FindOne(KindYtDlp, Options{ManagedDir: managed})
+	elapsed := time.Since(start)
+
 	if !res.Found {
-		t.Fatalf("首次超时后重试一次应能成功，实际：%s", res.Reason)
+		t.Fatalf("卡死候选之后的正常副本应被采用，实际：%s", res.Reason)
 	}
 	if res.Version != "2026.10.10.233141" {
 		t.Errorf("版本 = %q，期望 2026.10.10.233141", res.Version)
+	}
+	// 单个依赖的探测不应被卡死候选拖成「不可接受的等待」
+	if elapsed > 40*time.Second {
+		t.Errorf("探测耗时 %s，超出预期（候选执行预算 %s 未生效）", elapsed, probeTimeLimit)
+	}
+}
+
+// TestProbeBudgetResets 候选执行预算必须每次探测前重置。
+//
+// 它是包级可变状态，不重置的话「上一次探测把预算用光」会让下一次
+// 静默什么都不做——与 scan 预算踩过的坑完全相同。
+func TestProbeBudgetResets(t *testing.T) {
+	probeDeadline = time.Now().Add(-time.Second) // 假装上一次已用尽
+	if !probeBudgetExhausted() {
+		t.Fatal("已过期的预算应判定为用尽")
+	}
+	resetProbeBudget()
+	if probeBudgetExhausted() {
+		t.Fatal("重置后不应判定为用尽")
+	}
+	probeDeadline = time.Time{} // 零值视为无期限
+	if probeBudgetExhausted() {
+		t.Fatal("零值应视为无期限，否则探测会静默不做任何事")
 	}
 }
 

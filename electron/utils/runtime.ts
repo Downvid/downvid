@@ -16,6 +16,8 @@ export interface DepStatus {
   source?: 'system' | 'managed' | 'manual'
   reason?: string
   managed?: boolean
+  requiredVersion?: string
+  stale?: boolean
 }
 
 export interface RuntimeStatus {

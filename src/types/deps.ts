@@ -23,6 +23,10 @@ export interface DepStatus {
   reason?: string
   /** 由 DownVid 下载并托管，可安全覆盖更新 */
   managed?: boolean
+  /** 当前清单要求的最低版本；界面据此判断「是否真的该提示更新」 */
+  requiredVersion?: string
+  /** 找到了副本但版本落后于清单（此时 found 为 false） */
+  stale?: boolean
 }
 
 export interface RuntimeStatus {

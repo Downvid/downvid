@@ -290,7 +290,10 @@ Resume re-spawns and continues from the `.part` file. **No cross-restart resume.
 | Download history | main process, `userData/download-history.json`, merged by local file path, capped at 100, rebroadcast on change |
 | Runtime dependencies | Pinia `src/stores/deps.ts` |
 
-- Deps UI: `src/components/DepPanel.vue` (settings section) and `DepsPrompt.vue` (download prompt
+- Deps UI: `src/components/DepPanel.vue` (settings section) and `DepsPrompt.vue` (download prompt).
+  The "Update" button **must** go through `isOutdated()` (comparing `version` against
+  `requiredVersion`) rather than checking `managed` alone — the latter showed "Update" even when the
+  installed version already matched the manifest, so users re-downloaded 37 MB for nothing
   mounted in `App.vue`).
 - No router. `App.vue` `v-show`s views; navigation uses `window` CustomEvents (`tab-changed`,
   `navigate-to-settings`).

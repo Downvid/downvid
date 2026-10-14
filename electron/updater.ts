@@ -7,6 +7,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { APP, GITHUB_API, HTTP_USER_AGENT, RELEASES_URL } from './constants'
 import { broadcast } from './store'
+import { log } from './main'
 
 // 更新流程：
 // - Windows(NSIS) / Linux(AppImage、deb、rpm)：electron-updater
@@ -283,6 +284,9 @@ export async function checkForUpdates(manual = false): Promise<CheckResult> {
   // 短时间内重复点击「检查更新」时复用结果，不再发包：
   // 既避免 GitHub 限流，也避免同一个新版本反复弹窗。
   if (lastCheckResult && Date.now() - lastCheckAt < CHECK_CACHE_MS) {
+    const age = Math.round((Date.now() - lastCheckAt) / 1000)
+    log(`[UPDATE] 复用 ${age}s 前的检查结果（缓存 ${CHECK_CACHE_MS / 1000}s）：` +
+      `hasUpdate=${lastCheckResult.hasUpdate} version=${lastCheckResult.version || '-'}`)
     return { ...lastCheckResult, currentVersion }
   }
 
@@ -290,6 +294,7 @@ export async function checkForUpdates(manual = false): Promise<CheckResult> {
   if (inflightCheck) return inflightCheck
 
   inflightCheck = (async (): Promise<CheckResult> => {
+  log(`[UPDATE] 开始检查更新：current=${currentVersion} manual=${manual} unsupported=${reason || 'no'}`)
   try {
     if (reason) {
       if (!app.isPackaged) return { ...base, hasUpdate: false }
@@ -303,6 +308,7 @@ export async function checkForUpdates(manual = false): Promise<CheckResult> {
     if (!result) return { ...base, hasUpdate: false }
     latestInfo = result.updateInfo
     const hasUpdate = result.isUpdateAvailable ?? compareVersions(result.updateInfo.version, currentVersion) > 0
+    log(`[UPDATE] electron-updater 返回：latest=${result.updateInfo.version} hasUpdate=${hasUpdate}`)
     return {
       ...base,
       hasUpdate,
@@ -311,7 +317,23 @@ export async function checkForUpdates(manual = false): Promise<CheckResult> {
       releaseDate: result.updateInfo.releaseDate,
     }
   } catch (error) {
-    return { ...base, hasUpdate: false, error: friendlyUpdateError(error) }
+    // electron-updater 走的是 releases.atom + /releases/latest 两步。
+    // 任一环节被网络或限流打断时，**不能直接回答「已是最新」**——那正是
+    // 「明明有新版本却检测不到」的观感来源。改用 GitHub API 再试一次，
+    // 它只需要一个请求；两条路都失败才如实报错。
+    log(`[UPDATE] electron-updater 检查失败，改用 GitHub API 兜底：${friendlyUpdateError(error)}`)
+    try {
+      const latest = await withTimeout(checkViaGitHubApi(), CHECK_TIMEOUT)
+      const hasUpdate = compareVersions(latest.version, currentVersion) > 0
+      log(`[UPDATE] GitHub API 兜底成功：latest=${latest.version} hasUpdate=${hasUpdate}`)
+      if (hasUpdate) {
+        sendStatus({ status: 'available', version: latest.version, releaseNotes: latest.releaseNotes })
+      }
+      return { ...base, hasUpdate, ...latest }
+    } catch (fallbackError) {
+      log(`[UPDATE] 兜底也失败：${friendlyUpdateError(fallbackError)}`)
+      return { ...base, hasUpdate: false, error: friendlyUpdateError(error) }
+    }
   }
   })()
 

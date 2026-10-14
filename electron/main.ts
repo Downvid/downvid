@@ -38,7 +38,10 @@ function initLog() {
   }
 }
 
-function log(msg: string) {
+/** 主进程日志：写 userData/downvid.log（含 5s 心跳）。
+ *  导出给 updater / runtime 等模块复用——诊断打包应用的更新与依赖问题
+ *  全靠这个文件（曾经更新流程一条日志都不写，出问题只能靠猜）。 */
+export function log(msg: string) {
   const line = `[${new Date().toISOString()}] ${msg}\n`
   console.log(line.trim())
   if (logFile) {
