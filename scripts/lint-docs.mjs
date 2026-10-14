@@ -182,6 +182,22 @@ for (const [doc, text] of Object.entries(docs)) {
   }
 }
 
+// ===== 3b. README 徽章引用的 workflow 必须存在 =====
+//
+// 首页徽章是一个 `shields.io/.../actions/workflow/status/<owner>/<repo>/<file>.yml`
+// 的 URL。工作流被改名或删除后，徽章会**静默变成灰色**（"no status"），
+// 而不是报错——首页看起来就像项目没人维护。两个 README 都要查。
+for (const readme of ['README.md', 'README.zh-CN.md']) {
+  if (!exists(readme)) continue
+  const text = read(readme)
+  // 注意是 `actions/workflow/status/`（单数 workflow）——shields.io 的路径就是这样
+  for (const m of text.matchAll(/actions\/workflow\/status\/[^/]+\/[^/]+\/([a-z0-9-]+\.yml)/g)) {
+    if (!realWorkflows.has(m[1])) {
+      problems.push(`${readme} 的 CI 徽章引用了不存在的工作流 ${m[1]}（徽章会静默变灰）`)
+    }
+  }
+}
+
 // ===== 4. 关键数字与代码常量一致 =====
 //
 // 每条规则：从某个源文件里读出真实值，再确认两份文档都写了这个值。

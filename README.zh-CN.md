@@ -19,6 +19,9 @@
   <a href="https://github.com/yxxbc/downvid/releases/latest"><img src="https://img.shields.io/github/v/release/yxxbc/downvid?style=flat&label=Release&logo=github&logoColor=white&color=0284c7" alt="Latest Release" /></a>
   <a href="https://github.com/yxxbc/downvid/stargazers"><img src="https://img.shields.io/github/stars/yxxbc/downvid?style=flat&label=Stars&logo=github&logoColor=white&color=eab308" alt="GitHub Stars" /></a>
   <a href="https://alternativeto.net/software/downvid/"><img src="https://img.shields.io/badge/AlternativeTo-DownVid-0289d5?style=flat&logo=alternativeto&logoColor=white" alt="AlternativeTo" /></a>
+  <a href="https://github.com/yxxbc/downvid/actions/workflows/ci-linux.yml"><img src="https://img.shields.io/github/actions/workflow/status/yxxbc/downvid/ci-linux.yml?branch=main&label=CI%20Linux&logo=github-actions&logoColor=white&color=16a34a" alt="CI Linux" /></a>
+  <a href="https://github.com/yxxbc/downvid/actions/workflows/ci-macos.yml"><img src="https://img.shields.io/github/actions/workflow/status/yxxbc/downvid/ci-macos.yml?branch=main&label=CI%20macOS&logo=github-actions&logoColor=white&color=16a34a" alt="CI macOS" /></a>
+  <a href="https://github.com/yxxbc/downvid/actions/workflows/ci-windows.yml"><img src="https://img.shields.io/github/actions/workflow/status/yxxbc/downvid/ci-windows.yml?branch=main&label=CI%20Windows&logo=github-actions&logoColor=white&color=16a34a" alt="CI Windows" /></a>
   <a href="https://github.com/yxxbc/downvid/actions/workflows/codeql.yml"><img src="https://img.shields.io/github/actions/workflow/status/yxxbc/downvid/codeql.yml?branch=main&label=CodeQL&logo=github-actions&logoColor=white&color=16a34a" alt="CodeQL" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-7c3aed?style=flat&logo=open-source-initiative&logoColor=white" alt="MIT License" /></a>
 </p>
