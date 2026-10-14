@@ -1,6 +1,12 @@
 import { ipcMain, app } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+// ESM 没有 __dirname，需要自己算（与 main.ts 一致）。
+// 直接用 __dirname 会在运行时抛 `__dirname is not defined` —— 这个错被空 catch 吞掉后
+// 表现为"贡献者列表加载失败"，很难定位。
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 import { checkForUpdates, downloadUpdate, installUpdate, setUpdaterPrefs } from '../updater'
 
 export function registerAppIpc() {
@@ -29,18 +35,25 @@ export function registerAppIpc() {
   /** 读取随包分发的贡献者快照 */
   async function loadContributorsSnapshot(): Promise<any[]> {
     // 开发态在项目根，打包后在 app.asar 内（相对 main.js 的位置一致）
+    // 开发态：APP_ROOT 指向项目根
+    // 打包后：main.js 在 app.asar/dist-electron/ 下，往上一级即 asar 根
     const candidates = [
       path.join(process.env.APP_ROOT || '', 'shared', 'contributors.json'),
       path.join(__dirname, '..', 'shared', 'contributors.json'),
     ]
+
+    const tried = []
     for (const file of candidates) {
       try {
-        const raw = fs.readFileSync(file, 'utf8')
-        const parsed = JSON.parse(raw)
-        if (Array.isArray(parsed)) return parsed
-      } catch {}
+        const parsed = JSON.parse(fs.readFileSync(file, 'utf8'))
+        if (Array.isArray(parsed) && parsed.length) return parsed
+        tried.push(`${file}（内容为空或格式不对）`)
+      } catch (e) {
+        // 记下失败原因：全部候选都失败时一并抛出，便于定位
+        tried.push(`${file}（${e instanceof Error ? e.message : '读取失败'}）`)
+      }
     }
-    throw new Error('未找到贡献者数据文件（shared/contributors.json）')
+    throw new Error(`未找到贡献者数据文件：\n${tried.join('\n')}`)
   }
 
   // 手动检查：忽略自动检查开关
