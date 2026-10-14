@@ -86,7 +86,7 @@ func FindOne(kind Kind, opts Options) Result { return findOne(kind, opts) }
 func findOne(kind Kind, opts Options) Result {
 	res := Result{Kind: string(kind), Optional: Optional[kind]}
 	// 重置扫描预算：每个依赖独立计算，避免前一个把预算用光
-	scanBudget = 20000
+	scanDirsLeft = 3000
 
 	var lastErr error
 	for _, c := range candidatesFor(kind, opts) {
@@ -166,12 +166,15 @@ func scanForBinary(kind Kind, opts Options) *probe.Info {
 //
 // 限制点：
 //   - 深度（默认 4 层）：够到 `.../bin/yt-dlp`、`.../ffmpeg/bin/ffmpeg.exe` 这类层级
-//   - 条目数（全局预算）：避免在大目录里长时间遍历
+//   - 目录数预算：真正决定耗时的是**递归进入的目录数**（每次 ReadDir 是系统调用），
+//     而不是单个目录里有多少文件
 //   - 跳过明显无关的目录（node_modules、缓存、系统目录）
 func scanDir(dir string, name string, depth int) string {
-	if depth > scanMaxDepth || scanBudget <= 0 {
+	if depth > scanMaxDepth || scanDirsLeft <= 0 {
 		return ""
 	}
+	scanDirsLeft--
+
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return ""
@@ -179,11 +182,6 @@ func scanDir(dir string, name string, depth int) string {
 
 	var subdirs []string
 	for _, e := range entries {
-		scanBudget--
-		if scanBudget <= 0 {
-			return ""
-		}
-
 		full := filepath.Join(dir, e.Name())
 
 		if e.IsDir() {
@@ -210,9 +208,14 @@ func scanDir(dir string, name string, depth int) string {
 
 const scanMaxDepth = 4
 
-// scanBudget 是单次扫描允许访问的条目总数上限，避免在超大目录里卡住。
+// scanDirsLeft 是单次扫描允许**进入**的目录数上限。
+//
+// 刻意按目录数而不是条目数计：早先按条目计（20000 条），在 Windows 上扫
+// `C:\Program Files` 一个大目录就耗尽了预算，导致保底扫描形同虚设
+// ——CI 的 windows job 正是这样把它暴露出来的。
+//
 // 每探测一个依赖都会重置。
-var scanBudget = 20000
+var scanDirsLeft = 3000
 
 // shouldSkipDir 跳过明显不可能放可执行文件、或体量过大的目录
 func shouldSkipDir(name string) bool {
