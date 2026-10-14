@@ -75,6 +75,7 @@ export const useDownloadStore = defineStore('download', () => {
   const downloadTasks = ref<DownloadTask[]>([])
   const downloadDir = ref('')
   const pausedTasks = new Set<string>()
+  const pauseRequests = new Map<string, Promise<unknown>>()
   const taskProgressCleanups = new Map<string, () => void>()
 
   // Computed
@@ -177,11 +178,15 @@ export const useDownloadStore = defineStore('download', () => {
       downloadTasks.value[idx].speed = undefined
       downloadTasks.value[idx].eta = undefined
       pausedTasks.add(taskId)
-      window.electronAPI?.ytdlp?.pauseDownload?.(taskId)
+      const stopped = window.electronAPI?.ytdlp?.pauseDownload?.(taskId)
+      if (stopped) pauseRequests.set(taskId, Promise.resolve(stopped).catch(() => {}))
     }
   }
 
-  function resumeTask(task: DownloadTask) {
+  async function resumeTask(task: DownloadTask) {
+    // 前一次子进程完全退出后才能复用 taskId，避免旧调用清理新任务。
+    await pauseRequests.get(task.id)
+    pauseRequests.delete(task.id)
     const idx = downloadTasks.value.findIndex(t => t.id === task.id)
     if (idx === -1) return
 
@@ -339,20 +344,19 @@ export const useDownloadStore = defineStore('download', () => {
 
     // 依赖检查放在**下载**这一步（元数据解析只需要 yt-dlp，已由解析成功证明可用）。
     //
-    // 这里刻意不 `await deps.refresh()`：那会启动 Go 边车做一次完整探测
-    // （冷启动 1~3 秒），用户每次点下载都要白等；而且探测是异步的，
-    // 弹窗还可能出现在「正在提取元数据」之后，看起来像先解析后才提示。
-    //
-    // 改为读**已有的缓存状态**：启动时已后台探测过一次，解析成功也说明
-    // yt-dlp 可用；只有确实缺必需依赖时才弹引导。
+    // 缓存标记缺失时先重新检测，避免安装后旧状态把下载挡在提示框里。
     const deps = useDepsStore()
-    const missing = deps.deps
+    const missingKinds = () => deps.deps
       .filter(d => !d.found && !d.optional)
       .filter(d => !(downloadMode.value === 'subtitle' && d.kind === 'ffmpeg'))
       .map(d => d.kind)
-    if (missing.length) {
-      deps.promptForMissing(missing)
-      return
+    if (missingKinds().length) {
+      await deps.refresh(true)
+      const missing = missingKinds()
+      if (missing.length) {
+        deps.promptForMissing(missing)
+        return
+      }
     }
 
     isDownloading.value = true

@@ -1,4 +1,4 @@
-import { spawn, exec } from 'node:child_process'
+import { spawn, execFile } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { resolveDependency, getFfmpegLocation, checkJsRuntime } from '../utils/binary'
@@ -324,7 +324,7 @@ export async function runYtdlpDownload(options: DownloadOptions, outputDir: stri
 }
 
 /** 暂停：杀掉子进程（Windows 需连带子进程树），任务从活动表移除 */
-export function pauseDownload(taskId: string): boolean {
+export async function pauseDownload(taskId: string): Promise<boolean> {
   const download = activeDownloads.get(taskId)
   if (download?.abort) {
     download.abort()
@@ -332,11 +332,20 @@ export function pauseDownload(taskId: string): boolean {
   }
   if (download?.child) {
     if (download.setPaused) download.setPaused(true)
-    download.child.kill()
-    if (process.platform === 'win32' && download.child.pid) {
-      exec(`taskkill /pid ${download.child.pid} /T /F`, () => {})
-    }
-    return true
+    const child = download.child
+    if (child.exitCode !== null || child.signalCode !== null) return true
+    // Windows 必须先杀整个树：先杀父进程会让 taskkill 丢失 PyInstaller 子进程。
+    const stopped = new Promise<boolean>(resolve => {
+      child.once('close', () => resolve(true))
+      child.once('error', () => resolve(false))
+    })
+    if (process.platform === 'win32' && child.pid) {
+      execFile(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'taskkill.exe'),
+        ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true }, (error) => {
+          if (error && child.exitCode === null) child.kill()
+        })
+    } else child.kill()
+    return stopped
   }
   return false
 }

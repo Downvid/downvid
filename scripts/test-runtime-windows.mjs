@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { createRequire } from 'node:module'
 import vm from 'node:vm'
 import ts from 'typescript'
@@ -134,6 +134,42 @@ try {
     assert.match(entry(results, 'yt-dlp').reason, /时限/)
     assert.ok(elapsed < 4000, `总时限没有生效：${elapsed} ms`)
   })
+  // 用真实父子进程复现 PyInstaller：先杀父进程会使子进程继续写文件。
+  const treeDir = path.join(temp, 'pause-tree')
+  const treeFile = binary(treeDir, 'yt-dlp', 'tree')
+  const child = spawn(treeFile, [], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+  const activeDownloads = new Map([['pause-test', { child, setPaused: () => {} }]])
+  try {
+    const progress = path.join(treeDir, 'progress.txt')
+    for (let i = 0; i < 50 && !fs.existsSync(progress); i++) await new Promise(resolve => setTimeout(resolve, 100))
+    assert.ok(fs.existsSync(progress), '子进程未开始写入')
+    const pauseCode = ts.transpileModule(fs.readFileSync(path.join(root, 'electron', 'download', 'ytdlp.ts'), 'utf8'), {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
+    }).outputText
+    const pauseModule = { exports: {} }
+    vm.runInNewContext(pauseCode, {
+      exports: pauseModule.exports, module: pauseModule, process,
+      require: name => name === '../store' ? { activeDownloads } : name.startsWith('.') ? {} : require(name),
+    })
+    let timer
+    try {
+      assert.equal(await Promise.race([
+        pauseModule.exports.pauseDownload('pause-test'),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('暂停未停止进程树')), 5000) }),
+      ]), true)
+    } finally { clearTimeout(timer) }
+    const stoppedAt = fs.readFileSync(progress, 'utf8')
+    await new Promise(resolve => setTimeout(resolve, 500))
+    assert.equal(fs.readFileSync(progress, 'utf8'), stoppedAt, '暂停后子进程仍在写入')
+    console.log('通过：pause-native-process-tree')
+  } finally {
+    const pidFile = path.join(treeDir, 'child-pid.txt')
+    if (fs.existsSync(pidFile)) {
+      const pid = fs.readFileSync(pidFile, 'utf8').trim()
+      if (/^\d+$/.test(pid)) spawnSync(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'taskkill.exe'), ['/PID', pid, '/T', '/F'], { windowsHide: true, stdio: 'ignore' })
+    }
+    if (child.exitCode === null && child.signalCode === null) child.kill()
+  }
 } finally {
   fs.rmSync(temp, { recursive: true, force: true })
 }
