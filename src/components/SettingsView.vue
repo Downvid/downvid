@@ -94,6 +94,33 @@
                 </div>
               </div>
 
+              <div v-show="activeSection === 'acceleration'" class="flex flex-col gap-5">
+                <label class="flex items-center justify-between gap-3 text-sm font-medium text-on-surface">
+                  下载加速
+                  <input v-model="settings.acceleration.enabled" type="checkbox" class="size-4 accent-primary" />
+                </label>
+                <div class="flex flex-col gap-2">
+                  <label for="download-connections" class="flex justify-between gap-3 text-sm text-on-surface">
+                    每个任务的最大连接数
+                    <output class="w-6 text-right tabular-nums">{{ settings.acceleration.enabled ? settings.acceleration.maxConnections : 1 }}</output>
+                  </label>
+                  <input id="download-connections" v-model.number="settings.acceleration.maxConnections" type="range" min="1" max="16" step="1" :disabled="!settings.acceleration.enabled" class="w-full accent-primary" />
+                </div>
+                <div class="flex flex-col gap-2">
+                  <label class="text-sm font-medium text-on-surface">aria2c 路径</label>
+                  <div class="flex gap-2 min-w-0">
+                    <input v-model="settings.acceleration.aria2Path" placeholder="自动检测" class="min-w-0 flex-1 px-3 py-2 bg-surface-container-highest border border-outline-variant/20 rounded-md text-sm text-on-surface" />
+                    <button title="选择 aria2c" class="size-9 shrink-0 flex items-center justify-center rounded-md hover:bg-surface-container-highest" @click="selectAria2">
+                      <MaterialIcon name="folder_open" :size="18" />
+                    </button>
+                    <button title="检测 aria2c" :disabled="checkingAria2" class="size-9 shrink-0 flex items-center justify-center rounded-md hover:bg-surface-container-highest" @click="checkAria2">
+                      <MaterialIcon name="refresh" :size="18" />
+                    </button>
+                  </div>
+                  <p class="text-xs text-on-surface-variant break-words" role="status">{{ checkingAria2 ? '检测中...' : aria2Status }}</p>
+                </div>
+              </div>
+
               <!-- Cookies -->
               <div v-show="activeSection === 'cookies'" class="flex flex-col gap-5">
                 <div class="flex flex-col gap-2">
@@ -241,6 +268,7 @@ import DepPanel from './DepPanel.vue'
 import { useErrorModal } from '../composables/useErrorModal'
 import { abbreviatePath, ensureHomeDir } from '../composables/usePathDisplay'
 import { readSettings, updateSettings } from '../stores/settings'
+import { normalizeAcceleration, type AccelerationSettings } from '../../shared/acceleration'
 
 const { showError, showInfo } = useErrorModal()
 
@@ -254,6 +282,7 @@ function close() { emit('update:visible', false) }
 const activeSection = ref('download')
 const sections = [
   { key: 'download', icon: 'download', label: '下载' },
+  { key: 'acceleration', icon: 'speed', label: '加速' },
   { key: 'cookies', icon: 'cookie', label: 'Cookies' },
   { key: 'proxy', icon: 'language', label: '代理' },
   { key: 'deps', icon: 'extension', label: '运行依赖' },
@@ -267,6 +296,7 @@ interface Settings {
   cookieMode: 'auto' | 'manual'
   cookiesFile: string
   proxy: string
+  acceleration: AccelerationSettings
   autoCheckUpdate: boolean
   autoDownloadUpdate: boolean
 }
@@ -278,6 +308,7 @@ const settings = ref<Settings>({
   cookieMode: 'auto',
   cookiesFile: '',
   proxy: '',
+  acceleration: normalizeAcceleration(),
   autoCheckUpdate: true,
   autoDownloadUpdate: false,
 })
@@ -290,6 +321,23 @@ const qualityOptions = [
 ]
 
 const proxyTesting = ref(false)
+const checkingAria2 = ref(false)
+const aria2Status = ref('')
+
+async function checkAria2() {
+  if (checkingAria2.value) return
+  checkingAria2.value = true
+  try {
+    const result = await window.electronAPI.ytdlp.accelerationStatus(settings.value.acceleration.aria2Path)
+    aria2Status.value = result.found ? `aria2 ${result.version} · ${result.path}` : result.reason
+  } catch { aria2Status.value = '检测失败，使用内置下载器' }
+  finally { checkingAria2.value = false }
+}
+
+async function selectAria2() {
+  const file = await window.electronAPI.dialog.selectFile()
+  if (file) { settings.value.acceleration.aria2Path = file; await checkAria2() }
+}
 const proxyTestResult = ref<'success' | 'fail' | ''>('')
 const proxyTestLatency = ref(0)
 
@@ -352,12 +400,14 @@ async function loadSettings() {
     cookieMode: saved.cookieMode,
     cookiesFile: saved.cookiesFile,
     proxy: saved.proxy,
+    acceleration: { ...saved.acceleration },
     autoCheckUpdate: saved.autoCheckUpdate,
     autoDownloadUpdate: saved.autoDownloadUpdate,
   }
   if (!settings.value.downloadDir) {
     settings.value.downloadDir = await window.electronAPI.app.getDefaultDownloadDir()
   }
+  void checkAria2()
 }
 
 onMounted(() => { loadSettings() })

@@ -1,0 +1,60 @@
+# 下载加速
+
+## 设计与来源
+
+参考公开原理，而非复制商业程序代码：
+
+- [IDM 动态分段说明](https://www.internetdownloadmanager.com/support/segmentation.html)：动态分段与连接复用。
+- [FDM 功能说明](https://www.freedownloadmanager.org/features.htm)：分块并行与中断恢复。
+- [yt-dlp 下载器接口](https://github.com/yt-dlp/yt-dlp#download-options)：按协议选择外部下载器。
+- [aria2 官方手册](https://aria2.github.io/manual/en/html/aria2c.html)：连接上限、split、续传与证书验证。
+
+REA 仅用于参考分析，不是 DownVid 的运行依赖。公开资料足以确定本次实现方向；
+没有反编译、注入或修改 FDM，也不声称验证了其内部私有算法。
+
+## 实现
+
+设置的「加速」页可开关加速、设置 1–16 并发以及选择或检测可选 aria2c。
+默认开启 8 路；旧设置自动补齐，其他设置字段仍保持合并写入。
+
+内置抖音/快手直链使用有界的小块队列。每个工作连接完成一块就继续领取，不因某个大段较慢而闲置。
+Node fetch 的 HTTP 池负责连接复用。HTTP 429/503 下调并发并等待 Retry-After，重试次数有上限。
+读取连续 30 秒没有数据会终止该请求并重试。暂停等待写入结束再保存逐段检查点。
+不支持 Range 或资源身份改变时安全重下，不能突破服务器总限速、权限、签名或 DRM。
+
+检测到可运行的 aria2c >=1.36 时，yt-dlp 的 HTTP 下载采用 aria2 多连接。
+没有 aria2 或关闭加速时使用原生下载器；HLS/DASH 始终原生，并使用配置的分片并发。
+不自动安装 aria2、不修改系统 PATH、不使用 FDM/IDM 二进制、不增加必需依赖。
+aria2 片段隔离在 `.downvid-aria2`，避免关闭加速或更换引擎时把稀疏片段当作连续数据。
+固定 aria2 的无颜色/字节单位输出，将回车刷新转换为现有进度事件；实时百分比、速度和 ETA 不等待下载结束。
+暂停任务保留创建时的配置与选定引擎；原 aria2 消失时提示恢复程序，不偷换引擎。
+
+## 复现验证
+
+```powershell
+pnpm test
+pnpm test:download:integration
+$env:DOWNVID_BENCH_BASELINE = 'origin/main'
+$env:DOWNVID_TEST_ARIA2 = '你的 aria2c 绝对路径'
+$env:DOWNVID_TEST_YTDLP = '你的 yt-dlp 绝对路径'
+pnpm test:acceleration
+```
+
+未提供外部工具路径时仍运行内置基准，只明确跳过外部引擎。基准在临时目录运行，本地 HTTP
+服务模拟每连接限速；逐字节检查完整文件、检查并发上限与连接复用。可选旧版本引用应存在于本地 Git 历史。
+
+Windows 环境三轮 16 MiB 受控测试中位耗时：
+
+| 模式 | 中位耗时 | 峰值请求并发 |
+|---|---:|---:|
+| 内置单连接 | 8033 ms | 1 |
+| 原四段实现 | 2065 ms | 4 |
+| 八路小块队列 | 1097 ms | 8 |
+
+八路队列在该场景约为旧四段的 1.88 倍、单连接的 7.32 倍。不是对真实站点速度的承诺。
+真实 yt-dlp + aria2 一次完整运行约 3070 ms，含 yt-dlp 进程启动/提取开销；不能据此宣称它在小文件上更快。
+其原生进程树暂停/继续验证通过，恢复传输 11550720 字节，小于总计 16777216 字节，最终文件完全一致。
+
+测试用 aria2 1.37.0 ZIP 来自 aria2 官方 GitHub Release，SHA-256 记录为
+`67d015301eef0b612191212d564c5bb0a14b5b9c4796b76454276a4d28d9b288`。
+上游资产未提供独立摘要，以上是本地记录而非与上游签名比对的证明。

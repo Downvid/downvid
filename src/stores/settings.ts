@@ -1,3 +1,5 @@
+import { normalizeAcceleration, type AccelerationSettings } from '../../shared/acceleration'
+
 /**
  * 用户设置的读写。
  *
@@ -29,6 +31,7 @@ export interface AppSettings {
   cookieMode: 'auto' | 'manual'
   cookiesFile: string
   proxy: string
+  acceleration: AccelerationSettings
   /** 手动指定的依赖可执行文件路径，由 DepPanel 维护 */
   depPaths: Partial<Record<'yt-dlp' | 'ffmpeg' | 'ffprobe', string>>
 
@@ -57,6 +60,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   cookieMode: 'auto',
   cookiesFile: '',
   proxy: '',
+  acceleration: normalizeAcceleration(),
   depPaths: {},
   autoCheckUpdate: true,
   autoDownloadUpdate: false,
@@ -74,11 +78,12 @@ export function readSettings(): AppSettings {
     return {
       ...DEFAULT_SETTINGS,
       ...raw,
+      acceleration: normalizeAcceleration(raw?.acceleration),
       // depPaths 需要单独兜：旧数据里可能没有，或不是对象
       depPaths: raw && typeof raw.depPaths === 'object' && raw.depPaths ? raw.depPaths : {},
     }
   } catch {
-    return { ...DEFAULT_SETTINGS }
+    return { ...DEFAULT_SETTINGS, acceleration: normalizeAcceleration() }
   }
 }
 

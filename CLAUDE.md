@@ -16,6 +16,8 @@ pnpm dev                    # vite dev server + electron, hot reload; also compi
 pnpm vue-tsc --noEmit       # renderer/main type check (strict + noUnusedLocals + noUnusedParameters)
 pnpm test                   # pure-logic unit tests (Vitest, tests/*.test.ts)
 pnpm test:runtime:windows    # native Windows exe integration regression (requires Go)
+pnpm test:download:integration # local HTTP/file/store integration regression
+pnpm test:acceleration      # acceleration benchmark; see docs/download-acceleration.md
 pnpm lint:ipc               # static check of the hand-maintained IPC wiring
 pnpm deps:manifest:check    # is the dependency manifest behind upstream?
 pnpm build                  # vue-tsc && vite build && electron-builder (current platform)
@@ -118,7 +120,7 @@ A broadcast event must **not** double as an `ipcMain.handle` channel (`lint:ipc`
 
 Settings live in `localStorage['settings']` (**not** Pinia) and are read directly by several
 components. Fields: `downloadDir`, `filenameTemplate`, `preferredQuality`, `cookieMode`,
-`cookiesFile`, `proxy`, `depPaths`.
+`cookiesFile`, `proxy`, `depPaths`, `acceleration` (enabled/concurrency/optional aria2c path).
 
 - `grep -rn "localStorage.getItem('settings')"` first; confirm each read has a default
 - Read as `{ ...defaults, ...JSON.parse(saved) }` so old data still works
@@ -196,8 +198,9 @@ are invisible.
 
 Implementation lives in `electron/download/`; `electron/ipc/download.ts` only dispatches.
 
-- **`direct.ts`**: `directUrl` present (Douyin/Kuaishou only) → plain `fetch` + write stream, 4
-  parallel `Range` segments when supported (CDNs throttle single connections), per-segment resume.
+- **`direct.ts`**: `directUrl` present (Douyin/Kuaishou only) → `fetch` and a small-block queue,
+  8 workers by default (maximum 16). HTTP 429/503 reduces concurrency; segments resume from their written offsets.
+  `.part.json` checkpoints accept legacy four-segment layouts and survive connection-setting changes.
   Pause via an `AbortController` in `activeDownloads`. This path exists because those CDN URLs expire
   fast and going through yt-dlp would re-hit the platform API for a different URL.
 - **`ytdlp.ts`**: `spawn(yt-dlp)`, using `--load-info-json <parse cacheFile>` when the parse is
@@ -210,6 +213,12 @@ Implementation lives in `electron/download/`; `electron/ipc/download.ts` only di
 
 `buildYtdlpArgs` is a **pure function**: paths and JS runtime arrive via `BuildArgsContext`, so arg
 lists can be asserted without spawning anything (`tests/ytdlp-args.test.ts`).
+
+Optional aria2c (>=1.36) is detected by `electron/download/aria2.ts` via manual path, PATH,
+Scoop/WinGet and common install paths. It is neither auto-installed nor a required runtime dependency.
+Only HTTP transfers use it; HLS/DASH stay native. Temporary pieces live under `.downvid-aria2`
+and a paused task keeps its selected engine, preventing sparse pieces from being treated as sequential data.
+The `acceleration` settings field contains enabled/maxConnections/aria2Path.
 
 Formats are built by the pure `electron/parsers/formats.ts`. Three regressions it guards (all
 tested): keep formats without `vcodec` (X/Twitter mp4 has none), keep m3u8 only for heights with no
