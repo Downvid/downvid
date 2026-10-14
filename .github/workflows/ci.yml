@@ -41,7 +41,9 @@ jobs:
             exit 1
           fi
           go vet ./...
-          go test ./...
+          # -shuffle=on 会打乱用例顺序，能抓出"用例之间共享包级可变状态"的泄漏。
+          # 这类问题单跑必过、全量跑才随机失败（已真实发生过：扫描预算的全局变量）。
+          go test -shuffle=on ./...
       - name: Setup Node.js
         uses: actions/setup-node@v7
         with:

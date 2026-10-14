@@ -175,7 +175,7 @@ func TestScanRespectsDeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	scanDirsLeft = 3000
+	resetScanBudget()
 	scanDeadline = time.Now().Add(-1 * time.Second) // 已过期
 	if got := scanDir(root, BinaryName(KindFFmpeg), 0); got != "" {
 		t.Errorf("超过时限仍继续扫描：%s", got)

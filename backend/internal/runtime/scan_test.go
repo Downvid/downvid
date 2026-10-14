@@ -22,7 +22,7 @@ func TestScanFindsBinaryInNestedDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	scanDirsLeft = 3000
+	resetScanBudget()
 	got := scanDir(filepath.Join(root, "Downloads"), BinaryName(KindFFmpeg), 0)
 	if got == "" {
 		t.Fatal("未在嵌套目录中找到 ffmpeg（保底扫描失效）")
@@ -46,7 +46,7 @@ func TestScanRespectsMaxDepth(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	scanDirsLeft = 3000
+	resetScanBudget()
 	if got := scanDir(root, BinaryName(KindYtDlp), 0); got != "" {
 		t.Errorf("超过深度上限仍被找到：%s（深度限制失效，Windows 上会变慢）", got)
 	}
@@ -72,7 +72,7 @@ func TestScanRespectsBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	scanDirsLeft = 2 // 预算不足以到达第 3 层
+	setScanBudgetForTest(2) // 预算不足以到达第 3 层
 	if got := scanDir(root, BinaryName(KindYtDlp), 0); got != "" {
 		t.Errorf("预算耗尽后仍找到了文件：%s", got)
 	}
@@ -99,7 +99,8 @@ func TestBudgetCountsDirsNotEntries(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	scanDirsLeft = 10 // 只够进 10 个目录，但大目录里的 5000 个文件不该消耗它
+	// 只够进 10 个目录，但大目录里的 5000 个文件不该消耗它
+	setScanBudgetForTest(10)
 	if got := scanDir(root, BinaryName(KindFFmpeg), 0); got == "" {
 		t.Error("大目录里的文件数不应消耗预算（否则 Windows 上扫不到）")
 	}
