@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/yxxbc/downvid/backend/internal/probe"
 )
 
 // Windows 的候选目录必须能在 **macOS 上** 被验证。
@@ -225,5 +227,55 @@ func TestFindOneResetsScanDeadline(t *testing.T) {
 
 	if !scanDeadline.After(stale) {
 		t.Errorf("FindOne 未重置扫描时限：仍是 %v", scanDeadline)
+	}
+}
+
+// yt-dlp 的版本门槛必须与清单 pin 的 tag 一致，而不是只比年份。
+//
+// 回归背景：原先 MinimumMajor["yt-dlp"] = 2024 只按年份判断，
+// 实测 2026.08.19 的版本跑 YouTube 会报 `Requested format is not available`
+// （上游同类 issue 已在新版修复），却「通过检测」——用户因此长期停在跑不动的版本上。
+func TestYtDlpVersionGateUsesPinnedTag(t *testing.T) {
+	const pinned = "2026.10.10.233141"
+	MinVersions[KindYtDlp] = pinned
+	defer delete(MinVersions, KindYtDlp)
+
+	older := probe.Info{Version: "2026.08.19", Major: 2026}
+	if isAcceptableVersion(KindYtDlp, older) {
+		t.Error("2026.08.19 早于 pin 的版本，应判为不可用（这正是用户报的版本）")
+	}
+	// 提示里要带上「当前版本」与「要求版本」，便于用户判断
+	reason := staleReason(KindYtDlp, older).Error()
+	if !strings.Contains(reason, "2026.08.19") || !strings.Contains(reason, pinned) {
+		t.Errorf("过旧提示应同时包含当前版本与要求版本，实际：%s", reason)
+	}
+
+	same := probe.Info{Version: pinned, Major: 2026}
+	if !isAcceptableVersion(KindYtDlp, same) {
+		t.Error("与 pin 相同的版本应可用")
+	}
+	newer := probe.Info{Version: "2026.11.01", Major: 2026}
+	if !isAcceptableVersion(KindYtDlp, newer) {
+		t.Error("比 pin 新的版本应可用")
+	}
+}
+
+// 未注入门槛时退回粗判，不应把所有版本都判死
+func TestVersionGateFallsBackWhenNotInjected(t *testing.T) {
+	delete(MinVersions, KindYtDlp)
+	if !isAcceptableVersion(KindYtDlp, probe.Info{Version: "2026.08.19", Major: 2026}) {
+		t.Error("未注入门槛时应退回按主版本号判断")
+	}
+}
+
+// ffmpeg 等仍按主版本号判断，不应受 yt-dlp 的日期门槛影响
+func TestFfmpegGateUnaffected(t *testing.T) {
+	MinVersions[KindYtDlp] = "2026.10.10.233141"
+	defer delete(MinVersions, KindYtDlp)
+	if !isAcceptableVersion(KindFFmpeg, probe.Info{Version: "6.0", Major: 6}) {
+		t.Error("ffmpeg 6.0 应可用")
+	}
+	if isAcceptableVersion(KindFFmpeg, probe.Info{Version: "2.8", Major: 2}) {
+		t.Error("ffmpeg 2.8 过旧，应不可用")
 	}
 }

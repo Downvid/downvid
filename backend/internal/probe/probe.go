@@ -88,6 +88,52 @@ func ParseVersion(tool, out string) string {
 	return ""
 }
 
+// CompareVersions 按「数字段逐个比较」判断 a 与 b 的先后，返回 -1 / 0 / 1。
+//
+// 适用于 yt-dlp 的日期版本号（2026.10.10.233141）与 ffmpeg 的语义版本（6.0）。
+// 不做完整的 semver 解析：这里的用途只是「是否落后于清单里 pin 的版本」。
+func CompareVersions(a, b string) int {
+	pa := versionParts(a)
+	pb := versionParts(b)
+	for i := 0; i < len(pa) || i < len(pb); i++ {
+		var x, y int
+		if i < len(pa) {
+			x = pa[i]
+		}
+		if i < len(pb) {
+			y = pb[i]
+		}
+		if x != y {
+			if x < y {
+				return -1
+			}
+			return 1
+		}
+	}
+	return 0
+}
+
+// IsOlder 报告 version 是否早于 min
+func IsOlder(version, min string) bool {
+	if version == "" || min == "" {
+		return false // 版本未知时不判定为过旧，避免误报
+	}
+	return CompareVersions(version, min) < 0
+}
+
+// versionParts 抽出全部数字段；非数字前缀（如 ffmpeg 的 "n7.1"）会被跳过
+func versionParts(v string) []int {
+	var parts []int
+	for _, seg := range reDigits.FindAllString(v, -1) {
+		n, err := strconv.Atoi(seg)
+		if err != nil {
+			continue
+		}
+		parts = append(parts, n)
+	}
+	return parts
+}
+
 // Major 取版本号里的第一个数字段（yt-dlp 日期版本即为年份）
 func Major(version string) int {
 	m := reDigits.FindString(version)

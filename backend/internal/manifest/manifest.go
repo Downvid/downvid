@@ -13,6 +13,17 @@ import (
 	rt "github.com/yxxbc/downvid/backend/internal/runtime"
 )
 
+// MinYtDlpVersion 是判定 yt-dlp「过旧」的最低版本，等于清单里 pin 的 tag。
+//
+// 为什么不能像以前那样只比年份（MinimumMajor = 2024）：yt-dlp 是**日期版本号**，
+// 站点修复以周为单位发布。实测 2026.08.19 的版本跑 YouTube 会报
+// `Requested format is not available`（上游同类 issue #17586 已在新版修复），
+// 而按年份判断它会「通过检测」——用户因此长期停在一个已经跑不动的版本上。
+//
+// 门槛取**清单里 pin 的那个版本**：我们本来就会下载它，落后即提示重新下载。
+// 这样「检测认为可用」与「实际能下载」是同一个标准。
+func MinYtDlpVersion() string { return YtDlpTag }
+
 // Platforms 支持的平台组合，供 CI 交叉构建与校验使用
 var Platforms = []string{"darwin/arm64", "darwin/x64", "linux/x64", "linux/arm64", "win32/x64"}
 

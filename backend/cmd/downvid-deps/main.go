@@ -34,6 +34,11 @@ import (
 const Version = "1.0.0"
 
 func main() {
+	// 把清单里 pin 的版本注入 runtime 作为最低门槛。
+	// 放这里是因为 runtime 不能 import manifest（会形成 import cycle），
+	// 而 CLI 同时依赖两者。
+	rt.MinVersions[rt.KindYtDlp] = manifest.MinYtDlpVersion()
+
 	if len(os.Args) < 2 {
 		usage()
 		os.Exit(2)

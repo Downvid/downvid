@@ -104,18 +104,27 @@ func findOneContext(parent context.Context, kind Kind, opts Options) Result {
 	// 重置扫描预算与时限：每个依赖独立计算，避免前一个把额度用光
 	resetScanBudget()
 
-	var lastErr error
+	// 记录失败原因时**优先保留有信息量的那个**：
+	// 「版本过旧」远比「某个候选路径不存在」重要，而后者总是最后一个，
+	// 直接用 lastErr 会把前者覆盖掉（用户只看到 stat no such file）。
+	var staleErr error // 找到了文件但版本太旧
+	var probeErr error // 找到了文件但执行失败（损坏、无权限等）
+	var lastErr error  // 其它（路径不存在之类）
 	for _, c := range candidatesFor(kind, opts) {
 		if ctx.Err() != nil {
 			break
 		}
 		info, err := probeToolContext(ctx, kind, c.Path)
 		if err != nil {
-			lastErr = err
+			if _, statErr := os.Stat(c.Path); statErr == nil {
+				probeErr = err // 文件存在但跑不起来，值得展示
+			} else {
+				lastErr = err // 路径不存在，信息量最低
+			}
 			continue
 		}
-		if min, ok := probe.MinimumMajor[string(kind)]; ok && info.Major < min {
-			lastErr = errors.New("版本过旧（" + info.Version + "），建议重新下载")
+		if !isAcceptableVersion(kind, info) {
+			staleErr = staleReason(kind, info)
 			continue
 		}
 		res.Found = true
@@ -148,14 +157,26 @@ func findOneContext(parent context.Context, kind Kind, opts Options) Result {
 		return res
 	}
 
-	if ctx.Err() != nil {
+	switch {
+	case ctx.Err() != nil:
 		res.Reason = "依赖检测达到时限，请手动指定可执行文件路径后重试"
-	} else if lastErr != nil {
+	case staleErr != nil:
+		// 「版本过旧」比「某个路径不存在」有信息量得多，必须优先展示
+		res.Reason = staleErr.Error()
+	case probeErr != nil:
+		res.Reason = probeErr.Error()
+	case lastErr != nil && !isNotExist(lastErr):
 		res.Reason = lastErr.Error()
-	} else {
+	default:
 		res.Reason = "未在托管目录、PATH、常见安装目录中找到（已尝试扫描常见位置）"
 	}
 	return res
+}
+
+// isNotExist 判断错误是否只是"路径不存在"——这类原因没有诊断价值，
+// 展示出来只会把真正的原因（版本过旧、文件损坏）挤掉
+func isNotExist(err error) bool {
+	return errors.Is(err, os.ErrNotExist) || strings.Contains(err.Error(), "no such file or directory")
 }
 
 // scanForBinary 在常见根目录下有限度地搜索可执行文件。
@@ -177,7 +198,7 @@ func scanForBinary(ctx context.Context, kind Kind) *probe.Info {
 			probeCtx, cancel := context.WithDeadline(ctx, scanDeadline)
 			defer cancel()
 			info, err := probeToolContext(probeCtx, kind, file)
-			if err != nil || info.Major < probe.MinimumMajor[string(kind)] {
+			if err != nil || !isAcceptableVersion(kind, info) {
 				return false
 			}
 			result = &info
@@ -333,6 +354,38 @@ func scanRoots() []string {
 		)
 	}
 	return roots
+}
+
+// MinVersions 是各依赖的最低可用版本，由 CLI 从清单注入。
+//
+// 为什么不让本包直接读清单：`manifest` 需要 import 本包（为了平台键），
+// 反向引用会造成 import cycle。因此由 CLI（同时能看到两者）注入。
+//
+// **yt-dlp 的值是清单里 pin 的 tag**：它是日期版本号，站点修复以周为单位发布，
+// 按年份判断太松 —— 实测 2026.08.19 的版本跑 YouTube 会报
+// `Requested format is not available`（上游同类 issue 已在新版修复），
+// 而按年份它会「通过检测」，用户因此长期停在跑不动的版本上。
+var MinVersions = map[Kind]string{}
+
+// isAcceptableVersion 判断探测到的版本是否可用
+func isAcceptableVersion(kind Kind, info probe.Info) bool {
+	if min, ok := MinVersions[kind]; ok && min != "" {
+		return !probe.IsOlder(info.Version, min)
+	}
+	// 未注入门槛时退回粗判（按主版本号）
+	if min, ok := probe.MinimumMajor[string(kind)]; ok {
+		return info.Major >= min
+	}
+	return true
+}
+
+// staleReason 生成「版本过旧」的提示，带上当前版本与要求版本，便于用户判断
+func staleReason(kind Kind, info probe.Info) error {
+	if min, ok := MinVersions[kind]; ok && min != "" {
+		return errors.New("版本过旧（当前 " + info.Version + "，需要 " + min +
+			" 或更新），建议在「设置 → 运行依赖」中重新下载")
+	}
+	return errors.New("版本过旧（" + info.Version + "），建议重新下载")
 }
 
 // ===== 候选路径 =====
