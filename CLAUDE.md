@@ -242,7 +242,7 @@ Resume re-spawns and continues from the `.part` file. **No cross-restart resume.
 |-------|-------|
 | Download queue / selection / orchestration | Pinia `src/stores/download.ts` |
 | User settings | **not** Pinia — `localStorage['settings']` |
-| Download history | main process, `userData/download-history.json`, capped at 100, rebroadcast on change |
+| Download history | main process, `userData/download-history.json`, merged by local file path, capped at 100, rebroadcast on change |
 | Runtime dependencies | Pinia `src/stores/deps.ts` |
 
 - Deps UI: `src/components/DepPanel.vue` (settings section) and `DepsPrompt.vue` (download prompt

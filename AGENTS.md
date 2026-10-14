@@ -276,7 +276,7 @@ libmp3lame / aac / libx264。**代价**：上游不公布校验值，`deps:manif
 |------|------|
 | 下载队列、选择、编排 | Pinia `src/stores/download.ts` |
 | 用户设置 | **不在 Pinia**：`localStorage['settings']` |
-| 下载历史 | 主进程 `userData/download-history.json`，上限 100 条，变更即广播 |
+| 下载历史 | 主进程 `userData/download-history.json`，按本地文件路径合并、上限 100 条，变更即广播 |
 | 运行依赖 | Pinia `src/stores/deps.ts` |
 
 - 运行依赖的界面是 `src/components/DepPanel.vue`（设置里的「运行依赖」板块）与

@@ -40,6 +40,9 @@
                 <button 
                   class="opacity-0 group-hover:opacity-100 transition-opacity p-2 bg-primary/90 rounded-full text-on-primary"
                   @click="openFile(item)"
+                  :disabled="item.fileExists === false"
+                  :title="item.fileExists === false ? '本地文件不存在' : '播放文件'"
+                  :class="{ 'opacity-40 cursor-not-allowed': item.fileExists === false }"
                 >
                   <MaterialIcon name="play_arrow" :size="20" />
                 </button>
@@ -52,7 +55,8 @@
                 <h4 class="font-headline text-sm font-bold text-on-surface line-clamp-2">{{ item.title }}</h4>
                 <p class="text-xs text-on-surface-variant mt-1 font-mono">{{ item.url }}</p>
               </div>
-              <div class="flex items-center gap-4 text-[11px] text-on-surface-variant">
+              <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-on-surface-variant">
+                <span v-if="item.fileExists === false" class="text-error">本地文件不存在</span>
                 <span class="flex items-center gap-1">
                   <!-- 注意：`high_definition` 不是有效的 Symbols 名（会渲染成文字），正确名是 `hd` -->
                   <MaterialIcon name="hd" :size="14" />
@@ -69,7 +73,9 @@
             <div class="flex flex-col gap-2 justify-center">
               <button 
                 class="p-2 text-on-surface-variant hover:text-primary hover:bg-primary-container/20 rounded-md transition-colors"
-                title="打开文件"
+                :title="item.fileExists === false ? '本地文件不存在' : '打开文件'"
+                :disabled="item.fileExists === false"
+                :class="{ 'opacity-40 cursor-not-allowed': item.fileExists === false }"
                 @click="openFile(item)"
               >
                 <MaterialIcon name="play_circle" :size="20" />
@@ -97,11 +103,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import MaterialIcon from './icons/MaterialIcon.vue'
 import type { HistoryRecord } from '../types'
 
 const history = ref<HistoryRecord[]>([])
+let unsubscribe: (() => void) | undefined
+let requestVersion = 0
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr)
@@ -115,8 +123,10 @@ function formatDate(dateStr: string): string {
 }
 
 async function loadHistory() {
+  const version = ++requestVersion
   try {
-    history.value = await window.electronAPI.history.get()
+    const updated = await window.electronAPI.history.get()
+    if (version === requestVersion) history.value = updated
   } catch (e) {
     console.error('Failed to load history:', e)
   }
@@ -145,6 +155,7 @@ async function clearAllHistory() {
 }
 
 async function openFile(item: HistoryRecord) {
+  if (item.fileExists === false) return
   await window.electronAPI.shell.openPath(item.filePath)
 }
 
@@ -154,13 +165,27 @@ async function openFolder(item: HistoryRecord) {
   await window.electronAPI.shell.openPath(dir)
 }
 
+function onTabChanged(event: Event) {
+  if ((event as CustomEvent).detail === 'history') void loadHistory()
+}
+
 onMounted(() => {
-  loadHistory()
   // 订阅主进程广播，实时刷新历史列表
   if (window.electronAPI?.history?.onUpdated) {
-    window.electronAPI.history.onUpdated((updatedHistory) => {
+    unsubscribe = window.electronAPI.history.onUpdated((updatedHistory) => {
+      requestVersion++
       history.value = updatedHistory
     })
   }
+  void loadHistory()
+  window.addEventListener('focus', loadHistory)
+  window.addEventListener('tab-changed', onTabChanged)
+})
+
+onUnmounted(() => {
+  requestVersion++
+  unsubscribe?.()
+  window.removeEventListener('focus', loadHistory)
+  window.removeEventListener('tab-changed', onTabChanged)
 })
 </script>
