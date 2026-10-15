@@ -66,6 +66,12 @@ describe('isCookieError', () => {
     expect(isCookieError(ERROR('HTTP Error 429: Too Many Requests'))).toBe(false)
   })
 
+  it('不把下载时写文件失败的「No such file」当成 cookie 问题', () => {
+    // 与上面的 `no such table` 只差一个词，规则一旦放宽就会误伤。下载同样走 runWithCookies：
+    // 误判会把每个 cookie 来源白白重试一遍，真正的报错被淹没
+    expect(isCookieError(ERROR("unable to open for writing: [Errno 2] No such file or directory: 'D:\\Videos\\clip.mp4.part'"))).toBe(false)
+  })
+
   it('非 ERROR 行不参与判定（yt-dlp 会把提示写在其他行）', () => {
     expect(isCookieError('WARNING: Operation not permitted')).toBe(false)
   })
