@@ -110,6 +110,7 @@ and a **Go sidecar** (detects and installs yt-dlp / ffmpeg). They talk over IPC 
 | `src/` | Vue 3 renderer (`<script setup>`, Tailwind v4, Pinia) | `dist/` |
 | `shared/app.ts` | **single source** of repo coordinates and external links | imported by all three |
 | `tests/` | Vitest pure-logic tests | — |
+| `docker/` | container image (entrypoint, virtual display and VNC orchestration; see `docs/docker.md`) | OCI image |
 | `website/` | landing page (single file, no build; published by Vercel's Git integration) | — |
 | `scripts/` | manifest generation, sidecar build, IPC / website lint, release notes | — |
 
@@ -430,6 +431,58 @@ noticeable place of all.
 
 With no release planned, keep `package.json` at the **latest published version** and accumulate changes
 under `## [Unreleased]`. When releasing, rewrite it to `## [x.y.z] - <date>` and bump the version.
+
+---
+
+## Container image (Dockerfile and docker-compose.yml, entrypoint docker/entrypoint.sh)
+
+DownVid is an Electron desktop app, and a container has no display. The image **replicates a good-enough
+desktop**: Xvfb provides the virtual display, fluxbox manages windows, x11vnc + noVNC bring the UI into a
+browser. The user guide is `docs/docker.md`; here is what you must know before touching the image.
+
+**The build has two stages.** Stage 1 installs pnpm deps, runs `pnpm vite build` (producing `dist/`,
+`dist-electron/` and `backend/build/linux-*/`) and unpacks the Electron binary; stage 2 copies only the
+artifacts and installs runtime libraries. The runtime image therefore has **no Go and no node_modules**.
+Keep `Dockerfile` in sync with `.github/workflows/ci-*.yml` on Node/pnpm/Go versions, otherwise you get
+"CI is green but the image has a different toolchain".
+
+**`dist-electron/main.js` must run under Electron, not bare node.** It contains bare `"electron"` imports.
+The runtime stage carries no `node_modules`, so the build stage unpacks Electron to `/opt/electron`.
+Electron's asset names are `x64` / `arm64` — **not** Docker's `amd64` / `arm64` — and `Dockerfile` maps
+them explicitly. Its version is pinned in `ARG ELECTRON_VERSION`; when bumping Electron, update that
+and `package.json` together.
+
+**The Chromium runtime library list has one source.** The `lib*` packages in `Dockerfile` come from
+Chromium's `build/install-build-deps.py` `lib_list()` (referenced by Electron's install-deps.sh) —
+they are not hand-written, because Chromium's linked libraries change with versions and a guessed list
+ends in "works locally, missing one `.so` in the container".
+
+**Runtime dependencies are preinstalled, never committed.** yt-dlp and ffmpeg come from Debian and pip
+into `/usr/local/bin` and `/usr/bin`; both are already in the Go sidecar's candidate paths
+(Linux common dirs in `backend/internal/runtime`), so detection reports "system" and in-app settings
+cannot override them. Upgrade by rebuilding the image through CI — **do not** commit binaries to the
+repo, and do not add entries to `assets.gen.go` (that table drives the in-app downloader).
+
+**User data paths in the container come from the environment, not from code.** `entrypoint.sh` points
+`XDG_CONFIG_HOME` / `XDG_DATA_HOME` at `${DOWNVID_HOME}/userdata` and sets `DOWNVID_DOWNLOADS`, so
+history, cookie snapshots and logs follow the `/data` volume. "Recreating the container wiped my
+settings" is almost always an unmounted volume.
+
+**The single-instance lock cannot misfire here.** `main.ts` reads `isDev || app.requestSingleInstanceLock()`
+with `isDev = !app.isPackaged`; the container runs the unpackaged `dist-electron/main.js`, so it never
+requests the lock at all. A container restart needs no extra flags — but **do not** fake a marker like
+`package-type` to make it "look packaged": that would enable the lock *and* push the auto-updater down
+the wrong branch (a container should never auto-update; upgrading means rebuilding the image).
+
+**Supervision is "any service exits → stop the container".** `entrypoint.sh` uses `wait -n` on the first
+supervised process to exit and then ends with its exit code. A white-screen "running" container is harder
+to diagnose than a clear failure. Note that `sshd` and `x11vnc -bg` daemonize, so they are deliberately
+outside the supervised set (their parent exiting would read as a crash).
+
+**Image builds are "non-host-platform semantics" (the hard rule above).** POSIX paths, LF endings
+(guaranteed by `.gitattributes`), and **resolution driven by environment variables** all have to be
+validated under non-Windows semantics. `docker/entrypoint.sh` must stay LF or the `#!/usr/bin/env bash`
+shebang fails.
 
 ---
 

@@ -1,0 +1,67 @@
+# DownVid 容器编排。
+#
+# 一个最常见的疑问是「为什么桌面应用要 compose」：DownVid 在容器里跑，
+# 界面要通过 noVNC 暴露到浏览器，下载目录要落在宿主机上——
+# 这些映射写进 compose 比一条 `docker run` 长选项更不容易漏、也更好改。
+#
+# 用法：
+#   docker compose up -d          # 启动
+#   docker compose logs -f        # 看日志（容器内没有 syslog，日志都走 stdout）
+#   docker compose down           # 停止并删除容器（数据卷保留）
+#
+# 只想要下载器、不要界面？见 docs/docker.md 的「只用命令行」一节。
+
+services:
+  downvid:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # amd64 与 arm64 都支持。Apple Silicon 默认就是 arm64。
+      platforms:
+        - linux/amd64
+        - linux/arm64
+    image: downvid:latest
+    container_name: downvid
+    restart: unless-stopped
+
+    ports:
+      # noVNC：浏览器打开这个地址即是 DownVid 界面
+      - "${DOWNVID_HTTP_PORT:-6080}:6080"
+      # VNC：给 RealVNC / TigerVNC 等原生客户端用，不留也行
+      - "${DOWNVID_VNC_PORT:-5900}:5900"
+      # SFTP：取回下载好的文件。默认关闭，见 services.downvid.environment
+      - "${DOWNVID_SSH_PORT:-2222}:2222"
+
+    volumes:
+      # 下载目录：容器内 /data/downloads，宿主机上 ./data/downloads
+      - ./data/downloads:/data/downloads
+      # 用户数据：设置、下载历史、Cookie 快照、托管依赖、日志。
+      # 删掉这个卷等于重置应用。
+      - ./data/userdata:/data/userdata
+
+    environment:
+      # 应用在容器里的默认下载目录。
+      # DownVid 原本默认下载到 ~/Downloads/DownVid，容器里那藏在用户数据
+      # 目录中；指到挂载卷后，宿主机上的路径就是下载目录本身。
+      DOWNVID_DOWNLOADS: /data/downloads
+      DOWNVID_HOME: /data
+
+      # 虚拟显示的分辨率。minWidth=1000 / minHeight=700 是应用自己的约束，
+      # 低于这个尺寸界面元素会被裁掉，因此默认给 1280x800 而不是更省资源的 1024x768。
+      DOWNVID_RESOLUTION: "1280x800"
+
+      # SSH / SFTP：默认关闭。容器里跑 SSH 是个攻击面，
+      # 多数情况下挂载 volume 就够取文件了。要用就见 docs/docker.md。
+      DOWNVID_ENABLE_SSH: "0"
+
+      # 容器内时区跟随宿主机，日志时间才对得上
+      TZ: "${TZ:-Asia/Shanghai}"
+
+    # 容器内 Chromium 需要比默认更大的 /dev/shm。
+    # 默认只有 64MB，而 Electron 的 GPU 进程与渲染进程共用它，
+    # 小的时候表现为「界面偶发白屏或崩溃」。
+    shm_size: "1gb"
+
+    # 需要给站点单独走代理时取消注释（应用内设置 → 代理 处填同一地址）
+    # extra_hosts:
+    #   - "host.docker.internal:host-gateway"

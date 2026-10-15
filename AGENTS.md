@@ -114,6 +114,7 @@ Dependabot 已忽略其大版本升级。
 | `src/` | Vue 3 渲染进程（`<script setup>`、Tailwind v4、Pinia） | `dist/` |
 | `shared/app.ts` | 仓库坐标与外部链接的**唯一来源** | 被三方共同引用 |
 | `tests/` | Vitest 纯逻辑单测 | — |
+| `docker/` | 容器镜像（入口脚本、虚拟显示与 VNC 编排，见 `docs/docker.md`） | OCI 镜像 |
 | `website/` | 产品落地页（单文件、无构建，由 Vercel 的 Git 集成发布） | — |
 | `scripts/` | 清单生成、构建边车、IPC / 官网校验、Release 正文 | — |
 
@@ -448,6 +449,57 @@ Linux x64 有独立格式脚本可并行：`build:linux:x64:appimage`、`:deb`�
 
 没有发布计划时，`package.json` 的版本号**保持在最近一次已发布的版本**，
 CHANGELOG 用 `## [Unreleased]` 段落累积改动。发布时再一次性改成 `## [x.y.z] - 日期` 并升版本号。
+
+---
+
+## 容器镜像（Dockerfile 与 docker-compose.yml、入口脚本 docker/entrypoint.sh）
+
+DownVid 是 Electron 桌面应用，容器里没有显示器。镜像的做法是**复刻一套够用的桌面**：
+Xvfb 提供虚拟显示、fluxbox 管窗口、x11vnc + noVNC 把界面送进浏览器。
+用户指南在 `docs/docker.md`，这里是改镜像前必须知道的几件事。
+
+**构建分两阶段。** 第一阶段装 pnpm 依赖、跑 `pnpm vite build`（同时产出 `dist/`、
+`dist-electron/` 与 `backend/build/linux-*/`）、解包 Electron 二进制；
+第二阶段只拷产物并装运行时库。因此运行镜像里**没有 Go、没有 node_modules**。
+`Dockerfile` 与 `.github/workflows/ci-*.yml` 用的 Node/pnpm/Go 版本要保持一致，
+否则「CI 过了、镜像里却是另一套」。
+
+**`dist-electron/main.js` 必须用 Electron 跑，不能用裸 node。** 它里面有从 `"electron"`
+的裸导入。运行时阶段不带 `node_modules`，所以构建阶段要单独解包 Electron 到
+`/opt/electron`。Electron 的资产命名是 `x64` / `arm64`，**不是** Docker 的
+`amd64` / `arm64`，`Dockerfile` 里有显式映射；同时它的版本钉在 `ARG ELECTRON_VERSION`，
+升 Electron 时记得同步这一处与 `package.json`。
+
+**Chromium 的运行时库清单有唯一来源。** `Dockerfile` 里那一串 `lib*` 来自 Chromium 的
+`build/install-build-deps.py` 的 `lib_list()`（Electron 的 install-deps.sh 引用它），
+不是凭经验罗列的——Chromium 的链接库随版本变化，手写列表的下场是「本地能跑、
+容器里缺一个 `.so`」。
+
+**运行依赖是预装进镜像的，不是进仓库。** yt-dlp / ffmpeg 由 Debian 仓库与 pip 装到
+`/usr/bin`、`/usr/local/bin`；这两个目录本来就在 Go 边车的候选路径里
+（`backend/internal/runtime` 的 Linux 常见目录），因此探测结果标记为「系统安装」，
+用户在界面里改设置也不会被覆盖。升级时重建镜像即可，走一次 CI——**不要**
+把二进制提交进仓库，也不要在 `assets.gen.go` 里加条目（那是应用内下载用的）。
+
+**容器里的用户数据路径由环境变量决定，不在代码里。** `entrypoint.sh` 把
+`XDG_CONFIG_HOME` / `XDG_DATA_HOME` 指到 `${DOWNVID_HOME}/userdata`，
+并设 `DOWNVID_DOWNLOADS`。这样下载历史、Cookie 快照、日志才跟着 `/data` 卷走。
+容器一重建用户设置就没了，几乎都是这里没挂卷导致的。
+
+**单实例锁在容器里不会误伤。** `main.ts` 的条件是 `isDev || requestSingleInstanceLock()`，
+而 `isDev = !app.isPackaged`——容器跑的正是未打包的 `dist-electron/main.js`，
+所以它本来就不请求锁。容器重建不需要额外传参，但**不要**为了「更像打包版」而
+给容器打一个假的 `package-type` 之类的标记，那会把锁打开、
+还会让「自动更新」走错分支（容器不该自动更新，升级方式是重建镜像）。
+
+**监督策略是「任一服务退出就停容器」。** `entrypoint.sh` 用 `wait -n` 等第一个
+受监督进程退出，然后以它的退出码结束容器。留一个只剩白屏的「运行中」容器
+比明确的失败更难排查。注意 `sshd` 与 `x11vnc -bg` 都会 daemon 化，
+它们不在监督集合里（父进程退出会被误判成崩溃）。
+
+**镜像构建属于「非宿主平台语义」（AGENTS.md 的硬规则）。** Linux 的路径分隔符、
+LF 换行（`.gitattributes` 保证）、以及**分辨率走环境变量**都要在非 Windows 语义下
+验证过。`docker/entrypoint.sh` 必须是 LF，否则 `#!/usr/bin/env bash` 会失败。
 
 ---
 

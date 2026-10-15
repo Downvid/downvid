@@ -1,0 +1,224 @@
+name: Docker image
+
+# DownVid 容器镜像的构建与冒烟验证。
+#
+# 为什么要有这个工作流：镜像构建是本仓库**唯一**「非宿主平台语义」之外
+# 还需要外部工具链的一环（Docker、Linux 图形栈、Electron 二进制），
+# 本地不装 Docker 的贡献者改完 Dockerfile 是验证不了的。
+# 这里做两件事：
+#
+#   1. `build`  job：真的把镜像 build 出来，并跑一遍**容器冒烟**
+#      ——启动容器、等 Xvfb 与 noVNC 就绪、确认 DownVid 进程活着。
+#      「docker build 成功」不等于「容器能用」，Electron 在容器里起不来
+#      是最常见的失败形态，只能靠启动后探测。
+#   2. `publish` job：推送 tag 时发布镜像到 GHCR（手动触发可选 latest）。
+#
+# 不发布二进制到 Release——镜像里也不带自动更新逻辑（升级方式是重建镜像），
+# 见 AGENTS.md 的「容器镜像」一节。
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'docker/**'
+      - 'docker-compose.yml'
+      - '.github/workflows/docker.yml'
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: '推送镜像到 GHCR（需在默认分支或 tag 上运行才有意义）'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: 构建 · 容器冒烟
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+
+      # QEMU：让 x86 runner 能跑 arm64 容器，冒烟阶段才有东西可跑。
+      # buildx 是在多架构镜像与缓存导出时才必需的。
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 只构建，不推送。冒烟需要镜像在本地 daemon 里，
+      # 所以用 `load: true` 而不是 cache-only/cache-to。
+      - name: 构建镜像（amd64）
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: downvid:smoke-amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # ===== 容器冒烟 =====
+      #
+      # 逐项探测而不是 `sleep 5` 后看一眼：
+      #   - Xvfb 真的起来了（xdpyinfo 能连上 :99）
+      #   - noVNC 的 HTTP 端点返回 200（说明 x11vnc 与 websockify 都在）
+      #   - DownVid 的 Electron 进程还活着（这一步最关键）
+      #
+      # Electron 在容器里起不来的形态很固定：缺 .so、缺 --no-sandbox、
+      # 或者没有 display。三者都能在这一步抓到。
+      #
+      # 进程探测用 entrypoint 写的 /tmp/downvid-health.json，不用 pgrep：
+      # 基础镜像里没有 procps，装它只为了一个探测会白白增大镜像。
+      - name: 容器冒烟
+        env:
+          IMAGE: downvid:smoke-amd64
+        shell: bash
+        run: |
+          set -euo pipefail
+          CONTAINER=downvid-smoke-${{ github.run_id }}-${{ github.run_attempt }}
+          docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true
+
+          cleanup() { docker logs "${CONTAINER}" > smoke-logs.txt 2>&1 || true; docker rm -f "${CONTAINER}" >/dev/null 2>&1 || true; }
+          trap cleanup EXIT
+
+          # 不挂卷：冒烟只验证进程链，数据持久化由用户自己决定
+          docker run -d --name "${CONTAINER}" \
+            -e DOWNVID_RESOLUTION=1280x800 \
+            -p 6080:6080 -p 5900:5900 \
+            "${IMAGE}"
+
+          ok=0
+          for i in $(seq 1 60); do
+            state=$(docker inspect -f '{{.State.Status}}' "${CONTAINER}" 2>/dev/null || echo missing)
+            if [ "${state}" != "running" ]; then
+              echo "::error::容器未在运行（状态：${state}）"
+              docker logs "${CONTAINER}" || true
+              exit 1
+            fi
+            # 应用进程活着（由 entrypoint 的健康文件报告）
+            if docker exec "${CONTAINER}" sh -c 'grep -q "\"app\":\"1\"" /tmp/downvid-health.json' 2>/dev/null; then
+              ok=1
+              break
+            fi
+            sleep 2
+          done
+
+          if [ "${ok}" != "1" ]; then
+            echo "::error::容器冒烟失败：60 秒内 DownVid 进程未就绪"
+            echo "----- docker logs -----"
+            docker logs "${CONTAINER}" || true
+            echo "----- health -----"
+            docker exec "${CONTAINER}" cat /tmp/downvid-health.json 2>/dev/null || echo "(无健康文件)"
+            echo "----- app.log -----"
+            docker exec "${CONTAINER}" tail -n 60 /var/log/downvid/app.log 2>/dev/null || true
+            echo "----- xvfb.log -----"
+            docker exec "${CONTAINER}" tail -n 20 /var/log/downvid/xvfb.log 2>/dev/null || true
+            exit 1
+          fi
+
+          echo "----- 健康状态 -----"
+          docker exec "${CONTAINER}" cat /tmp/downvid-health.json
+
+          # noVNC 真的在服务网页（x11vnc 与 websockify 都在链上）
+          curl -fsS -o /dev/null http://127.0.0.1:6080/vnc.html \
+            || { echo "::error::noVNC 未响应"; exit 1; }
+
+          # 窗口真的被创建出来才算「能看见界面」。
+          # Electron 起来但窗口创建失败是另一种静默失败形态。
+          docker exec "${CONTAINER}" grep -q 'WINDOW' /var/log/downvid/app.log 2>/dev/null \
+            && echo "窗口创建日志：有" || echo "提示：应用日志暂无窗口创建记录（不阻塞）"
+
+          echo "冒烟通过：Xvfb、noVNC(6080)、DownVid 进程均就绪"
+
+      - name: 上传冒烟日志
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: docker-smoke-logs
+          path: smoke-logs.txt
+          retention-days: 7
+          if-no-files-found: ignore
+
+  # ===== 多架构构建 =====
+  #
+  # 单独一个 job：arm64 在 QEMU 下构建慢（Go 与 Chromium 都要模拟执行），
+  # 和 amd64 挤在一个 job 里会让失败定位变难。推 tag 时才需要 arm64 产物，
+  # 所以只在 push tag / 手动发布时构建并推送。
+  publish:
+    name: 发布 · GHCR 多架构
+    needs: build
+    if: >-
+      github.event_name == 'workflow_dispatch' && inputs.publish == true ||
+      startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # GHCR：不需要额外 secret，用 GitHub 自带的 token。
+      # 包默认私有；发布后需要去组织/个人主页把它改为 public，
+      # 否则用户 pull 不到（会报 denied / not found 混在一起的怪错误）。
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 标签策略：
+      #   - tag 触发：v1.2.3 → :1.2.3 与 :1.2（ minor 固定，方便跟随小版本）
+      #   - main 分支手动发布：latest
+      - name: 生成镜像标签
+        id: meta
+        shell: bash
+        run: |
+          REF="${GITHUB_REF_NAME}"
+          if [[ "${REF}" == v* ]]; then
+            V="${REF#v}"
+            echo "tags=ghcr.io/${{ github.repository_owner }}/downvid:${V}" >> "${GITHUB_OUTPUT}"
+            echo "tags=ghcr.io/${{ github.repository_owner }}/downvid:${V%.*}" >> "${GITHUB_OUTPUT}"
+          else
+            echo "tags=ghcr.io/${{ github.repository_owner }}/downvid:latest" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: 构建并推送 amd64 + arm64
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 校验推送结果
+        shell: bash
+        run: |
+          for t in ${{ steps.meta.outputs.tags }}; do
+            echo "已推送：${t}"
+          done
+          echo "提示：首次发布后需在 GitHub Package 设置里把镜像改为 public，用户才能拉取。"

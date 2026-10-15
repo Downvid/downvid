@@ -113,6 +113,21 @@ DownVid 通过 yt-dlp 支持 **1000+ 个**视频和音频网站。以下是常�
 
 安装步骤与常见问题见 [安装指南](./docs/installation.md)。
 
+### 用 Docker 运行
+
+DownVid 是桌面应用，容器镜像内置虚拟显示，并把界面通过 noVNC 暴露到浏览器——
+打开网页就是完整应用：
+
+```bash
+git clone https://github.com/yxxbc/downvid.git
+cd downvid
+docker compose up -d
+# 然后打开 http://127.0.0.1:6080/vnc.html
+```
+
+镜像内已预装 yt-dlp 与 FFmpeg，下载文件落在宿主机的 `./data/downloads` 目录。
+端口、SSH/SFTP、分辨率与排错的完整说明见 [Docker 指南](./docs/docker.md)。
+
 ## 从源码构建
 
 ### 环境要求
@@ -140,6 +155,7 @@ pnpm build     # 构建当前平台安装包
 | 文档 | 内容 |
 | --- | --- |
 | [安装指南](./docs/installation.md) | macOS、Windows、Linux 的安装说明 |
+| [Docker 指南](./docs/docker.md) | 在容器中运行 DownVid，通过浏览器访问 |
 | [从源码构建](./docs/build-from-source.md) | 开发环境、依赖与构建流程 |
 | [故障排除](./docs/troubleshooting.md) | 常见错误与排查步骤 |
 | [常见问题（FAQ）](./docs/faq.md) | 使用问题与解答 |

@@ -1,0 +1,47 @@
+# Docker 构建上下文排除清单。
+#
+# 不带这份文件时，`.git`、`node_modules`、`release` 会被完整送进构建上下文：
+# 既让每次 `docker build` 多花十几秒传上下文，又让任何文件变动都导致
+# `COPY . .` 这一层缓存失效。
+#
+# 注意与 electron-builder.json5 的 files 列表保持一致的思路：
+# 只需要源码 + 构建配置 + 必需的静态资源。
+
+# 版本控制与本地配置
+.git
+.gitignore
+.github
+.vscode
+.vercelignore
+.env*
+*.log
+
+# 依赖与构建产物（镜像内会重新 install / build）
+node_modules
+dist
+dist-electron
+backend/build
+release
+.turbo
+.pnpm-store
+
+# 运行时数据：容器内的数据走卷，不该从仓库带进来
+data
+
+# 文档与官网：镜像里用不到。
+# 排除 *.md 会让 `COPY . .` 之外的所有文档都不进上下文；
+# Dockerfile / compose 自身在上下文里即可，构建时 docker 会单独读取，
+# 被这里排除也不影响（docker 的 .dockerignore 对 Dockerfile 自身无效）。
+docs
+website
+*.md
+
+# 编辑器与系统杂项
+.DS_Store
+Thumbs.db
+*.swp
+
+# 测试与本地脚本（不进镜像）
+coverage
+.nyc_output
+tmp
