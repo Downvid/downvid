@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isCookieError } from '../electron/utils/cookies'
+import { isCookieError, runWithCookies, type CookieAttempt } from '../electron/utils/cookies'
 
 /**
  * cookie 读取失败的识别。
@@ -33,6 +33,20 @@ describe('isCookieError', () => {
     expect(isCookieError(ERROR('unable to open database file'))).toBe(true)
   })
 
+  it('识别 Cookie 库读不出表结构（issue #53）', () => {
+    // #53 的原始报错：yt-dlp 挑中的 Cookies 文件里没有 meta 表（空库就是这样）。它只打出 sqlite3 的
+    // 原始异常；又因为同时传了 --cookies，退出保存时会再加载一次，所以同一行出现两遍
+    const stderr = [ERROR('no such table: meta'), ERROR('no such table: meta')].join('\n')
+    expect(isCookieError(stderr)).toBe(true)
+  })
+
+  it('识别 Cookie 库不是可读 SQLite 的其他形态', () => {
+    // 都是真实 yt-dlp 读同类坏库的输出：Firefox 的空库、根本不是 SQLite 的文件、拷贝时损坏的库
+    expect(isCookieError(ERROR('no such table: moz_cookies'))).toBe(true)
+    expect(isCookieError(ERROR('file is not a database'))).toBe(true)
+    expect(isCookieError(ERROR('database disk image is malformed'))).toBe(true)
+  })
+
   it('识别 keyring / keychain 类失败', () => {
     expect(isCookieError(ERROR('Keyring Error: keychain not available'))).toBe(true)
   })
@@ -62,5 +76,33 @@ describe('isCookieError', () => {
       'ERROR: Operation not permitted: /path/Cookies.binarycookies',
     ].join('\n')
     expect(isCookieError(stderr)).toBe(true)
+  })
+})
+
+/**
+ * 识别之后要真的换来源。#53 里第一个浏览器的报错没被识别，整个解析直接以
+ * `no such table: meta` 失败，后面的浏览器、快照和「不带 Cookie」一个都没轮到。
+ */
+describe('runWithCookies', () => {
+  it('浏览器 Cookie 库读不出来时换下一个来源，而不是整个解析失败（issue #53）', async () => {
+    const tried: string[] = []
+    const failed: string[] = []
+    const attempt = (label: string): CookieAttempt => ({
+      label,
+      prepare: () => (label === 'none' ? [] : ['--cookies-from-browser', label]),
+      onSuccess: () => {},
+      onCookieFailure: () => { failed.push(label) },
+      cleanup: () => {},
+    })
+    const result = await runWithCookies([attempt('chrome'), attempt('none')], async (_args, { label }) => {
+      tried.push(label)
+      return label === 'chrome'
+        ? { code: 1, stderr: 'ERROR: no such table: meta\nERROR: no such table: meta\n' }
+        : { code: 0, stderr: '' }
+    })
+    expect(tried).toEqual(['chrome', 'none'])
+    // 记为读取失败，接下来十分钟跳过这个浏览器，不再反复撞同一个坏库
+    expect(failed).toEqual(['chrome'])
+    expect(result.code).toBe(0)
   })
 })
