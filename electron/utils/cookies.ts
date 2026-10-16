@@ -204,6 +204,11 @@ const COOKIE_ERROR_PATTERNS = [
   /keyring|keychain|secretstorage|kwallet/i,
   /unsupported (?:browser|keyring)/i,
   /database is locked|unable to open database/i,
+  // 浏览器目录下最新的那个 Cookies 文件不是可读的 Cookie 库（空库、不是 SQLite、拷贝时损坏）时，
+  // yt-dlp 只打出 sqlite3 的原始异常，例如 `ERROR: no such table: meta`（issue #53）。
+  // 以前没有这条，整个解析就以这句报错告终，后面的浏览器、快照和「不带 Cookie」都轮不到。
+  // yt-dlp 只在读浏览器 Cookie 时用 SQLite，这类报错不会来自别处
+  /no such table|is not a database|database disk image is malformed/i,
   /netscape format|invalid (?:length|expires)/i,
   // 权限类失败：macOS 上读 Safari 的 cookie 需要「完全磁盘访问」权限，
   // 报错形如 `ERROR: [Errno 1] Operation not permitted: '.../Cookies.binarycookies'`。
