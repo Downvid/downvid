@@ -46,8 +46,13 @@ WORKDIR /app
 ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1
 
 # 安装项目前端构建依赖
+# 说明：bufferutil 与 utf-8-validate 的官方 prebuilds 仅包含 linux-x64、darwin-* 和 win32-*，
+# 缺少 linux-arm64 预编译包。在 Apple Silicon (Mac M系列) 或 ARM64 Linux 上构建镜像时，
+# 不加 --ignore-scripts 会触发 node-gyp 回退编译 C++ 源码并因缺少编译链而报错失败。
+# WebUI 静态构建仅使用纯 JS 模块（Vite 8 / Rolldown 原生二进制通过 optionalDependencies 直接分发），
+# 因此使用 --ignore-scripts 既能彻底规避跨架构编译失败，又能大幅加快安装速度。
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
-RUN pnpm install --frozen-lockfile
+RUN pnpm install --frozen-lockfile --ignore-scripts
 
 COPY . .
 
