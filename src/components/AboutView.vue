@@ -50,6 +50,20 @@
         </button>
 
         <button
+          @click="openExternal(WEBSITE_URL)"
+          class="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-surface-container-low hover:bg-surface-container-highest transition-colors group border border-outline-variant/10 text-left"
+        >
+          <div class="w-9 h-9 rounded-lg bg-surface-container-highest flex items-center justify-center group-hover:bg-surface transition-colors">
+            <MaterialIcon name="public" :size="18" class="text-on-surface" />
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-medium text-on-surface">{{ t('about.website') }}</p>
+            <p class="text-xs text-on-surface-variant truncate">{{ websiteLabel }}</p>
+          </div>
+          <MaterialIcon name="arrow_forward_ios" :size="14" class="text-on-surface-variant" />
+        </button>
+
+        <button
           @click="openExternal(ISSUES_URL)"
           class="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-surface-container-low hover:bg-surface-container-highest transition-colors group border border-outline-variant/10 text-left"
         >
@@ -173,6 +187,33 @@
             <p class="text-[11px] text-on-surface-variant">{{ t('about.donateCaption') }}</p>
           </div>
         </Transition>
+
+        <!-- 商务合作 / 赞助接洽：需要私下沟通的事走邮箱，其余仍引导到 Issues -->
+        <div class="mt-4 pt-4 border-t border-outline-variant/15">
+          <p class="text-xs text-on-surface-variant leading-relaxed mb-3">
+            {{ t('about.contactHint') }}
+          </p>
+          <button
+            class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-surface-container-high hover:bg-surface-container-highest transition-colors border border-outline-variant/15 text-left"
+            @click="openExternal(sponsorMailto)"
+          >
+            <MaterialIcon name="handshake" :size="18" class="text-on-surface-variant shrink-0" />
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium text-on-surface">{{ t('about.contactSponsor') }}</p>
+              <p class="text-xs text-on-surface-variant truncate">{{ CONTACT_EMAIL }}</p>
+            </div>
+          </button>
+          <button
+            class="mt-2 w-full flex items-center gap-3 px-3 py-2.5 rounded-lg bg-surface-container-high hover:bg-surface-container-highest transition-colors border border-outline-variant/15 text-left"
+            @click="openExternal(businessMailto)"
+          >
+            <MaterialIcon name="campaign" :size="18" class="text-on-surface-variant shrink-0" />
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium text-on-surface">{{ t('about.contactBusiness') }}</p>
+              <p class="text-xs text-on-surface-variant truncate">{{ CONTACT_EMAIL }}</p>
+            </div>
+          </button>
+        </div>
       </div>
 
       <!-- Copyright -->
@@ -188,15 +229,29 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { t } from '../i18n'
 import MaterialIcon from './icons/MaterialIcon.vue'
 import GitHubIcon from './icons/GitHubIcon.vue'
 import UpdateModal from './UpdateModal.vue'
-import { ISSUES_URL, REPO_SLUG, REPO_URL } from '../../shared/app'
+import { CONTACT_EMAIL, ISSUES_URL, REPO_SLUG, REPO_URL, WEBSITE_URL, contactMailto } from '../../shared/app'
 
 /** 界面展示用的仓库标识（去掉 https:// 前缀） */
 const repoLabel = `github.com/${REPO_SLUG}`
+
+/** 官网地址展示用（去掉协议前缀，省得一行放不下） */
+const websiteLabel = WEBSITE_URL.replace(/^https?:\/\//, '')
+
+/**
+ * 商务合作 / 赞助接洽的 mailto。
+ *
+ * 主题带上项目名与类别，收件箱里一眼能分清是哪一类来信——
+ * 只写一个裸邮箱时，用户往往不写主题，事后完全无法归类。
+ * 主题**随界面语言切换**（与官网一致）：写死中文时英文用户点开会收到一封
+ * 中文主题的邮件，同样没法归类。用 computed 而不是模块级常量，否则切语言不更新。
+ */
+const sponsorMailto = computed(() => contactMailto({ subject: t('about.mailSubjectSponsor') }))
+const businessMailto = computed(() => contactMailto({ subject: t('about.mailSubjectBusiness') }))
 
 /**
  * 贡献者：**固定名单**，不请求 GitHub API。
@@ -206,12 +261,20 @@ const repoLabel = `github.com/${REPO_SLUG}`
  * 稳定、离线可用、不再有失败态，也不用为"提交次数"这种会变化的数字做缓存。
  *
  * 顺序即展示顺序；`role` 只用于身份标。原作者不必额外标注 —— 许可证里已经写明。
+ *
+ * 名单口径：**在 main 上留下过代码贡献的人**，与 README 的
+ * `contributors` 徽章、CHANGELOG 的致谢保持同一批人。加人时两处一起看，
+ * 漏掉谁都不会报错，只会让人以为他没参与过。
+ * 机器人（dependabot / github-actions）与 AI 助手不列：前者是自动化，
+ * 后者在 README 的致谢里单独说明。
  */
 const CONTRIBUTORS = [
   { login: 'yxxbc', url: 'https://github.com/yxxbc', role: 'DEV' },
   { login: 'cshuangyy', url: 'https://github.com/cshuangyy' },
   { login: 'hailaij', url: 'https://github.com/hailaij', role: 'CONTRIBUTOR' },
   { login: 'jwfstars', url: 'https://github.com/jwfstars', role: 'CONTRIBUTOR' },
+  { login: 'zerow', url: 'https://github.com/zerow', role: 'CONTRIBUTOR' },
+  { login: 'linuztx', url: 'https://github.com/linuztx', role: 'CONTRIBUTOR' },
 ]
 
 /** 头像地址：固定名单用 GitHub 头像，不依赖接口 */

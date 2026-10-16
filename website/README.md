@@ -50,6 +50,8 @@ pnpm exec vercel dev      # 或直接 open website/index.html
 | `#osIcons` 里的平台图标与脚本 `PLATFORMS` 双向对上 | 键名写错只是**没有图标**，线上不报错 |
 | 页面脚本里的仓库坐标（`REPO`）与 `shared/app.ts` 一致 | 下载按钮指向别人的仓库 |
 | 下载产物名模板与 `electron-builder.json5` 的 `artifactName` 一致 | 产物改名后所有平台都静默挑不到，只剩「去 Releases 页面」的兜底 |
+| 版本号占位（`data-version`）存在且是 `v<数字>` 形态 | 刷新脚本找不到落点，版本号从此不再随发布更新 |
+| `mailto:` 里的联系邮箱与 `shared/app.ts` 的 `CONTACT_EMAIL` 一致、主题已编码 | 地址写错时页面照常渲染，只是信寄不到；主题不编码会被邮件客户端截断 |
 
 ## 在线演示（hero 预览）
 
@@ -95,6 +97,43 @@ hero 的主按钮会识别访问者的系统，点击**直接下载**对应安�
 `tests/website-download.test.ts` 用真实的产物列表（含 `.blockmap` / `.zip` / `latest*.yml`
 等干扰项）断言每个模板都能命中。
 
+## 版本号（发布时自动刷新）
+
+「关于软件」演示里的版本号带 `data-version` 标记，是一个**离线兜底值**：
+
+```html
+<p class="dv-about-version" id="dvAboutVersion" data-version>v1.3.4</p>
+```
+
+- 页面脚本加载后会请求 `releases/latest`，把它覆盖成真实 tag（`renderAlt` 与 `syncAppDemo` 里各有一处）
+- 拉不到时（离线 / 被 GitHub 限流 / 禁用 `sessionStorage`）显示的就是这里的值
+- 因此这个值**必须每次发布后刷新**，由 `release.yml` 在 Release 创建成功并自检通过后
+  自动跑 `pnpm website:version`（`scripts/sync-website-version.mjs`）写入并提交回 `main`
+
+**不要删 `data-version`**：刷新脚本靠它定位，`pnpm lint:website` 会校验它在不在。
+也不要手工去改它——发布流程会覆盖，手工改反而会和 `package.json` 不一致。
+
+想本地核对/刷新：
+
+```bash
+pnpm website:version            # 用 package.json 的版本刷新
+pnpm website:version 1.4.0      # 指定版本
+pnpm website:version --check    # 只核对（落后则退出码 1）
+```
+
+## 赞助与商务合作
+
+「加入开源社区」之后有一个独立的赞助与商务合作区，两张卡片直链
+`mailto:xynrin@icloud.com`（赞助 / 商务各一个主题）：
+
+- **邮箱是唯一来源**：`shared/app.ts` 的 `CONTACT_EMAIL`。官网、关于页、README 都指它，
+  `pnpm lint:website` 会比对官网与它是否一致——写错不会报错，只是信寄不到
+- **主题随语言切换**：`data-mail-subject` 存中文主题，`data-i18n-subject` 指向英文词条，
+  `apply(lang)` 里重写 `href`。只写死中文主题时，英文用户点开会看到一封中文主题的邮件
+- **主题必须编码**：裸的空格与方括号会被部分邮件客户端截断，`lint:website` 会拦
+- **要写明「软件本身不含广告」**：README 的卖点里有「无任何弹窗广告」，只加合作入口
+  不作区分，读者会以为要往安装包里塞广告
+
 ## 下载量 / 星标
 
 hero 里的下载量与星标用 **README 同款 shields.io 徽章**，数字实时，没有「发布后忘了刷新」的问题：
@@ -112,9 +151,11 @@ hero 里的下载量与星标用 **README 同款 shields.io 徽章**，数字实
   `#ff9800`、背景 `#fff8f4`。改色时两边一起改（`lint:website` 会比对）。
 - **文案与 README 保持一致**：功能、平台支持、依赖说明都以 README 为准。
   落地页可以更精简，但不能出现 README 里没有的承诺。
-- **不写死具体产物名与版本号**：下载按钮在运行时按「产物名模板 + 最新 Release」
+- **不写死具体产物名**：下载按钮在运行时按「产物名模板 + 最新 Release」
   拼直链，拉不到就退回 Releases 页面，所以不会变成死链。模板本身由 `lint:website`
   与 `electron-builder.json5` 对齐（`scripts/gen-release-notes.mjs` 也是同样的思路）。
+  版本号是这条规则唯一的例外（单文件、无构建，页面首帧必须有东西可显示），
+  见下节——它由发布流程自动刷新，不靠人记得。
 - **版式参考 <https://www.deepseek.com/harness/>**：居中 hero + 大预览图、两列卡片网格、
   「安装与运行」的代码块、居中的社区 CTA、极简页脚；配色仍取自应用本身（见上）。
   重做版式时保持这套区块划分，不要再回到老式的左右分栏 hero。

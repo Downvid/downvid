@@ -33,6 +33,8 @@
   ·
   <a href="https://github.com/yxxbc/downvid/issues">Report an issue</a>
   ·
+  <a href="mailto:xynrin@icloud.com?subject=%5BDownVid%5D%20Business">Sponsorship / business</a>
+  ·
   <a href="./docs/installation.md">Installation guide</a>
 </p>
 
@@ -44,6 +46,24 @@
 
 ---
 
+## Sponsorship and business
+
+Sponsorship, or business enquiries such as advertising placements — email **xynrin@icloud.com**:
+
+| Enquiry | Contact |
+| --- | --- |
+| Sponsorship | <a href="mailto:xynrin@icloud.com?subject=%5BDownVid%5D%20Sponsorship">xynrin@icloud.com</a> |
+| Business / advertising | <a href="mailto:xynrin@icloud.com?subject=%5BDownVid%5D%20Business">xynrin@icloud.com</a> |
+
+Please use the [issue tracker](https://github.com/yxxbc/downvid/issues) for bug reports and feature
+requests instead, so that other users can find the answers too.
+
+**The app itself contains no ads and never will.** These enquiries are about the project — for example
+a placement in this README or on the [website](https://downvid-coral.vercel.app) — not about anything
+shipped inside the installer.
+
+---
+
 > [!IMPORTANT]
 > This project is a graphical front end for [yt-dlp](https://github.com/yt-dlp/yt-dlp). It contains no code for
 > cracking or circumventing technical protection measures. Please follow your local laws, platform terms and
@@ -51,6 +71,7 @@
 
 ## Contents
 
+- [Sponsorship and business](#sponsorship-and-business)
 - [About](#about)
 - [Features](#features)
 - [Supported sites](#supported-sites)
@@ -151,6 +172,7 @@ Per-platform build commands, dependency notes and troubleshooting are in the
 | [Troubleshooting](./docs/troubleshooting.md) | Common errors and how to diagnose them |
 | [FAQ](./docs/faq.md) | Usage questions and answers |
 | [Architecture](./docs/architecture.html) | Process structure, IPC and download flow |
+| [Developer guide](./docs/development.md) | Code map, request lifecycle, IPC contract, debugging |
 | [Project structure](./docs/project-structure.md) | Directory guide and where to make changes |
 | [Repository standards](./docs/standards.md) | Branch, commit, issue and PR conventions |
 | [Server mode (design)](./docs/server-mode.md) | Docker / WebUI design — **not implemented yet** |
@@ -288,6 +310,8 @@ If DownVid is useful to you, you can buy the author a coffee. WeChat tip code:
 
 <img src="src/assets/donate.jpg" alt="WeChat tip code" width="240" />
 </details>
+
+For sponsorship and business enquiries, see [Sponsorship and business](#sponsorship-and-business) above.
 
 ---
 

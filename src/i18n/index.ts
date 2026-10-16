@@ -270,6 +270,13 @@ const messages: Record<Locale, Record<string, string>> = {
     'about.hideDonate': '收起赞赏码',
     'about.donateAlt': '微信赞赏码',
     'about.donateCaption': '微信扫码赞赏 — 给 Black Cat 赞赏',
+    'about.website': '产品官网',
+    'about.websiteHint': '下载安装包与查看功能介绍',
+    'about.contactHint': '功能建议与缺陷请走「问题反馈」，其他人也能搜到；以下事宜请发邮件：',
+    'about.contactSponsor': '赞助支持',
+    'about.contactBusiness': '商务合作 / 广告位',
+    'about.mailSubjectSponsor': '[DownVid] 赞助',
+    'about.mailSubjectBusiness': '[DownVid] 商务合作',
 
     // ===== 更新弹窗 =====
     'update.title': '软件更新',
@@ -571,6 +578,13 @@ const messages: Record<Locale, Record<string, string>> = {
     'about.hideDonate': 'Hide donation code',
     'about.donateAlt': 'WeChat donation code',
     'about.donateCaption': 'Scan with WeChat to tip Black Cat',
+    'about.website': 'Website',
+    'about.websiteHint': 'Downloads and feature overview',
+    'about.contactHint': 'Use Issues for bug reports and feature requests so others can find them. For the following, email us:',
+    'about.contactSponsor': 'Sponsorship',
+    'about.contactBusiness': 'Business / advertising',
+    'about.mailSubjectSponsor': '[DownVid] Sponsorship',
+    'about.mailSubjectBusiness': '[DownVid] Business',
 
     // ===== Update modal =====
     'update.title': 'Software update',

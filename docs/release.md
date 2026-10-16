@@ -38,7 +38,11 @@
 pnpm vue-tsc --noEmit
 cd backend && gofmt -l . && go vet ./... && go test ./...
 pnpm deps:manifest:check      # 依赖清单是否落后上游
+pnpm lint:website             # 官网（含版本号占位）静态约束
 ```
+
+> **不要**为了发版去手工改 `website/index.html` 的版本号：`release.yml` 会在
+> Release 创建成功后自动刷新它（见[官网版本号](#官网版本号为什么需要自动刷新)）。
 
 ### 2. 升版本号
 
@@ -75,6 +79,40 @@ git tag -d v1.3.0 && git push origin :refs/tags/v1.3.0
 - Release 页面产物齐全（5 个架构，含 `.blockmap` 与 `latest*.yml`）
 - 下载一个安装包，确认能打开
 - 用**上一个版本**的应用检查一次「检查更新」，确认能发现新版本（这是更新链路唯一可靠的验证方式）
+
+> 其中「官网版本号」这一项**不需要人核对**：`release.yml` 在 Release 创建成功、
+> 且通过 `verify-release.mjs` 自检之后，会自动跑 `pnpm website:version` 把
+> `website/index.html` 的版本号刷成本次版本并提交回 `main`，由 Vercel 自动部署。
+> 详见下文「官网版本号为什么需要自动刷新」。
+
+## 官网版本号为什么需要自动刷新
+
+官网（`website/index.html`）是单文件、由 Vercel 从 `main` 直接发布，**没有构建步骤**，
+页面上的版本号因此只能是硬编码的：
+
+- 页面脚本加载后会请求 `releases/latest`，把版本号覆盖成真实 tag
+- 但这条路径依赖三件事：能联网、没被 GitHub 限流、访问者没禁用 `sessionStorage`
+- 任何一条不成立，界面就退回那个**写死的值**——它不会报错，只会安静地过期，
+  于是页面上写着 `v1.3.4` 而实际最新版是 `v1.4.0`
+
+所以写死的值必须每次发布后刷新，而不是靠人记得：
+
+| 环节 | 做什么 |
+| --- | --- |
+| 标记 | `website/index.html` 的版本号元素带 `data-version`（刷新脚本的定位标记） |
+| 刷新 | `pnpm website:version` → `scripts/sync-website-version.mjs`，只替换那个元素的文本 |
+| 时机 | `release.yml` 的 `release` job **最后**两步：自检通过之后、预发布则跳过 |
+| 校验 | `pnpm lint:website` 要求 `data-version` 占位存在且是 `v<数字>` 形态 |
+
+**时机为什么放在最后**：发布被取消或失败时，官网不该先跳到一个不存在的版本。
+自检失败时后续步骤不执行，写入的版本一定已经在 Releases 里。
+
+**预发布为什么跳过**：`/releases/latest` 拿不到标记为 prerelease 的版本，
+官网显示 beta 号会让稳定用户以为该去下 beta。
+
+**产物直链不受影响**：下载按钮至今仍是运行时按 `ARTIFACTS` 模板 + 最新 Release
+拼出来的（见 `website/README.md` 的「下载区」），本流程只刷新离线兜底的版本号，
+不写死任何产物名。
 
 ## 产物命名契约
 

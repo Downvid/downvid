@@ -390,7 +390,6 @@ jobs:
             artifacts/**/*.blockmap
 
       # 发布**完成后**回头核对一次：Release 真的存在、且带着全部平台的更新清单。
-      #
       # 为什么需要这一步：实测 `v1.3.5` 的 tag 推上去了、CHANGELOG 也写了，
       # 但这次运行在 3 分钟后**被取消**，于是 GitHub Release 里没有 v1.3.5，
       # 自动更新通道仍指向 v1.3.4 —— 所有存量用户永远收不到这次修复，
@@ -403,3 +402,38 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/verify-release.mjs --tag "v${{ env.VERSION }}"
+
+      # ===== 官网版本号：只在确认发布成功之后才刷 =====
+      #
+      # 官网是单文件、无构建，页面上的版本号只能是硬编码的：脚本拉到 releases/latest
+      # 会覆盖成真实 tag，但离线 / 被限流 / 禁用 sessionStorage 时会退回那个写死的值。
+      # 不刷新它不会报错，只会安静地过期——页面上写着 v1.3.4 而实际最新版是 v1.4.0。
+      #
+      # 顺序很关键：**发布失败时官网不该先跳到一个不存在的版本**。放在自检之后，
+      # 写入的版本一定已经在 Releases 里（自检失败时这一步不会执行）。
+      # 预发布也跳过：latest 通道拿不到 beta，官网显示 beta 号会误导稳定用户。
+      - name: 刷新官网版本号
+        if: needs.version.outputs.prerelease != 'true'
+        run: |
+          node scripts/sync-website-version.mjs "$VERSION"
+          node scripts/lint-website.mjs
+
+      - name: 提交回 main
+        if: needs.version.outputs.prerelease != 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # checkout 默认停在 tag 对应的游离 HEAD 上。这里显式挪到 origin/main 顶端再写，
+          # 而不是 `git push HEAD:main`：打 tag 之后 main 若又往前走了（比如这条提交本身、
+          # 或别人的 PR），直接推会被拒，官网版本号就静默停在上一个版本。
+          git fetch origin main
+          git checkout -B main origin/main
+          # 重新写一次：origin/main 上的 index.html 可能是旧版本
+          node scripts/sync-website-version.mjs "$VERSION"
+          git add website/index.html
+          if git diff --cached --quiet; then
+            echo "官网版本号已是最新，无需提交"
+            exit 0
+          fi
+          git commit -m "chore(website): 发布后同步官网版本号至 v$VERSION" -m "由 release.yml 在 Release 创建成功后自动写入，离线兜底值不再是过期的。"
+          git push origin main

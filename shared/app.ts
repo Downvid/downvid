@@ -28,6 +28,30 @@ export const RELEASES_URL = `${REPO_URL}/releases`
 export const LATEST_RELEASE_URL = `${RELEASES_URL}/latest`
 export const ISSUES_URL = `${REPO_URL}/issues`
 
+/**
+ * 产品官网（`website/`，由 Vercel 从 main 直接发布）。
+ *
+ * 域名写在这里而不是各处硬编码：关于页、README 与文档都指同一个站点，
+ * 换域名时漏改一处不会报错，只会让人点进一个 404。
+ * `pnpm lint:website` 与 `tests/app-links.test.ts` 会比对 `website/README.md`。
+ */
+export const WEBSITE_URL = 'https://downvid-coral.vercel.app'
+
+/**
+ * 商务合作与赞助接洽邮箱。
+ *
+ * 用途**仅限**合作/赞助这类需要私下沟通的事：功能建议与缺陷请走 Issues，
+ * 那样其他人也能搜到、维护者也不用重复回答同一件事。
+ */
+export const CONTACT_EMAIL = 'xynrin@icloud.com'
+
+/** 商务合作与赞助的 mailto 链接（带主题，收件箱里一眼能看出是哪一类） */
+export function contactMailto(params: { subject: string; body?: string }): string {
+  const query = new URLSearchParams({ subject: params.subject })
+  if (params.body) query.set('body', params.body)
+  return `mailto:${CONTACT_EMAIL}?${query.toString()}`
+}
+
 /** GitHub API 基址 */
 export const GITHUB_API = 'https://api.github.com'
 

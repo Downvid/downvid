@@ -307,6 +307,16 @@ header.is-stuck::before{opacity:1}
 .join .wrap{position:relative;z-index:1}
 .join-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin-top:34px}
 
+/* ===== 赞助与商务合作 ===== */
+.sponsor-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px;max-width:720px;margin:30px auto 0}
+.sponsor-card{display:flex;align-items:center;gap:14px;padding:18px 20px;background:var(--surface-lowest);border:1px solid var(--outline-variant);border-radius:var(--radius-panel);transition:border-color .18s ease,box-shadow .18s ease,transform .18s ease}
+.sponsor-card:hover{border-color:var(--accent);box-shadow:var(--shadow-card);transform:translateY(-2px)}
+.sponsor-icon{display:flex;align-items:center;justify-content:center;flex:none;width:42px;height:42px;border-radius:12px;background:rgba(255,152,0,.16)}
+.sponsor-icon svg{width:22px;height:22px;fill:var(--primary)}
+.sponsor-body{display:flex;flex-direction:column;gap:3px;min-width:0}
+.sponsor-body b{font-family:var(--font-display);font-size:15px;font-weight:600}
+.sponsor-mail{font-family:var(--font-mono);font-size:12.5px;color:var(--on-surface-variant);overflow-wrap:anywhere}
+
 /* ===== FAQ ===== */
 details{margin-bottom:10px;padding:16px 20px;background:var(--surface-lowest);border:1px solid var(--outline-variant);border-radius:var(--radius-panel)}
 details summary{cursor:pointer;font-weight:600;font-size:15px;list-style:none}
@@ -514,7 +524,10 @@ html.ready [data-i18n]{visibility:visible}
                       <div class="dv-alt-panel dv-about" id="dvAltAbout" hidden>
                         <img class="dv-about-logo" src="https://raw.githubusercontent.com/yxxbc/downvid/main/src/assets/logo.png" alt="" width="64" height="64">
                         <p class="dv-about-name">DownVid</p>
-                        <p class="dv-about-version" id="dvAboutVersion">v1.3.4</p>
+                        <!-- 版本号：离线兜底值，由 scripts/sync-website-version.mjs 在发布后刷新。
+                             拉到 releases/latest 时会被真实 tag 覆盖，拉不到就显示这里的值。
+                             data-version 是刷新脚本的定位标记，不要删（lint:website 会校验）。 -->
+                        <p class="dv-about-version" id="dvAboutVersion" data-version>v1.3.4</p>
                         <p class="dv-about-text" data-i18n="demo.about">基于 yt-dlp 的开源桌面视频下载工具</p>
                         <p class="dv-about-link"><a href="https://github.com/yxxbc/downvid">github.com/yxxbc/downvid</a></p>
                       </div>
@@ -682,6 +695,31 @@ html.ready [data-i18n]{visibility:visible}
         <a class="btn btn-ghost" href="https://github.com/yxxbc/downvid/issues" data-i18n="foot.issues">问题反馈</a>
         <a class="btn btn-ghost" href="https://github.com/yxxbc/downvid/blob/main/CHANGELOG.md" data-i18n="foot.changelog">更新日志</a>
       </div>
+    </div>
+  </section>
+
+  <!-- ===== 赞助与商务合作 ===== -->
+  <section class="section sponsor" id="sponsor">
+    <div class="wrap">
+      <h2 class="h2" data-i18n="sponsor.title">赞助与商务合作</h2>
+      <p class="sub" data-i18n="sponsor.sub">赞助支持，或商务合作（如展示位），请发邮件联系。缺陷与功能建议请走 Issues，这样其他人也能搜到答案。</p>
+      <div class="sponsor-grid">
+        <a class="sponsor-card" href="mailto:xynrin@icloud.com?subject=%5BDownVid%5D%20%E8%B5%9E%E5%8A%A9" data-mail-subject="[DownVid] 赞助 / Sponsor" data-i18n-subject="sponsor.subject.tip">
+          <span class="sponsor-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 21s-6.716-4.35-9.193-7.61C1.06 11.15 1.6 8.02 3.83 6.53c2.02-1.35 4.6-.72 5.98 1.13L12 10.1l2.19-2.44c1.38-1.85 3.96-2.48 5.98-1.13 2.23 1.49 2.77 4.62.86 6.86C18.716 16.65 12 21 12 21z"/></svg></span>
+          <span class="sponsor-body">
+            <b data-i18n="sponsor.tip">赞助支持</b>
+            <span class="sponsor-mail">xynrin@icloud.com</span>
+          </span>
+        </a>
+        <a class="sponsor-card" href="mailto:xynrin@icloud.com?subject=%5BDownVid%5D%20%E5%95%86%E5%8A%A1%E5%90%88%E4%BD%9C" data-mail-subject="[DownVid] 商务合作 / Business" data-i18n-subject="sponsor.subject.business">
+          <span class="sponsor-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 10v7a2 2 0 002 2h14a2 2 0 002-2v-7h-6.5l-2 2.5h-3l-2-2.5H3zm18-2V6a2 2 0 00-2-2h-4l-2 2H5a2 2 0 00-2 2v2h5.2l2 2.5h3.6l2-2.5H21z"/></svg></span>
+          <span class="sponsor-body">
+            <b data-i18n="sponsor.business">商务合作 / 展示位</b>
+            <span class="sponsor-mail">xynrin@icloud.com</span>
+          </span>
+        </a>
+      </div>
+      <p class="note" data-i18n="sponsor.note">软件本身不含任何广告，将来也不会有 —— 这里谈的是项目层面的合作，与安装包里装了什么无关。</p>
     </div>
   </section>
 
@@ -911,6 +949,13 @@ const I18N = {
     'join.sub': 'DownVid is an MIT-licensed open-source project. File an issue, send a pull request, or just leave a star.',
     'join.github': 'View on GitHub',
     'join.docs': 'Developer docs',
+    'sponsor.title': 'Sponsorship and business',
+    'sponsor.sub': 'For sponsorship, or for business enquiries such as a placement, email us. Use Issues for bugs and feature requests so others can find the answers too.',
+    'sponsor.tip': 'Sponsorship',
+    'sponsor.business': 'Business / placement',
+    'sponsor.subject.tip': '[DownVid] Sponsorship',
+    'sponsor.subject.business': '[DownVid] Business',
+    'sponsor.note': 'The app itself contains no ads and never will — these enquiries are about the project, not about anything shipped inside the installer.',
     'faq.title': 'FAQ',
     'faq.sub': 'More in the repository docs.',
     'faq.q1': 'It says yt-dlp or FFmpeg is missing?',
@@ -1091,6 +1136,13 @@ function t(key) {
 
 function apply(lang) {
   const dict = I18N[lang] || {};
+  // 赞助 / 商务卡片：邮件主题要跟着界面语言走。
+  // 只在 HTML 里写死中文主题，英文用户点开会看到一封中文主题的邮件——
+  // 收件箱里分类就乱了，所以中文版主题缓存在 data-mail-subject 上，切语言时重写。
+  document.querySelectorAll('[data-mail-subject]').forEach(el => {
+    const subject = lang === 'zh' ? el.getAttribute('data-mail-subject') : (dict[el.getAttribute('data-i18n-subject')] || el.getAttribute('data-mail-subject'));
+    el.setAttribute('href', 'mailto:xynrin@icloud.com?subject=' + encodeURIComponent(subject));
+  });
   document.querySelectorAll('[data-i18n]').forEach(el => {
     const key = el.getAttribute('data-i18n');
     // 中文直接回填原始 HTML（首次切换时缓存下来）
@@ -1518,6 +1570,15 @@ function initAppDemo() {
   const historyHost = document.getElementById('dvHistory');
   const historyEmpty = document.getElementById('dvHistoryEmpty');
   const aboutVersion = document.getElementById('dvAboutVersion');
+  /**
+   * 版本号占位里的那个离线兜底值（`v1.3.4` 这种），由 release.yml 在发布后刷新。
+   *
+   * **不要**在这里再写一份字面量：两处各写一份就会漂移——刷新脚本只改 HTML，
+   * 而这里的字面量会在每次切到「关于软件」标签页或切语言时把它覆盖回去，
+   * 于是「发了新版，官网显示的还是旧版号」，而且**没有任何报错**。
+   * 拉不到 Release 时就保持占位里的原值。
+   */
+  const aboutVersionFallback = aboutVersion ? aboutVersion.textContent.trim() : '';
   const tabs = [...document.querySelectorAll('.dv-tab')];
   const panels = [...document.querySelectorAll('[data-dv-panel="download"]')];
 
@@ -1698,7 +1759,7 @@ function initAppDemo() {
     if (altHistory) altHistory.hidden = name !== 'history';
     if (altAbout) altAbout.hidden = name !== 'about';
     if (name === 'history') renderHistory();
-    if (name === 'about' && aboutVersion) aboutVersion.textContent = release ? release.tag : 'v1.3.4';
+    if (name === 'about' && aboutVersion) aboutVersion.textContent = release ? release.tag : aboutVersionFallback;
   }
 
   function setTab(name) {
@@ -1784,7 +1845,7 @@ function initAppDemo() {
   syncAppDemo = function () {
     if (parseLabel) parseLabel.textContent = parsing ? t('demo.parsing') : t('demo.parse');
     if (elapsedLabel && !parsing) elapsedLabel.textContent = t('demo.usuallyseconds');
-    if (aboutVersion) aboutVersion.textContent = release ? release.tag : 'v1.3.4';
+    if (aboutVersion) aboutVersion.textContent = release ? release.tag : aboutVersionFallback;
     renderFormats();
     renderQueue();
     renderHistory();

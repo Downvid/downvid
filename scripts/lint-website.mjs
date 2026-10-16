@@ -46,6 +46,9 @@ if (!fs.existsSync(INDEX)) {
 const html = fs.readFileSync(INDEX, 'utf8')
 const rel = (p) => path.relative(ROOT, p)
 
+// 刷新版本号的脚本：它的 VERSION_RE 是「版本号占位」的唯一判据，第 7c 项直接复用
+const syncScript = fs.readFileSync(path.join(ROOT, 'scripts/sync-website-version.mjs'), 'utf8')
+
 // ===== 0. 仓库坐标（先读，后面几项都要用） =====
 const sharedApp = fs.readFileSync(path.join(ROOT, 'shared/app.ts'), 'utf8')
 const owner = sharedApp.match(/owner:\s*'([^']+)'/)?.[1]
@@ -95,6 +98,11 @@ for (const m of html.matchAll(/data-i18n=["']([^"']+)["']/g)) {
 }
 // 脚本里拼装的文案（t('...') 与产物表里的 key: '...'）也算「用到」
 for (const m of html.matchAll(/data-i18n-placeholder=["']([^"']+)["']/g)) {
+  used.add(m[1])
+  placeholderKeys.add(m[1])
+}
+// 邮件主题这类「只用于属性、不在文本里渲染」的词条：中文默认值就写在属性上
+for (const m of html.matchAll(/data-i18n-subject=["']([^"']+)["']/g)) {
   used.add(m[1])
   placeholderKeys.add(m[1])
 }
@@ -283,6 +291,59 @@ if (iconKeys.length === 0) {
     if (!scriptPlatforms.includes(os)) problems.push('#osIcons 里的 ' + os + ' 在脚本的 PLATFORMS 里没有被用到')
   }
   notes.push('平台图标 ' + iconKeys.join(' / ') + ' 与脚本 PLATFORMS 一致')
+}
+
+// ===== 7c. 版本号占位必须存在 =====
+// 官网是单文件、无构建，页面上的版本号只能是硬编码的：脚本拉到 releases/latest 时
+// 会覆盖成真实 tag，但**离线 / 被限流 / 禁用 sessionStorage** 时会退回那个写死的值。
+// 因此它必须每次发布后由 scripts/sync-website-version.mjs 刷新，而刷新脚本靠
+// `data-version` 定位。标记被删掉不会报错——只会让版本号安静地停在某个旧值上，
+// 所以这里要求它与脚本的匹配规则**用的是同一个正则**。
+{
+  // 取的是字面量**里面**那段（不含首尾的 /），否则 new RegExp 会把斜杠也当模式的一部分
+  const versionSource = syncScript.match(/const VERSION_RE = \/(.+)\/\s*$/m)?.[1]
+  const versionRe = versionSource ? new RegExp(versionSource) : /(?!)/
+  const versionMarkup = html.match(versionRe)
+  if (!versionMarkup) {
+    problems.push(
+      'index.html 里找不到版本号占位（形如 `<p class="dv-about-version" id="dvAboutVersion" data-version>v1.3.4</p>`）。\n' +
+        '    scripts/sync-website-version.mjs 靠 data-version 定位，删掉它版本号就再也不会随发布更新了',
+    )
+  } else if (!/^v\d/.test(versionMarkup[2].trim())) {
+    problems.push(`index.html 的版本号占位里不是 v<数字> 形态：${versionMarkup[2].trim()}`)
+  } else {
+    notes.push(`版本号占位 ${versionMarkup[2].trim()}（发布后由 sync-website-version.mjs 刷新）`)
+  }
+}
+
+// ===== 7d. 联系邮箱必须与 shared/app.ts 一致 =====
+//
+// 商务合作 / 赞助的邮箱同时出现在官网、关于页与 README 里。写错**不会报错**——
+// 页面照常渲染，只是信件寄不到，要等对方放弃才知道。所以这里把它与
+// shared/app.ts 的 CONTACT_EMAIL 比对（那是唯一来源）。
+{
+  const contactEmail = sharedApp.match(/CONTACT_EMAIL\s*=\s*'([^']+)'/)?.[1]
+  if (!contactEmail) {
+    problems.push('shared/app.ts 未能解析出 CONTACT_EMAIL（改名了？）')
+  } else {
+    const mails = [...html.matchAll(/mailto:([^\s"?]+)/g)].map((m) => m[1])
+    const contactMails = [...new Set(mails.filter((m) => m.includes('@')))]
+    if (contactMails.length === 0) {
+      problems.push('index.html 里找不到任何 mailto 联系入口（赞助 / 商务合作的入口被删了？）')
+    }
+    for (const mail of contactMails) {
+      if (mail !== contactEmail) {
+        problems.push(`index.html 的 mailto 指向 ${mail}，与 shared/app.ts 的 CONTACT_EMAIL（${contactEmail}）不一致`)
+      }
+    }
+    // 邮件主题必须编码：裸的主题会把空格与方括号截断，收件人看到的是残缺标题
+    for (const m of html.matchAll(/mailto:[^\s"?]+\?subject=([^\s"']*)/g)) {
+      if (/[\[\] ]/.test(m[1])) {
+        problems.push(`index.html 的 mailto 主题未编码：${m[1]}`)
+      }
+    }
+    if (contactMails.length) notes.push(`联系邮箱 ${contactMails.length} 处，与 shared/app.ts 一致`)
+  }
 }
 
 // ===== 8. 输出 =====

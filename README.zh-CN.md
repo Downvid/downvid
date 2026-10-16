@@ -33,6 +33,8 @@
   ·
   <a href="https://github.com/yxxbc/downvid/issues">反馈问题</a>
   ·
+  <a href="mailto:xynrin@icloud.com?subject=%5BDownVid%5D%20%E8%B5%9E%E5%8A%A9">赞助 / 商务合作</a>
+  ·
   <a href="./docs/installation.md">安装指南</a>
 </p>
 
@@ -44,11 +46,28 @@
 
 ---
 
+## 赞助与商务合作
+
+赞助支持，或商务合作（如广告位），请发邮件至 **xynrin@icloud.com**：
+
+| 事宜 | 联系方式 |
+| --- | --- |
+| 赞助支持 | <a href="mailto:xynrin@icloud.com?subject=%5BDownVid%5D%20%E8%B5%9E%E5%8A%A9">xynrin@icloud.com</a> |
+| 商务合作 / 广告位 | <a href="mailto:xynrin@icloud.com?subject=%5BDownVid%5D%20%E5%95%86%E5%8A%A1%E5%90%88%E4%BD%9C">xynrin@icloud.com</a> |
+
+缺陷报告与功能建议请走 [Issues](https://github.com/yxxbc/downvid/issues)，这样其他人也能搜到答案。
+
+**软件本身不含任何广告，将来也不会有。** 这里谈的是项目层面的合作 —— 例如本 README 或
+[官网](https://downvid-coral.vercel.app) 上的展示位，与安装包里装了什么无关。
+
+---
+
 > [!IMPORTANT]
 > 本项目是 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 的图形界面封装，不包含破解或绕过技术保护措施的代码。请遵守当地法律法规、平台规则及内容版权要求，使用者需自行承担使用责任。
 
 ## 目录
 
+- [赞助与商务合作](#赞助与商务合作)
 - [项目简介](#项目简介)
 - [功能特性](#功能特性)
 - [支持的网站](#支持的网站)
@@ -144,6 +163,7 @@ pnpm build     # 构建当前平台安装包
 | [故障排除](./docs/troubleshooting.md) | 常见错误与排查步骤 |
 | [常见问题（FAQ）](./docs/faq.md) | 使用问题与解答 |
 | [架构说明](./docs/architecture.html) | 进程结构、IPC 通信与下载流程 |
+| [开发者指南](./docs/development.md) | 代码导读、请求生命周期、IPC 契约、调试手段 |
 | [项目结构](./docs/project-structure.md) | 目录说明与代码维护位置 |
 | [仓库规范](./docs/standards.md) | 分支、提交、Issue 与 PR 规范 |
 | [服务端模式（设计稿）](./docs/server-mode.md) | Docker / WebUI 设计 —— **尚未实现** |
@@ -274,6 +294,10 @@ DownVid 最初基于 [Videdown](https://github.com/cshuangyy/videdown) 开发，
 
 <img src="src/assets/donate.jpg" alt="微信赞赏码" width="240" />
 </details>
+
+#### 赞助与商务合作
+
+赞助与商务合作的联系方式见上文[赞助与商务合作](#赞助与商务合作)一节。
 
 ---
 
