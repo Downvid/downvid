@@ -1,0 +1,28 @@
+# DownVid 容器编排（集中于 docker/ 目录中管理）。
+# 支持从 docker/ 目录直接执行：docker compose up -d
+
+services:
+  downvid:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: downvid:latest
+    container_name: downvid
+    restart: unless-stopped
+    ports:
+      - "${DOWNVID_HTTP_PORT:-6080}:6080"
+    volumes:
+      - ../data/downloads:/data/downloads
+      - ../data/userdata:/data/userdata
+    environment:
+      DOWNVID_HOME: /data
+      DOWNVID_DATA_DIR: /data/userdata
+      DOWNVID_DOWNLOADS: /data/downloads
+      DOWNVID_WEB_HOST: 0.0.0.0
+      TZ: "${TZ:-Asia/Shanghai}"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:6080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

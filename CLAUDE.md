@@ -110,6 +110,7 @@ and a **Go sidecar** (detects and installs yt-dlp / ffmpeg). They talk over IPC 
 | `src/` | Vue 3 renderer (`<script setup>`, Tailwind v4, Pinia) | `dist/` |
 | `shared/app.ts` | **single source** of repo coordinates and external links | imported by all three |
 | `tests/` | Vitest pure-logic tests | — |
+| `docker/` | container image (entrypoint, virtual display and VNC orchestration; see `docs/docker.md`) | OCI image |
 | `website/` | landing page (single file, no build; published by Vercel's Git integration) | — |
 | `scripts/` | manifest generation, sidecar build, IPC / website lint, release notes | — |
 
@@ -473,6 +474,31 @@ noticeable place of all.
 
 With no release planned, keep `package.json` at the **latest published version** and accumulate changes
 under `## [Unreleased]`. When releasing, rewrite it to `## [x.y.z] - <date>` and bump the version.
+
+---
+
+## Container image (Dockerfile and docker-compose.yml, entrypoint docker/entrypoint.sh)
+
+DownVid in container runs as a **native WebUI**: a lightweight Node service (`docker/server/index.ts`) hosts
+the static frontend and download engines; access it directly from any browser. The user guide is `docs/docker.md`.
+
+**Zero frontend rewrite.** `src/` has no Electron-specific imports; all capabilities go through `window.electronAPI`.
+In browser environments, `docker/web/bridge.ts` dynamically provides the identical API surface over WebSocket RPC.
+Vue 3 components and Pinia stores remain 100% isomorphic.
+
+**Shared core logic and architecture isolation.** The download engine (`electron/download/`), parsers, and dependency manager are
+reused headlessly via `docker/server/electron-shim.ts`, leaving desktop codebase (`electron/` and `src/`) completely untouched.
+Progress and events broadcast over WebSocket in container mode.
+
+**Runtime dependencies preinstalled, never committed.** yt-dlp and ffmpeg are preinstalled into `/usr/local/bin`
+and `/usr/bin`; both are in the Go sidecar's (`backend/internal/runtime`) candidate paths, detected as "system".
+Upgrade by rebuilding the image; do not add entries to `backend/internal/manifest/assets.gen.go`.
+
+**Data persistence.** Paths are driven by environment variables: `DOWNVID_DATA_DIR` points to `/data/userdata`,
+`DOWNVID_DOWNLOADS` points to `/data/downloads`. Download records and media files persist via mounted volumes.
+
+**Build conventions.** POSIX paths and LF endings (`.gitattributes`) are required; `docker/entrypoint.sh` must
+stay LF. Build artifacts and local data directories are isolated via `.dockerignore`.
 
 ---
 

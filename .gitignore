@@ -16,6 +16,7 @@ node_modules
 dist
 dist-ssr
 dist-electron
+dist-web
 *.local
 
 # Editor directories and files
@@ -61,7 +62,15 @@ dll/
 # OS files
 Thumbs.db
 
+# ZCode agent 本地目录
+.zcode/
+
 # TypeScript 增量构建缓存
 *.tsbuildinfo
 .vercel
 .env*
+
+# Docker 本地运行数据（由 docker-compose 生成）
+data/
+docker/dist-web/
+docker/node_modules/

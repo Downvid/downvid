@@ -139,6 +139,22 @@ package for your OS.
 
 Step-by-step instructions and common issues are in the [installation guide](./docs/installation.md).
 
+### Run it in Docker
+
+DownVid is a desktop app, so the container image ships a virtual display and exposes the
+UI through noVNC — open a browser and you have the full app:
+
+```bash
+git clone https://github.com/yxxbc/downvid.git
+cd downvid
+docker compose up -d
+# then open http://127.0.0.1:6080/vnc.html
+```
+
+yt-dlp and FFmpeg come preinstalled in the image. Downloads land in `./data/downloads`
+on the host. Full details — ports, SSH/SFTP, resolution, troubleshooting — are in the
+[Docker guide](./docs/docker.md).
+
 ## Build from source
 
 ### Requirements
@@ -168,6 +184,7 @@ Per-platform build commands, dependency notes and troubleshooting are in the
 | Document | Contents |
 | --- | --- |
 | [Installation](./docs/installation.md) | Install instructions for macOS, Windows and Linux |
+| [Docker](./docs/docker.md) | Run DownVid in a container, reach it from a browser |
 | [Build from source](./docs/build-from-source.md) | Development environment, dependencies and build flow |
 | [Troubleshooting](./docs/troubleshooting.md) | Common errors and how to diagnose them |
 | [FAQ](./docs/faq.md) | Usage questions and answers |
