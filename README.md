@@ -153,6 +153,7 @@ Per-platform build commands, dependency notes and troubleshooting are in the
 | [Architecture](./docs/architecture.html) | Process structure, IPC and download flow |
 | [Project structure](./docs/project-structure.md) | Directory guide and where to make changes |
 | [Repository standards](./docs/standards.md) | Branch, commit, issue and PR conventions |
+| [Server mode (design)](./docs/server-mode.md) | Docker / WebUI design — **not implemented yet** |
 | [Release process](./docs/release.md) | Versioning and release artifact maintenance |
 | [Contributing](./CONTRIBUTING.md) | How to contribute |
 | [Security policy](./SECURITY.md) | How to report security issues |

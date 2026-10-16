@@ -146,6 +146,7 @@ pnpm build     # 构建当前平台安装包
 | [架构说明](./docs/architecture.html) | 进程结构、IPC 通信与下载流程 |
 | [项目结构](./docs/project-structure.md) | 目录说明与代码维护位置 |
 | [仓库规范](./docs/standards.md) | 分支、提交、Issue 与 PR 规范 |
+| [服务端模式（设计稿）](./docs/server-mode.md) | Docker / WebUI 设计 —— **尚未实现** |
 | [发布流程](./docs/release.md) | 版本与发布产物维护 |
 | [贡献指南](./CONTRIBUTING.md) | 如何参与项目开发 |
 | [安全政策](./SECURITY.md) | 安全问题的报告方式与处理范围 |
