@@ -173,11 +173,15 @@ describe('官网只有一处版本号字面量', () => {
   })
 
   it('HTML 里只有一个 v<版本> 字面量，且它就在 data-version 占位上', () => {
-    // 多出来的字面量不会被刷新脚本碰到，只会安静地停在旧值上
+    // 多出来的字面量不会被刷新脚本碰到，只会安静地停在旧值上。
+    // 这里只钉**结构**（数量 + 位置），不把版本号写死：占位每次发布都会被刷新，
+    // 写死等于让这条检查在发布成功后自己变红（v1.4.0 就是这么红的）。
     const literals = [...html.matchAll(/>v[0-9][0-9.]*</g)].map((m) => m[0])
-    expect(literals).toEqual(['>v1.3.4<'])
+    expect(literals).toHaveLength(1)
     const marker = html.indexOf('data-version')
-    expect(html.indexOf('>v1.3.4<')).toBeGreaterThan(marker)
-    expect(html.indexOf('>v1.3.4<')).toBeLessThan(html.indexOf('</p>', marker))
+    const at = html.indexOf(literals[0])
+    expect(marker).toBeGreaterThan(-1)
+    expect(at).toBeGreaterThan(marker)
+    expect(at).toBeLessThan(html.indexOf('</p>', marker))
   })
 })

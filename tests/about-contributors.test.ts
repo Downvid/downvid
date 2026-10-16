@@ -42,6 +42,9 @@ const HUMAN_IDENTITY_TOKENS = [
   'yxxbc',
   '203426472+yxxbc',
   'Francis-Xavier-code',
+  // 维护者的另一种署名（提交里用的是实名 + outlook 邮箱），与 yxxbc 是同一人
+  'Xynrin',
+  'xynrin@outlook.com',
   'cshuangyy',
   '121596361+cshuangyy',
   'hailaij',
@@ -50,6 +53,27 @@ const HUMAN_IDENTITY_TOKENS = [
   'zerow',
   'linuztx',
 ]
+
+/**
+ * 仓库历史里的署名（`名字\n邮箱`）。
+ *
+ * **拿不到完整历史时返回空串**：CI 默认是 `fetch-depth: 1` 的浅检出，只有被推的那一个提交，
+ * 用它去核对**整份**贡献者名单必然误报——v1.4.0 的 CI 就是这么三平台全红的
+ * （唯一可见的那个提交署的是维护者的另一个身份，名单里其他人的 token 一个都找不到）。
+ * 部分克隆（比如 `fetch-depth: 50`）同样对不上，所以署名数量少于名单长度也当作不完整。
+ */
+function gitAuthors(): string {
+  try {
+    const shallow = execFileSync('git', ['rev-parse', '--is-shallow-repository'], { cwd: ROOT, encoding: 'utf8' }).trim()
+    if (shallow === 'true') return ''
+    const authors = execFileSync('git', ['log', '--format=%an%n%ae'], { cwd: ROOT, encoding: 'utf8' })
+    const identities = new Set(authors.split('\n').map((line) => line.trim().toLowerCase()).filter(Boolean))
+    if (identities.size < EXPECTED_LOGINS.length) return ''
+    return authors
+  } catch {
+    return ''
+  }
+}
 
 /** 从 AboutView 的 CONTRIBUTORS 里取出 login 列表（顺序即展示顺序） */
 function logins(): string[] {
@@ -75,15 +99,9 @@ describe('关于页贡献者名单', () => {
   })
 
   it('每个 login 都在仓库历史里留下过署名（没有凭空加人）', () => {
-    // 用 execFileSync 传参数数组：`--format=%an|%ae` 交给 shell 会被当成管道拆开
-    let authors = ''
-    try {
-      authors = execFileSync('git', ['log', '--format=%an%n%ae'], { cwd: ROOT, encoding: 'utf8' })
-    } catch {
-      // CI 的浅检出拿不到完整历史；快照与 CHANGELOG 两条检查仍在
-      authors = ''
-    }
+    const authors = gitAuthors()
     if (!authors.trim()) {
+      // 浅检出 / 没有 git / 没有完整历史：这条查不了，快照与 CHANGELOG 两条仍在
       expect(EXPECTED_LOGINS.length).toBeGreaterThan(0)
       return
     }
