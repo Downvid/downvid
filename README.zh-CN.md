@@ -253,6 +253,8 @@ pnpm lint:ipc
 
 DownVid 基于 [MIT License](./LICENSE) 开源。
 
+关于项目名称、Logo 及第三方托管服务的品牌使用规则，请参阅[品牌与商标使用政策](./TRADEMARKS.md)。
+
 DownVid 最初基于 [Videdown](https://github.com/cshuangyy/videdown) 开发，之后经过了大量修改、重构与功能扩展。感谢原作者 cshuangyy 的开源工作；原项目的版权与许可声明保留在 [LICENSE](./LICENSE) 中。
 
 感谢社区贡献者与项目依赖的维护者：
