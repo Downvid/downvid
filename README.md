@@ -265,6 +265,8 @@ Thanks to everyone who has contributed to DownVid:
 
 DownVid is released under the [MIT License](./LICENSE).
 
+For the project name, logo, and third-party service attribution, see the [Brand and Trademark Usage Policy](./TRADEMARKS.md).
+
 DownVid started from [Videdown](https://github.com/cshuangyy/videdown) and has since been substantially
 modified, refactored and extended. Thanks to cshuangyy for the original work; the original copyright and
 license notice is preserved in [LICENSE](./LICENSE).
