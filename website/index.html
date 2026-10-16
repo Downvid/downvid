@@ -20,7 +20,8 @@
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
 
 <style>
-/* 配色取自应用本身的 src/style.css @theme，两边保持一致 */
+/* 配色取自应用本身的 src/style.css @theme，两边保持一致（pnpm lint:website 会逐条比对）。
+   版式参考 deepseek.com/harness：居中 hero + 大预览图、卡片网格、代码块、居中 CTA、极简页脚。 */
 :root{
   --primary:#8c5100;
   --primary-dim:#7b4700;
@@ -34,231 +35,661 @@
   --on-surface:#3b3125;
   --on-surface-variant:#695d50;
   --outline-variant:rgba(134,120,106,.28);
-  --radius:16px;
-  --maxw:1080px;
+  /* 下面几条同样来自 @theme，只是不在 lint 比对清单里 */
+  --surface-lowest:#ffffff;
+  --surface-variant:#f1e0ce;
+  --surface-dim:#e8d7c6;
+  --primary-fixed:#ff9800;
+  --on-primary-fixed:#271300;
+  --secondary-container:#c9e7f7;
+  --on-secondary-container:#395663;
+  --inverse-on-surface:#a59b92;
+  --tertiary:#86523d;
+  --error:#a73b21;
+  --surface-low:#fff1e5;
+  --outline:#86786a;
+  --radius-card:24px;
+  --radius-panel:16px;
+  --radius-media:12px;
+  --radius-pill:999px;
+  --maxw:1140px;
+  --shadow-card:0 1px 0 rgba(59,49,37,.03),0 14px 34px -22px rgba(59,49,37,.35);
+  --shadow-shot:0 50px 90px -50px rgba(59,49,37,.5);
+  --font-display:'Plus Jakarta Sans','Noto Sans SC',sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
-body{
-  margin:0;background:var(--surface);color:var(--on-surface);
-  font-family:Inter,'Noto Sans SC',system-ui,-apple-system,sans-serif;
-  line-height:1.7;-webkit-font-smoothing:antialiased;
-}
-h1,h2,h3,.headline{font-family:'Plus Jakarta Sans','Noto Sans SC',sans-serif;letter-spacing:-.02em;line-height:1.25}
-a{color:var(--primary);text-decoration:none}
-a:hover{text-decoration:underline}
+body{margin:0;background:var(--surface);color:var(--on-surface);font-family:Inter,'Noto Sans SC',system-ui,-apple-system,sans-serif;font-size:16px;line-height:1.7;-webkit-font-smoothing:antialiased}
 img{max-width:100%;display:block}
-.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
-.grad{background:linear-gradient(135deg,var(--accent-soft) 0%,var(--accent) 100%);color:#271300}
+a{color:inherit;text-decoration:none}
+h1,h2,h3{font-family:var(--font-display);font-weight:600;letter-spacing:-.02em;line-height:1.22;margin:0}
+.wrap{width:min(100% - 48px,var(--maxw));margin-inline:auto}
+.section{padding:104px 0}
+.section.alt{background:var(--surface-container);border-top:1px solid var(--outline-variant);border-bottom:1px solid var(--outline-variant)}
+.h2{font-size:clamp(26px,3.4vw,38px);text-align:center}
+.sub{margin:14px auto 0;max-width:640px;text-align:center;color:var(--on-surface-variant)}
+.note{margin:22px auto 0;max-width:660px;text-align:center;font-size:13.5px;color:var(--on-surface-variant)}
 
 /* ===== 顶栏 ===== */
-header{position:sticky;top:0;z-index:20;background:rgba(255,248,244,.86);backdrop-filter:blur(12px);border-bottom:1px solid var(--outline-variant)}
-.nav{display:flex;align-items:center;gap:16px;height:64px}
-.brand{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;color:var(--on-surface);font-family:'Plus Jakarta Sans','Noto Sans SC',sans-serif}
+/* 顶栏：停在页面顶部时是通栏细条（和以前一样）；往下滑才收成浮动圆角胶囊并钉住，
+   滑回顶部再还原。两种状态只靠 header.is-stuck 切换，属性都带过渡。 */
+header{position:sticky;top:0;z-index:40;display:flex;justify-content:center;padding:0;pointer-events:none;transition:top .26s ease,padding .26s ease}
+.nav{pointer-events:auto;display:flex;align-items:center;gap:16px;width:100%;max-width:100%;height:64px;padding:0 24px;border-radius:0;border:1px solid transparent;border-bottom-color:var(--outline-variant);background:rgba(255,248,244,.86);backdrop-filter:blur(14px);transition:max-width .26s ease,height .26s ease,padding .26s ease,border-radius .26s ease,border-color .26s ease,background .26s ease,box-shadow .26s ease}
+header.is-stuck{top:14px;padding:0 24px}
+header.is-stuck .nav{max-width:var(--maxw);height:58px;padding:0 18px;border-radius:var(--radius-pill);border-color:var(--outline-variant);background:rgba(255,248,244,.95);box-shadow:0 20px 46px -24px rgba(59,49,37,.72)}
+/* 胶囊上方留了一条缝，滚动时内容会从缝里露出来——用一层渐隐把它盖掉 */
+header::before{content:'';position:fixed;top:0;left:0;right:0;height:96px;z-index:-1;pointer-events:none;opacity:0;transition:opacity .26s ease;background:linear-gradient(180deg,var(--surface) 0%,rgba(255,248,244,.92) 52%,rgba(255,248,244,0) 100%)}
+header.is-stuck::before{opacity:1}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--font-display);font-weight:700;font-size:17px}
 .brand img{width:28px;height:28px;border-radius:8px}
+.brand-tag{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--primary);border:1px solid var(--outline-variant);background:var(--surface-lowest);border-radius:6px;padding:2px 7px;white-space:nowrap}
+@media(max-width:520px){.brand-tag{display:none}}
 .nav .spacer{flex:1}
-.nav a.link{color:var(--on-surface-variant);font-size:14px;font-weight:500}
-.nav a.link:hover{color:var(--on-surface);text-decoration:none}
-.lang{border:1px solid var(--outline-variant);background:transparent;color:var(--on-surface-variant);border-radius:999px;padding:4px 12px;font-size:13px;cursor:pointer;font-family:inherit}
-.lang:hover{background:var(--surface-container-highest)}
+.locale{display:flex;gap:2px;padding:3px;border-radius:var(--radius-pill);border:1px solid var(--outline-variant);background:var(--surface-container)}
+.locale-item{border:0;background:transparent;color:var(--on-surface-variant);font:inherit;font-size:13px;line-height:1;padding:6px 13px;border-radius:var(--radius-pill);cursor:pointer}
+.locale-item.is-active{background:var(--surface-lowest);color:var(--on-surface);font-weight:600;box-shadow:0 1px 3px rgba(59,49,37,.14)}
 
 /* ===== Hero ===== */
-.hero{padding:72px 0 56px;display:grid;grid-template-columns:1fr;gap:44px;align-items:center}
-@media(min-width:900px){.hero{grid-template-columns:1fr 1.15fr;gap:56px;padding:88px 0 64px}}
-.hero h1{font-size:clamp(32px,5vw,52px);font-weight:800;margin:0 0 16px}
-.hero .lede{font-size:clamp(15px,1.6vw,18px);color:var(--on-surface-variant);margin:0 0 28px;max-width:44ch}
-.cta{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
-.btn{display:inline-flex;align-items:center;gap:8px;padding:13px 26px;border-radius:12px;font-weight:700;font-size:15px;border:1px solid transparent;cursor:pointer;font-family:inherit}
-.btn-primary{background:linear-gradient(135deg,var(--accent-soft) 0%,var(--accent) 100%);color:#271300}
-.btn-primary:hover{background:linear-gradient(135deg,rgb(255,167,46) 0%,rgb(230,137,0) 100%);text-decoration:none}
-.btn-ghost{background:var(--surface-container-high);color:var(--on-surface);border-color:var(--outline-variant)}
-.btn-ghost:hover{background:var(--surface-container-highest);text-decoration:none}
-.platforms{display:flex;gap:18px;flex-wrap:wrap;margin-top:26px;font-size:13px;color:var(--on-surface-variant)}
-.platforms span{display:inline-flex;align-items:center;gap:6px}
-/* 下载量：数字由 scripts/gen-website-stats.mjs 从 GitHub Releases 汇总后写死。
-   放在 hero 里是为了给「要不要装」一个社会认同，所以只用数字，不做图表。 */
-.stats{margin-top:22px;font-size:13px;color:var(--on-surface-variant)}
-.stats b{font-size:15px;color:var(--on-surface);font-variant-numeric:tabular-nums}
-.shot{border-radius:var(--radius);overflow:hidden;border:1px solid var(--outline-variant);box-shadow:0 24px 60px -20px rgba(59,49,37,.28)}
-.shot img{width:100%}
+.hero{position:relative;padding:84px 0 96px;text-align:center}
+.hero-glow{position:absolute;inset:0;z-index:0;pointer-events:none;background:radial-gradient(880px 420px at 50% -12%,rgba(255,152,0,.22),transparent 68%),radial-gradient(620px 340px at 8% 6%,rgba(255,179,71,.18),transparent 70%),radial-gradient(620px 340px at 92% 2%,rgba(140,81,0,.12),transparent 70%)}
+.hero .wrap{position:relative;z-index:2}
+.hero .hero-inner{z-index:3}   /* 下载菜单要盖在预览图之上 */
+.eyebrow{display:inline-flex;align-items:center;gap:8px;margin:0 0 24px;padding:6px 14px;border-radius:var(--radius-pill);border:1px solid var(--outline-variant);background:rgba(255,255,255,.66);color:var(--on-surface-variant);font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase}
+.eyebrow svg{width:14px;height:14px;fill:var(--accent)}
+.hero h1{font-size:clamp(34px,5.6vw,58px);max-width:15em;margin-inline:auto}
+.lede{margin:22px auto 0;max-width:640px;color:var(--on-surface-variant);font-size:clamp(15px,1.6vw,17px)}
+.hero-cta{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:12px;margin-top:34px}
 
-/* ===== 通用区块 ===== */
-section{padding:64px 0}
-section.alt{background:var(--surface-container)}
-.sec-title{font-size:clamp(22px,3vw,30px);font-weight:800;margin:0 0 8px}
-.sec-sub{color:var(--on-surface-variant);margin:0 0 36px;max-width:60ch}
+/* 按钮 */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;height:50px;padding:0 24px;border-radius:var(--radius-pill);border:1px solid transparent;font-family:inherit;font-size:15px;font-weight:600;cursor:pointer;white-space:nowrap}
+.btn-primary{background:linear-gradient(135deg,var(--accent-soft),var(--accent));color:#271300;box-shadow:0 12px 26px -14px rgba(140,81,0,.7)}
+.btn-primary:hover{filter:brightness(1.04)}
+.btn-ghost{background:var(--surface-lowest);border-color:var(--outline-variant);color:var(--on-surface)}
+.btn-ghost:hover{background:var(--surface-container)}
+.btn-icon{display:inline-flex;align-items:center}
+.btn-icon svg{width:18px;height:18px;fill:currentColor}
+.btn svg.mark{width:17px;height:17px;fill:currentColor}
 
-/* ===== 特性 ===== */
-.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
-.card{background:var(--surface);border:1px solid var(--outline-variant);border-radius:var(--radius);padding:22px}
-section.alt .card{background:var(--surface-container-high);border-color:transparent}
-.card h3{font-size:15px;font-weight:700;margin:0 0 8px}
-.card p{margin:0;font-size:14px;color:var(--on-surface-variant)}
-.card .ico{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;margin-bottom:14px;background:var(--surface-container-highest)}
-.card .ico svg{width:19px;height:19px;fill:var(--primary)}
+/* 下载：主按钮 + 右侧展开全部平台与格式（分体按钮） */
+.dl-split{position:relative;display:inline-flex;align-items:stretch;border-radius:var(--radius-pill);background:linear-gradient(135deg,var(--accent-soft),var(--accent));color:#271300;box-shadow:0 12px 26px -14px rgba(140,81,0,.7)}
+.dl-main{height:50px;padding:0 22px;border:0;border-radius:var(--radius-pill) 0 0 var(--radius-pill);font-size:15px;font-weight:600}
+.dl-main:hover{background:rgba(255,255,255,.16)}
+.dl-caret{display:inline-flex;align-items:center;justify-content:center;width:46px;border:0;border-left:1px solid rgba(39,19,0,.16);background:transparent;color:inherit;cursor:pointer;border-radius:0 var(--radius-pill) var(--radius-pill) 0}
+.dl-caret:hover{background:rgba(255,255,255,.16)}
+.dl-caret svg{width:18px;height:18px}
+.dl-note{margin:16px 0 0;min-height:22px;font-size:13.5px;color:var(--on-surface-variant)}
+.hero-badges{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;margin-top:18px}
+.hero-badges img{height:20px;width:auto}
+
+/* 平台与格式菜单 */
+.dl-menu{position:absolute;z-index:30;left:50%;top:calc(100% + 12px);transform:translateX(-50%);width:min(92vw,600px);padding:18px;text-align:left;background:var(--surface-lowest);border:1px solid var(--outline-variant);border-radius:var(--radius-panel);box-shadow:0 30px 70px -34px rgba(59,49,37,.5)}
+.dl-menu[hidden]{display:none}
+.dl-menu-title{margin:0 0 12px;font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--on-surface-variant)}
+.dl-menu-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px 20px}
+.dl-group-title{display:flex;align-items:center;gap:7px;margin:0 0 6px;font-size:13px;font-weight:600;color:var(--on-surface)}
+.dl-group-title svg{width:15px;height:15px;fill:currentColor}
+.dl-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 9px;border-radius:8px;font-size:13px;color:var(--on-surface-variant)}
+.dl-item:hover{background:var(--surface-container);color:var(--on-surface)}
+.dl-item-size{font-variant-numeric:tabular-nums;opacity:.75}
+.dl-menu-empty{margin:0;font-size:13px;color:var(--on-surface-variant)}
+.dl-menu-all{display:block;margin-top:14px;padding-top:12px;border-top:1px solid var(--outline-variant);font-size:13px;font-weight:600;color:var(--primary)}
+.hero-shot{position:relative;z-index:2;margin-top:64px}
+.shot{overflow:hidden;border-radius:var(--radius-card);border:1px solid var(--outline-variant);background:var(--surface-lowest);box-shadow:var(--shadow-shot)}
+
+/* ===== hero 预览：应用主界面的可交互复刻 =====
+   结构 / 文案 / 配色都照 src/components/DownloadView.vue 等搬过来。
+   画布按应用窗口的实际 CSS 宽度（1100px）设计，所以内部尺寸可以直接照搬应用里的 px 值；
+   外层再用 transform: scale() 等比缩放到容器宽度（等同于把窗口截图缩小）。 */
+.shot{--dv-scale:1}
+.dv-stage{width:1100px;height:822px;display:flex;flex-direction:column;transform-origin:top left;transform:scale(var(--dv-scale));background:var(--surface);font-size:14px;line-height:1.45;text-align:left}
+.shot-caption{margin:14px 0 0;text-align:center;font-size:13px;color:var(--on-surface-variant)}
+
+/* 标题栏 */
+.dv-bar{display:flex;align-items:center;gap:14px;padding:12px 20px 12px 18px;background:var(--surface-low);flex:none}
+.dv-lights{display:flex;gap:8px}
+.dv-lights i{width:12px;height:12px;border-radius:50%;background:var(--surface-dim)}
+.dv-lights i:nth-child(1){background:#ff5f57}
+.dv-lights i:nth-child(2){background:#febc2e}
+.dv-lights i:nth-child(3){background:#28c840}
+.dv-brand{display:flex;align-items:center;gap:10px}
+.dv-brand img{width:26px;height:26px;border-radius:8px;background:rgba(140,81,0,.1);object-fit:contain;padding:2px}
+.dv-brand b{font-family:var(--font-display);font-size:16px;letter-spacing:-.01em;color:var(--on-surface)}
+.dv-tabs{display:flex;gap:26px;margin-left:auto}
+.dv-tab{position:relative;border:0;background:none;font:inherit;font-size:14px;font-weight:500;color:var(--on-surface-variant);cursor:pointer;padding:8px 0}
+.dv-tab.is-on{color:var(--primary);font-weight:600}
+.dv-tab.is-on::after{content:'';position:absolute;left:0;right:0;bottom:2px;height:2px;border-radius:2px;background:var(--primary)}
+.dv-gear{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:var(--surface-container-highest);color:var(--on-surface);flex:none}
+.dv-gear svg{width:18px;height:18px;fill:currentColor}
+
+/* 主体两栏 */
+.dv-body{flex:1;display:flex;min-height:0}
+.dv-left{flex:1.5;display:flex;flex-direction:column;min-width:0;position:relative;background:var(--surface)}
+.dv-left-inner{flex:1;overflow-y:auto;padding:25px 32px 8px}
+.dv-left-inner::-webkit-scrollbar{width:8px}
+.dv-left-inner::-webkit-scrollbar-thumb{background:var(--surface-container-highest);border-radius:8px}
+.dv-inner{max-width:576px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+.dv-h1{font-family:var(--font-display);font-size:22px;font-weight:700;line-height:1.2;margin:0;color:var(--on-surface)}
+.dv-sub{margin:4px 0 0;font-size:13px;color:var(--on-surface-variant)}
+.dv-url{width:100%;height:78px;padding:11px 12px;background:var(--surface-container-highest);border:2px solid transparent;border-radius:12px;font:inherit;font-size:13.5px;line-height:1.5;color:var(--on-surface);resize:none;outline:none;overflow:hidden}
+.dv-url::placeholder{color:var(--outline-variant)}
+.dv-url:focus{border-color:var(--primary)}
+.dv-actions{display:flex;gap:12px}
+.dv-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:40px;padding:0 14px;border:1px solid transparent;border-radius:12px;font:inherit;font-family:var(--font-display);font-size:13.5px;font-weight:600;cursor:pointer;transition:background .15s ease,border-color .15s ease}
+.dv-btn:disabled{opacity:.55;cursor:default}
+.dv-ico{width:17px;height:17px;fill:currentColor;flex:none}
+.dv-btn-ghost{flex:1;background:var(--surface-container-highest);color:var(--on-surface);border-color:rgba(134,120,106,.1)}
+.dv-btn-ghost:hover{background:var(--surface-variant)}
+.dv-btn-parse{flex:1.5;background:rgba(255,185,159,.4);color:var(--tertiary);border-color:rgba(134,82,61,.3)}
+.dv-btn-parse:hover{background:rgba(255,185,159,.6)}
+.dv-label{margin:0;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--outline)}
+.dv-platforms{display:flex;flex-wrap:wrap;gap:8px;padding:10px 12px;border-radius:12px;background:var(--surface-low)}
+.dv-chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--on-surface-variant)}
+.dv-result{display:flex;flex-direction:column;gap:14px}
+.dv-result[hidden],.dv-parsing[hidden],.dv-alt[hidden],.dv-alt-panel[hidden],.dv-empty[hidden]{display:none}
+.dv-result-title{margin:0;padding-bottom:8px;border-bottom:1px solid rgba(134,120,106,.2);font-family:var(--font-display);font-size:14px;font-weight:700;color:var(--on-surface)}
+.dv-video{display:flex;gap:14px;padding:11px;border:1px solid rgba(134,120,106,.1);border-radius:12px;background:var(--surface-low)}
+.dv-poster{position:relative;flex:none;width:160px;height:96px;border-radius:8px;overflow:hidden;background:var(--surface-variant)}
+.dv-poster svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.dv-thumb{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit}
+.dv-video-meta{display:flex;flex-direction:column;justify-content:space-between;min-width:0;padding:2px 0}
+.dv-video-title{margin:0;font-family:var(--font-display);font-size:13.5px;font-weight:700;line-height:1.35;color:var(--on-surface);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.dv-uploader{display:flex;align-items:center;gap:5px;margin:6px 0 0;font-size:12px;color:var(--on-surface-variant)}
+.dv-stats{display:flex;gap:14px;margin:0;font-family:var(--font-mono);font-size:11.5px;color:var(--on-surface-variant)}
+.dv-formats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.dv-format{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px;border:1px solid rgba(134,120,106,.2);border-radius:12px;background:var(--surface-lowest);font:inherit;cursor:pointer;transition:background .15s ease,border-color .15s ease}
+.dv-format:hover{border-color:rgba(140,81,0,.4)}
+.dv-format.is-on{background:rgba(241,224,206,.5);border-color:rgba(140,81,0,.3)}
+.dv-format-name{padding-left:22px;position:relative;font-size:12.5px;font-weight:600;color:var(--on-surface)}
+.dv-format-name::before{content:'';position:absolute;left:0;top:50%;width:16px;height:16px;margin-top:-8px;border-radius:50%;border:4px solid var(--outline-variant);background:var(--surface);box-sizing:border-box}
+.dv-format.is-on .dv-format-name::before{border-color:var(--primary)}
+.dv-format-size{font-family:var(--font-mono);font-size:10.5px;color:var(--on-surface-variant)}
+.dv-download{height:48px;border-radius:14px;font-size:15px;font-weight:700;color:var(--on-primary-fixed);background:linear-gradient(135deg,var(--accent-soft),var(--accent));box-shadow:0 8px 20px -12px rgba(140,81,0,.8)}
+.dv-download:hover:not(:disabled){filter:brightness(1.04)}
+.dv-parsing{flex:none;padding:14px 32px;border-top:1px solid rgba(134,120,106,.15);background:rgba(255,241,229,.95)}
+.dv-parsing-row{display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:600;color:var(--primary)}
+.dv-parsing-label{display:inline-flex;align-items:center;gap:8px}
+.dv-spin{width:15px;height:15px;fill:currentColor;animation:dv-spin 1s linear infinite}
+@keyframes dv-spin{to{transform:rotate(360deg)}}
+.dv-parsing-time{font-weight:400;color:var(--on-surface-variant)}
+.dv-parsebar{margin-top:8px;height:6px;border-radius:99px;background:var(--surface-container-highest);overflow:hidden}
+.dv-parsebar span{display:block;width:33%;height:100%;border-radius:99px;background:var(--accent-soft);animation:dv-slide 1.4s ease-in-out infinite}
+@keyframes dv-slide{0%{transform:translateX(-100%)}100%{transform:translateX(320%)}}
+
+/* 右侧任务队列 */
+.dv-right{flex:1;display:flex;flex-direction:column;min-height:0;padding:24px 20px 18px;background:var(--surface-low);border-left:1px solid rgba(134,120,106,.12)}
+.dv-queue-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.dv-queue-head h4{margin:0;font-family:var(--font-display);font-size:15px;font-weight:700;color:var(--on-surface)}
+.dv-badge{padding:2px 7px;border-radius:5px;background:var(--secondary-container);color:var(--on-secondary-container);font-family:var(--font-mono);font-size:10px;font-weight:700}
+.dv-queue{flex:1;display:flex;flex-direction:column;gap:12px;overflow-y:auto;min-height:0}
+.dv-task{display:flex;gap:12px;padding:11px;border:1px solid rgba(134,120,106,.12);border-radius:12px;background:var(--surface-lowest)}
+.dv-task.is-done{background:rgba(241,224,206,.6);border-color:rgba(134,120,106,.06)}
+.dv-task .dv-poster{width:80px;height:56px}
+.dv-task-meta{display:flex;flex-direction:column;justify-content:space-between;flex:1;min-width:0;padding:1px 0}
+.dv-task-head{display:flex;align-items:flex-start;gap:8px}
+.dv-task-title{margin:0;font-family:var(--font-display);font-size:12px;font-weight:700;color:var(--on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dv-x{margin-left:auto;border:0;background:none;color:var(--on-surface-variant);font:inherit;font-size:15px;line-height:1;cursor:pointer;padding:0 2px}
+.dv-x:hover{color:var(--error)}
+.dv-task-status{display:flex;align-items:center;justify-content:space-between;gap:8px;font-family:var(--font-mono);font-size:10px;color:var(--on-surface-variant)}
+.dv-pct{font-weight:700;color:var(--primary)}
+.dv-task-done{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--on-surface-variant)}
+.dv-folder{width:15px;height:15px;fill:var(--primary)}
+.dv-bar-track{height:6px;border-radius:99px;background:var(--surface-container-highest);overflow:hidden;margin-top:5px}
+.dv-bar-track span{display:block;height:100%;border-radius:99px;background:var(--primary-fixed);transition:width .16s linear}
+.dv-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:56px 0;text-align:center;color:var(--on-surface-variant)}
+.dv-empty svg{width:44px;height:44px;fill:currentColor;opacity:.3}
+.dv-empty p{margin:0;font-size:13px}
+.dv-empty-hint{font-size:12px;opacity:.75}
+.dv-storage{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid rgba(134,120,106,.12);font-size:11px;color:var(--on-surface-variant)}
+.dv-storage span{display:inline-flex;align-items:center;gap:6px}
+.dv-storage svg{width:14px;height:14px;fill:currentColor}
+.dv-path{font-family:var(--font-mono)}
+
+/* 下载历史 / 关于软件 */
+.dv-alt{flex:1;display:flex;align-items:flex-start;justify-content:center;padding:40px;overflow-y:auto;background:var(--surface)}
+.dv-alt-panel{width:100%;max-width:560px;display:flex;flex-direction:column;gap:12px}
+.dv-alt-panel h4{margin:0;font-family:var(--font-display);font-size:15px;font-weight:700;color:var(--on-surface)}
+.dv-history{display:flex;flex-direction:column;gap:10px}
+.dv-history-row{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid rgba(134,120,106,.15);border-radius:12px;background:var(--surface-low)}
+.dv-history-row p{margin:0;font-size:12.5px;color:var(--on-surface);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dv-history-row span{margin-left:auto;font-family:var(--font-mono);font-size:11px;color:var(--on-surface-variant)}
+.dv-about{align-items:center;text-align:center;gap:6px;padding-top:30px}
+.dv-about-logo{width:64px;height:64px;border-radius:18px;background:rgba(140,81,0,.08);padding:8px}
+.dv-about-name{margin:6px 0 0;font-family:var(--font-display);font-size:20px;font-weight:700;color:var(--on-surface)}
+.dv-about-version{margin:0;font-family:var(--font-mono);font-size:12.5px;color:var(--primary)}
+.dv-about-text{margin:6px 0 0;font-size:13px;color:var(--on-surface-variant)}
+.dv-about-link{margin:2px 0 0;font-size:12.5px;color:var(--primary)}
+
+/* ===== 卡片 ===== */
+.cards{display:grid;grid-template-columns:1fr;gap:20px;margin-top:46px}
+@media(min-width:900px){.cards{grid-template-columns:repeat(2,1fr)}}
+.card{display:flex;flex-direction:column;gap:12px;padding:26px;background:var(--surface-lowest);border:1px solid var(--outline-variant);border-radius:var(--radius-card);box-shadow:var(--shadow-card)}
+.card h3{font-size:17px}
+.card p{margin:0;font-size:14.5px;color:var(--on-surface-variant)}
+.card-media{margin-top:auto;display:flex;flex-wrap:wrap;align-content:center;gap:8px;min-height:112px;padding:16px;border:1px solid var(--outline-variant);border-radius:var(--radius-media);background:var(--surface-low)}
+/* 卡片里的「小演示」：跟应用里一样可以点（平台 / 画质 / 浏览器单选，依赖检测，检查更新） */
+.pick-set{display:flex;flex-wrap:wrap;gap:8px;width:100%}
+.pick{cursor:pointer;font:inherit;font-size:12.5px;font-weight:500;padding:5px 11px;border-radius:var(--radius-pill);border:1px solid var(--outline-variant);background:var(--surface-lowest);color:var(--on-surface-variant);transition:background .15s ease,border-color .15s ease,color .15s ease}
+.pick:hover{border-color:var(--outline);color:var(--on-surface)}
+.pick:focus-visible{outline:2px solid var(--primary);outline-offset:2px}
+.pick.is-on{background:rgba(255,152,0,.18);border-color:var(--accent);color:var(--primary-dim);font-weight:600}
+.pick:disabled{opacity:.65;cursor:default}
+.pick-out{margin:0;font-size:12.5px;color:var(--on-surface-variant)}
+.demo-btn{margin-top:2px}
+.mock-row b.is-ok{color:var(--primary)}
+.mock-bar{flex:1 1 100%;height:8px;border-radius:var(--radius-pill);background:var(--surface-container-highest);overflow:hidden}
+.mock-bar span{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--accent-soft),var(--accent))}
+.mock-row{flex:1 1 100%;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:12.5px;color:var(--on-surface-variant)}
+.mock-row b{font-weight:600;color:var(--on-surface)}
+.mono{font-family:var(--font-mono);font-size:12.5px}
 
 /* ===== 步骤 ===== */
-.steps{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));counter-reset:s}
-.step{background:var(--surface);border:1px solid var(--outline-variant);border-radius:var(--radius);padding:22px}
-.step .n{width:28px;height:28px;border-radius:999px;background:var(--primary);color:var(--on-primary);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;margin-bottom:12px}
-.step h3{font-size:15px;margin:0 0 6px}
-.step p{margin:0;font-size:14px;color:var(--on-surface-variant)}
+.steps{list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:20px;padding:0;margin:46px 0 0}
+.step{padding:26px;background:var(--surface-lowest);border:1px solid var(--outline-variant);border-radius:var(--radius-card)}
+.step .n{display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;margin-bottom:14px;border-radius:var(--radius-pill);background:var(--surface-container-high);color:var(--primary-dim);font-family:var(--font-display);font-size:13px;font-weight:700}
+.step h3{font-size:17px;margin-bottom:6px}
+.step p{margin:0;font-size:14.5px;color:var(--on-surface-variant)}
+.cta-row{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin-top:36px}
+
+/* ===== 安装与运行（代码块） ===== */
+.dev-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;margin-top:46px}
+.dev-card{padding:26px;background:var(--surface-lowest);border:1px solid var(--outline-variant);border-radius:var(--radius-card)}
+.dev-card h3{font-size:17px;margin-bottom:8px}
+.dev-card p{margin:0;font-size:14.5px;color:var(--on-surface-variant)}
+.code{display:flex;align-items:center;gap:10px;margin-top:18px;padding:12px 14px;background:var(--surface-container);border:1px solid var(--outline-variant);border-radius:var(--radius-media)}
+.code code{flex:1;min-width:0;overflow-x:auto;white-space:nowrap;font-family:var(--font-mono);font-size:12.5px;color:var(--on-surface)}
+.copy{flex:none;padding:4px 11px;border-radius:var(--radius-pill);border:1px solid var(--outline-variant);background:var(--surface-lowest);color:var(--on-surface-variant);font:inherit;font-size:12px;cursor:pointer}
+.copy:hover{background:var(--surface-container-high);color:var(--on-surface)}
+
+/* ===== 加入社区 ===== */
+.join{position:relative;overflow:hidden;background:linear-gradient(180deg,var(--surface) 0%,var(--surface-container) 100%)}
+.join::before{content:'';position:absolute;left:50%;top:-180px;width:900px;height:520px;transform:translateX(-50%);background:radial-gradient(closest-side,rgba(255,152,0,.28),transparent);pointer-events:none}
+.join .wrap{position:relative;z-index:1}
+.join-actions{display:flex;flex-wrap:wrap;justify-content:center;gap:12px;margin-top:34px}
 
 /* ===== FAQ ===== */
-details{background:var(--surface);border:1px solid var(--outline-variant);border-radius:12px;padding:16px 20px;margin-bottom:10px}
-section.alt details{background:var(--surface-container-high);border-color:transparent}
+details{margin-bottom:10px;padding:16px 20px;background:var(--surface-lowest);border:1px solid var(--outline-variant);border-radius:var(--radius-panel)}
 details summary{cursor:pointer;font-weight:600;font-size:15px;list-style:none}
 details summary::-webkit-details-marker{display:none}
 details summary::before{content:'＋';color:var(--primary);margin-right:10px;font-weight:700}
 details[open] summary::before{content:'－'}
-details p{margin:12px 0 0;font-size:14px;color:var(--on-surface-variant)}
+details p{margin:12px 0 0;font-size:14.5px;color:var(--on-surface-variant)}
 
 /* ===== 页脚 ===== */
-footer{border-top:1px solid var(--outline-variant);padding:40px 0;font-size:13px;color:var(--on-surface-variant)}
-.foot{display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between}
-.foot nav{display:flex;gap:18px;flex-wrap:wrap}
+footer{padding:64px 0 56px}
+.foot-divider{height:1px;background:var(--outline-variant)}
+.foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:18px;padding-top:26px;font-size:13px;color:var(--on-surface-variant)}
+.foot-brand{display:flex;align-items:center;gap:8px;font-family:var(--font-display);font-weight:700;font-size:15px;color:var(--on-surface)}
+.foot-brand img{width:22px;height:22px;border-radius:7px}
+.foot p{margin:0}
+.foot nav{display:flex;flex-wrap:wrap;gap:18px}
+.foot a:hover{color:var(--on-surface)}
 
 /* 未选中语言时先隐藏，避免中英同时闪现（脚本会立刻显示） */
 [data-i18n]{visibility:hidden}
 html.ready [data-i18n]{visibility:visible}
+
+@media(max-width:720px){
+  .section{padding:64px 0}
+  .hero{padding:56px 0 64px}
+  .hero-shot{margin-top:44px}
+  .btn,.dl-main{height:46px}
+  .nav{height:58px;padding:0 16px;gap:10px}
+  header.is-stuck{top:10px;padding:0 14px}
+  header.is-stuck .nav{height:52px;padding:0 12px}
+  .brand{font-size:16px}
+}
 </style>
 </head>
+
 <body>
 
 <header>
-  <div class="wrap nav">
+  <div class="nav">
     <a class="brand" href="#top">
-      <img src="https://raw.githubusercontent.com/yxxbc/downvid/main/src/assets/logo.png" alt="DownVid">
+      <img src="https://raw.githubusercontent.com/yxxbc/downvid/main/src/assets/logo.png" alt="DownVid" width="28" height="28">
       DownVid
+      <span class="brand-tag" data-i18n="brand.tag">开源</span>
     </a>
     <span class="spacer"></span>
-    <a class="link" href="#features" data-i18n="nav.features">功能</a>
-    <a class="link" href="#install" data-i18n="nav.install">下载</a>
-    <a class="link" href="#faq" data-i18n="nav.faq">常见问题</a>
-    <a class="link" href="https://github.com/yxxbc/downvid" data-i18n="nav.github">GitHub</a>
-    <button class="lang" id="langBtn" type="button">English</button>
+    <div class="locale" role="group" aria-label="Language">
+      <button class="locale-item is-active" type="button" data-lang="zh">中文</button>
+      <button class="locale-item" type="button" data-lang="en">EN</button>
+    </div>
   </div>
 </header>
 
 <main id="top">
 
-  <!-- Hero -->
-  <div class="wrap hero">
-    <div>
+  <!-- ===== Hero ===== -->
+  <section class="hero">
+    <div class="hero-glow" aria-hidden="true"></div>
+    <div class="wrap hero-inner">
+      <p class="eyebrow">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2l1.9 5.7 5.7 1.9-5.7 1.9L12 17.2l-1.9-5.7L4.4 9.6l5.7-1.9L12 2z"/></svg>
+        <span data-i18n="hero.eyebrow">开源 · 跨平台 · 免费</span>
+      </p>
       <h1 data-i18n="hero.title">把喜欢的视频，<br>轻松保存到本地。</h1>
       <p class="lede" data-i18n="hero.lede">
         面向 macOS、Windows 与 Linux 的开源桌面工具。基于 yt-dlp，支持 1000+ 网站，
         界面简洁，不需要记任何命令行参数。
       </p>
-      <div class="cta">
-        <a class="btn btn-primary" href="https://github.com/yxxbc/downvid/releases/latest" data-i18n="hero.download">下载最新版</a>
-        <a class="btn btn-ghost" href="https://github.com/yxxbc/downvid" data-i18n="hero.source">查看源码</a>
+      <div class="hero-cta">
+        <div class="dl-split">
+          <a class="btn dl-main" id="dlPrimary" href="https://github.com/yxxbc/downvid/releases/latest">
+            <span class="btn-icon" id="dlPrimaryIcon" aria-hidden="true"></span>
+            <span id="dlPrimaryLabel" data-i18n="hero.download">下载最新版</span>
+          </a>
+          <button class="dl-caret" id="dlCaret" type="button" aria-expanded="false" aria-controls="dlMenu" aria-label="其他平台与格式">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <!-- 平台与格式菜单：主按钮已经按访问者系统选好，这里给需要手动选的人 -->
+          <div class="dl-menu" id="dlMenu" hidden>
+            <p class="dl-menu-title" data-i18n="dl.menu">所有平台与格式</p>
+            <div class="dl-menu-grid" id="dlMenuGrid"></div>
+            <a class="dl-menu-all" href="https://github.com/yxxbc/downvid/releases" data-i18n="dl.all">全部版本与产物</a>
+          </div>
+        </div>
+        <a class="btn btn-ghost" href="https://github.com/yxxbc/downvid">
+          <svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+          <span data-i18n="hero.source">查看源码</span>
+        </a>
       </div>
-      <div class="platforms">
-        <span>
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M11.2 1.3c.1.8-.3 1.6-.7 2.1-.5.6-1.3 1-2.1 1-.1-.8.3-1.6.7-2.1.5-.6 1.4-1 2.1-1zM14.6 11.4c-.4.9-.6 1.3-1.1 2.1-.7 1.1-1.7 2.4-3 2.4-1.1 0-1.4-.7-2.9-.7s-1.8.7-2.9.7c-1.2 0-2.2-1.2-2.9-2.3C-.2 10.5-.5 6.6 1.1 4.6c.8-1 1.9-1.5 3-1.5 1.2 0 2 .7 3 .7.9 0 1.5-.7 3-.7 1 0 2.1.5 2.9 1.5-2.6 1.4-2.2 5 .6 6.3z"/></svg>
-          <span data-i18n="plat.macos">macOS</span>
-        </span>
-        <span>
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M0 2.6l6.5-.9v6.2H0V2.6zm7.3-1l8.7-1.2v7.5H7.3V1.6zM0 8.8h6.5v6.2L0 14V8.8zm7.3 0H16v7.5l-8.7-1.2V8.8z"/></svg>
-          <span data-i18n="plat.windows">Windows</span>
-        </span>
-        <span>
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0a8 8 0 100 16A8 8 0 008 0zM2.2 6.3c.9-.3 2-.3 3 .2.1-.7.5-1.4 1-1.9-.4-.4-1-.7-1.7-.7-1 0-1.8.6-2.3 1.4v1zm2 6.3c-.4-.4-.7-1-.7-1.6 0-1.3 1-2.3 2.2-2.3.7 0 1.3.3 1.7.8.3-.5.8-.9 1.4-1.1a3.4 3.4 0 00-3.2-2.5c-.9 0-1.8.4-2.4 1A4.6 4.6 0 004.2 12.6zm8.4-.9a2.7 2.7 0 00-2.3-2.6 1.5 1.5 0 01-1.4 2.2c-.3 0-.5 0-.7-.1.1.9.8 1.6 1.7 1.6.9 0 1.7-.6 2-1.4.5.1 1.1.4 1.4.9.2-.6.3-1.2.2-1.9-.2.4-.5.7-.9.9z"/></svg>
-          <span data-i18n="plat.linux">Linux</span>
-        </span>
+      <p class="dl-note" id="dlNote"></p>
+      <!-- 下载量 / 星标用 README 同款 shields.io 徽章：数字实时，不再维护静态值 -->
+      <div class="hero-badges">
+        <a href="https://github.com/yxxbc/downvid/releases" rel="noopener"><img src="https://img.shields.io/github/downloads/yxxbc/downvid/total?style=flat&amp;label=Downloads&amp;logo=github&amp;logoColor=white&amp;color=2563eb" alt="Downloads" height="20"></a>
+        <a href="https://github.com/yxxbc/downvid/stargazers" rel="noopener"><img src="https://img.shields.io/github/stars/yxxbc/downvid?style=flat&amp;label=Stars&amp;logo=github&amp;logoColor=white&amp;color=eab308" alt="GitHub Stars" height="20"></a>
       </div>
-      <!-- 下载量：静态数字，由 pnpm website:stats 从 GitHub Releases 汇总刷新。
-           刻意不用 shields.io 或前端 fetch —— 官网约定零第三方依赖，
-           且未认证 API 限额按出口 IP 共享（60 次/小时），失败态不值得写。 -->
-      <p class="stats">
-        <span data-i18n="hero.downloads">已被下载</span>
-        <b data-download-count>4,880</b>
-        <span data-i18n="hero.times">次</span>
-      </p>
     </div>
-    <div class="shot">
-      <img src="https://raw.githubusercontent.com/yxxbc/downvid/main/src/assets/screen.png" alt="DownVid 界面" loading="eager">
+    <div class="wrap hero-shot">
+      <div class="shot" id="dvShell">
+              <div class="dv" id="dvDemo">
+                <div class="dv-stage">
+                  <!-- 标题栏 -->
+                  <div class="dv-bar">
+                    <span class="dv-lights" aria-hidden="true"><i></i><i></i><i></i></span>
+                    <span class="dv-brand"><img src="https://raw.githubusercontent.com/yxxbc/downvid/main/src/assets/logo.png" alt="" width="26" height="26"><b>DownVid</b></span>
+                    <div class="dv-tabs" role="tablist">
+                      <button class="dv-tab is-on" type="button" role="tab" aria-selected="true" data-dv-tab="download" data-i18n="demo.tabdownload">解析下载</button>
+                      <button class="dv-tab" type="button" role="tab" aria-selected="false" data-dv-tab="history" data-i18n="demo.tabhistory">下载历史</button>
+                      <button class="dv-tab" type="button" role="tab" aria-selected="false" data-dv-tab="about" data-i18n="demo.tababout">关于软件</button>
+                    </div>
+                    <span class="dv-gear" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7zm7.4-2.6c.05-.3.07-.6.07-.9s-.02-.6-.07-.9l2.03-1.58a.5.5 0 0 0 .12-.64l-1.93-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.4 7.4 0 0 0-1.56-.9l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.56.23-1.08.53-1.56.9l-2.39-.96a.5.5 0 0 0-.6.22L2.44 8.87a.5.5 0 0 0 .12.64l2.03 1.59c-.05.3-.07.6-.07.9s.02.6.07.9l-2.03 1.58a.5.5 0 0 0-.12.64l1.93 3.32c.13.22.39.3.6.22l2.39-.96c.48.37 1 .67 1.56.9l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.56-.23 1.08-.53 1.56-.9l2.39.96c.21.08.47 0 .6-.22l1.93-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58z"/></svg></span>
+                  </div>
+      
+                  <div class="dv-body">
+                    <!-- 左：解析下载 -->
+                    <section class="dv-left" data-dv-panel="download">
+                      <div class="dv-left-inner">
+                        <div class="dv-inner">
+                          <div>
+                            <h3 class="dv-h1" data-i18n="demo.title">全平台视频下载</h3>
+                            <p class="dv-sub" data-i18n="demo.subtitle">输入链接即刻解析高清数字资产</p>
+                          </div>
+                          <textarea class="dv-url" id="dvUrl" rows="3" data-i18n-placeholder="demo.placeholder" placeholder="在此处粘贴需要解析的视频链接..." aria-label="URL"></textarea>
+                          <div class="dv-actions">
+                            <button class="dv-btn dv-btn-ghost" type="button" id="dvPaste">
+                              <svg class="dv-ico" viewBox="0 0 24 24"><path d="M19 2h-4.18C14.4.84 13.3 0 12 0S9.6.84 9.18 2H5a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2zm-7 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm7 18H5V4h2v3h10V4h2v16z"/></svg>
+                              <span data-i18n="demo.paste">粘贴链接</span>
+                            </button>
+                            <button class="dv-btn dv-btn-parse" type="button" id="dvParse">
+                              <svg class="dv-ico" viewBox="0 0 24 24"><path d="M11 21h-1l1-7H7.5c-.58 0-.57-.32-.38-.66l.07-.12C8.48 10.94 10.42 7.54 13 3h1l-1 7h3.5c.49 0 .56.33.47.51l-.07.15C12.96 17.55 11 21 11 21z"/></svg>
+                              <span id="dvParseLabel" data-i18n="demo.parse">解析视频信息</span>
+                            </button>
+                          </div>
+                          <p class="dv-label" data-i18n="demo.platforms">支持解析平台</p>
+                          <div class="dv-platforms">
+                            <span class="dv-chip">抖音</span><span class="dv-chip">小红书</span><span class="dv-chip">B站</span><span class="dv-chip">YouTube</span><span class="dv-chip">Instagram</span>
+                          </div>
+      
+                          <!-- 解析结果 -->
+                          <div class="dv-result" id="dvResult" hidden>
+                            <h4 class="dv-result-title" data-i18n="demo.result">解析结果预览</h4>
+                            <div class="dv-video">
+                              <div class="dv-poster" id="dvPoster">
+                                <!-- 离线时的兜底底图；正常情况由原链接的预览图盖住（图里自带了时长角标） -->
+                                <svg viewBox="0 0 160 96" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+                                  <rect width="160" height="96" fill="#a9d3ee"/>
+                                  <rect y="54" width="160" height="42" fill="#dfc9b0"/>
+                                  <circle cx="120" cy="24" r="9" fill="#ffe0ae"/>
+                                  <path d="M0 96 L36 52 L58 74 L78 40 L104 80 L124 62 L160 96 Z" fill="#7d6553"/>
+                                  <path d="M50 66 L78 26 L106 66 Z" fill="#5c4a3d"/>
+                                  <path d="M68 41 L78 26 L88 41 L82 45 L78 40 L74 45 Z" fill="#fff8f4"/>
+                                </svg>
+                                <img class="dv-thumb" src="https://raw.githubusercontent.com/yxxbc/downvid/main/src/assets/demo-thumb.jpg" alt="" loading="eager">
+                              </div>
+                              <div class="dv-video-meta">
+                                <p class="dv-video-title">Day Trip to Mt. Fuji Area from Tokyo | Winter Train Trip | JAPAN TRAVEL VLOG</p>
+                                <p class="dv-uploader">Unique Japan Travel</p>
+                                <p class="dv-stats"><span>18:42</span><span id="dvSize">2.28 GB</span></p>
+                              </div>
+                            </div>
+                            <p class="dv-label" id="dvVideoHeader">视频格式 (MP4) - 共 8 个</p>
+                            <div class="dv-formats" id="dvFormats"></div>
+                            <p class="dv-label" id="dvAudioHeader">纯音频格式 - 共 6 个</p>
+                            <div class="dv-formats" id="dvAudioFormats"></div>
+                            <button class="dv-btn dv-download" type="button" id="dvDownload">
+                              <svg class="dv-ico" viewBox="0 0 24 24"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>
+                              <span id="dvDownloadLabel">立即下载所选资源</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="dv-parsing" id="dvParsing" hidden>
+                        <div class="dv-parsing-row">
+                          <span class="dv-parsing-label"><svg class="dv-spin" viewBox="0 0 24 24"><path d="M12 4V2A10 10 0 0 0 2 12h2a8 8 0 0 1 8-8z"/></svg><span data-i18n="demo.extracting">正在提取视频元数据...</span></span>
+                          <span class="dv-parsing-time" id="dvElapsed">通常需要几秒</span>
+                        </div>
+                        <div class="dv-parsebar"><span></span></div>
+                      </div>
+                    </section>
+      
+                    <!-- 右：任务队列 -->
+                    <aside class="dv-right" data-dv-panel="download">
+                      <div class="dv-queue-head">
+                        <h4 data-i18n="demo.queue">任务队列</h4>
+                        <span class="dv-badge" id="dvActive">0 进行中</span>
+                      </div>
+                      <div class="dv-queue" id="dvQueue">
+                        <div class="dv-empty" id="dvQueueEmpty">
+                          <svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 15l-4-4h3V8h2v5h3l-4 4z"/></svg>
+                          <p data-i18n="demo.queueempty">暂无下载任务</p>
+                          <p class="dv-empty-hint" data-i18n="demo.queuehint">解析视频后点击下载按钮添加任务</p>
+                        </div>
+                      </div>
+                      <div class="dv-storage">
+                        <span><svg viewBox="0 0 24 24"><path d="M4 4h16v6H4zm0 10h16v6H4zM6 6h2v2H6zm0 10h2v2H6z"/></svg><span data-i18n="demo.storage">存储空间</span>: 180.9 GB / 460.4 GB</span>
+                        <span class="dv-path">~/Downloads/DownVid</span>
+                      </div>
+                    </aside>
+      
+                    <!-- 下载历史 / 关于软件 -->
+                    <div class="dv-alt" id="dvAlt" hidden>
+                      <div class="dv-alt-panel" id="dvAltHistory" hidden>
+                        <h4 data-i18n="demo.tabhistory">下载历史</h4>
+                        <div class="dv-history" id="dvHistory"></div>
+                        <p class="dv-empty-hint" id="dvHistoryEmpty" data-i18n="demo.historyempty">暂无下载记录</p>
+                      </div>
+                      <div class="dv-alt-panel dv-about" id="dvAltAbout" hidden>
+                        <img class="dv-about-logo" src="https://raw.githubusercontent.com/yxxbc/downvid/main/src/assets/logo.png" alt="" width="64" height="64">
+                        <p class="dv-about-name">DownVid</p>
+                        <p class="dv-about-version" id="dvAboutVersion">v1.3.4</p>
+                        <p class="dv-about-text" data-i18n="demo.about">基于 yt-dlp 的开源桌面视频下载工具</p>
+                        <p class="dv-about-link"><a href="https://github.com/yxxbc/downvid">github.com/yxxbc/downvid</a></p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p class="shot-caption" data-i18n="demo.caption">上面是应用界面的可交互演示——可以直接点</p>
     </div>
-  </div>
+  </section>
 
-  <!-- 特性 -->
-  <section class="alt" id="features">
+  <!-- ===== 功能 ===== -->
+  <section class="section" id="features">
     <div class="wrap">
-      <h2 class="sec-title" data-i18n="feat.title">能做什么</h2>
-      <p class="sec-sub" data-i18n="feat.sub">该有的都有，不该有的（破解、绕过）一个都没有。</p>
-      <div class="grid">
-        <div class="card">
-          <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm0 18a8 8 0 110-16 8 8 0 010 16zM11 7h2v6h-2zm0 8h2v2h-2z"/></svg></div>
+      <h2 class="h2" data-i18n="feat.title">能做什么</h2>
+      <p class="sub" data-i18n="feat.sub">该有的都有，不该有的（破解、绕过）一个都没有。</p>
+      <div class="cards">
+        <article class="card">
           <h3 data-i18n="feat.sites.t">1000+ 网站</h3>
           <p data-i18n="feat.sites.d">基于 yt-dlp；抖音、快手另有专属解析器，能拿到无水印直链。</p>
-        </div>
-        <div class="card">
-          <div class="ico"><svg viewBox="0 0 24 24"><path d="M3 17h18v2H3zm3-6h4v4H6zm8 0h4v4h-4zM6 5h12v4H6z"/></svg></div>
+          <div class="card-media">
+            <div class="pick-set" data-pick-set>
+              <button class="pick is-on" type="button" data-pick>YouTube</button>
+              <button class="pick" type="button" data-pick>Bilibili</button>
+              <button class="pick" type="button" data-pick>抖音</button>
+              <button class="pick" type="button" data-pick>快手</button>
+              <button class="pick" type="button" data-pick>X</button>
+            </div>
+          </div>
+        </article>
+        <article class="card">
           <h3 data-i18n="feat.quality.t">画质与格式</h3>
           <p data-i18n="feat.quality.d">360P 到 4K；支持仅音频（MP3）、仅字幕（SRT）与 YouTube 多音轨。</p>
-        </div>
-        <div class="card">
-          <div class="ico"><svg viewBox="0 0 24 24"><path d="M13 3l-2 7h6l-9 11 2-7H4z"/></svg></div>
+          <div class="card-media">
+            <div class="pick-set" data-pick-set>
+              <button class="pick is-on" type="button" data-pick data-out="2.28 GB">4K</button>
+              <button class="pick" type="button" data-pick data-out="457.1 MB">1080P</button>
+              <button class="pick" type="button" data-pick data-out="142.2 MB">720P</button>
+              <button class="pick" type="button" data-pick data-out="17.3 MB">MP3</button>
+              <button class="pick" type="button" data-pick data-out="128 KB">SRT</button>
+            </div>
+            <p class="pick-out mono" data-pick-out>2.28 GB</p>
+          </div>
+        </article>
+        <article class="card">
           <h3 data-i18n="feat.speed.t">下载加速</h3>
           <p data-i18n="feat.speed.d">直链使用小块工作队列（默认 8 路、最多 16 路），可选 aria2 多连接。</p>
-        </div>
-        <div class="card">
-          <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 12a4 4 0 100-8 4 4 0 000 8zm0 2c-4 0-8 2-8 4v2h16v-2c0-2-4-4-8-4z"/></svg></div>
+          <div class="card-media">
+            <div class="mock-row"><b>8×</b><span class="mono">5.4 MB/s</span><span class="mono" data-percent>0%</span></div>
+            <div class="mock-bar"><span data-bar style="width:0%"></span></div>
+            <button class="pick demo-btn" type="button" data-run aria-pressed="false">开始</button>
+          </div>
+        </article>
+        <article class="card">
           <h3 data-i18n="feat.cookie.t">登录内容</h3>
           <p data-i18n="feat.cookie.d">自动读取已安装浏览器的登录状态，也可以手动导入 cookies.txt。</p>
-        </div>
-        <div class="card">
-          <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 3v10l3-3 1.4 1.4L12 15.8 7.6 11.4 9 10l3 3V3zM5 19h14v2H5z"/></svg></div>
+          <div class="card-media">
+            <div class="pick-set" data-pick-set>
+              <button class="pick is-on" type="button" data-pick>Chrome</button>
+              <button class="pick" type="button" data-pick>Edge</button>
+              <button class="pick" type="button" data-pick>Safari</button>
+              <button class="pick mono" type="button" data-pick>cookies.txt</button>
+            </div>
+          </div>
+        </article>
+        <article class="card">
           <h3 data-i18n="feat.deps.t">依赖自动识别</h3>
           <p data-i18n="feat.deps.d">安装包不内置 yt-dlp / FFmpeg，启动时自动复用系统已有的版本，缺失可一键下载。</p>
-        </div>
-        <div class="card">
-          <div class="ico"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 100 20 10 10 0 000-20zm1 15h-2v-2h2zm1.8-6.2l-.9.9c-.7.7-1.1 1.3-1.1 2.3h-2c0-1.4.6-2.2 1.5-3.1l1.2-1.3c.4-.3.6-.8.6-1.3a2 2 0 10-4 0H8a4 4 0 118 0c0 .9-.4 1.7-1.2 2.5z"/></svg></div>
+          <div class="card-media">
+            <div class="mock-row"><span class="mono">yt-dlp</span><b data-dep>···</b></div>
+            <div class="mock-row"><span class="mono">ffmpeg</span><b data-dep>···</b></div>
+            <div class="mock-row"><span class="mono">ffprobe</span><b data-dep>···</b></div>
+            <button class="pick demo-btn" type="button" data-detect>检测依赖</button>
+          </div>
+        </article>
+        <article class="card">
           <h3 data-i18n="feat.update.t">自动更新</h3>
           <p data-i18n="feat.update.d">通过 GitHub Releases 更新；macOS 未签名，改用自带校验与替换流程。</p>
-        </div>
+          <div class="card-media">
+            <div class="mock-row"><span class="mono">GitHub Releases</span><b class="mono" data-update-out>—</b></div>
+            <div class="mock-bar"><span data-update-bar style="width:0%"></span></div>
+            <button class="pick demo-btn" type="button" data-update>检查更新</button>
+          </div>
+        </article>
       </div>
     </div>
   </section>
 
-  <!-- 安装 -->
-  <section id="install">
+  <!-- ===== 三步开始 ===== -->
+  <section class="section alt" id="install">
     <div class="wrap">
-      <h2 class="sec-title" data-i18n="ins.title">三步开始</h2>
-      <p class="sec-sub" data-i18n="ins.sub">不需要预先安装任何命令行工具。</p>
-      <div class="steps">
-        <div class="step">
-          <div class="n">1</div>
+      <h2 class="h2" data-i18n="ins.title">三步开始</h2>
+      <p class="sub" data-i18n="ins.sub">不需要预先安装任何命令行工具。</p>
+      <ol class="steps">
+        <li class="step">
+          <span class="n">1</span>
           <h3 data-i18n="ins.s1.t">下载安装包</h3>
-          <p data-i18n="ins.s1.d">按系统选择 .dmg / .exe / .AppImage，全部产物见 Releases 页面。</p>
-        </div>
-        <div class="step">
-          <div class="n">2</div>
+          <p data-i18n="ins.s1.d">页面会自动识别你的系统，点一下直接下载对应的安装包，不需要跳转。</p>
+        </li>
+        <li class="step">
+          <span class="n">2</span>
           <h3 data-i18n="ins.s2.t">粘贴链接</h3>
           <p data-i18n="ins.s2.d">在应用里粘贴视频链接，选好画质或格式。</p>
-        </div>
-        <div class="step">
-          <div class="n">3</div>
+        </li>
+        <li class="step">
+          <span class="n">3</span>
           <h3 data-i18n="ins.s3.t">开始下载</h3>
           <p data-i18n="ins.s3.d">首次使用若缺少运行依赖，应用会提示并可以一键装好。</p>
-        </div>
-      </div>
-      <div class="cta" style="margin-top:28px">
-        <a class="btn btn-primary" href="https://github.com/yxxbc/downvid/releases/latest" data-i18n="ins.cta">前往下载</a>
+        </li>
+      </ol>
+      <div class="cta-row">
+        <a class="btn btn-primary" id="dlInstall" href="https://github.com/yxxbc/downvid/releases/latest" data-i18n="ins.cta">前往下载</a>
         <a class="btn btn-ghost" href="https://github.com/yxxbc/downvid/blob/main/docs/installation.md" data-i18n="ins.guide">安装指南</a>
       </div>
-      <p style="margin-top:22px;font-size:13px;color:var(--on-surface-variant);max-width:64ch" data-i18n="ins.note">
-        提示：macOS 上应用未做代码签名，首次打开需要在「系统设置 → 隐私与安全性」中允许。
-      </p>
+      <p class="note" data-i18n="ins.note">提示：macOS 上应用未做代码签名，首次打开需要在「系统设置 → 隐私与安全性」中允许。</p>
     </div>
   </section>
 
-  <!-- FAQ -->
-  <section class="alt" id="faq">
+  <!-- ===== 安装与运行 ===== -->
+  <section class="section">
     <div class="wrap">
-      <h2 class="sec-title" data-i18n="faq.title">常见问题</h2>
-      <p class="sec-sub" data-i18n="faq.sub">更多问题见仓库文档。</p>
+      <h2 class="h2" data-i18n="dev.title">安装与运行</h2>
+      <p class="sub" data-i18n="dev.sub">每个平台的安装方式略有不同，这里是最常见的几步。</p>
+      <div class="dev-grid">
+        <div class="dev-card">
+          <h3 data-i18n="dev.mac.t">macOS：应用未签名</h3>
+          <p data-i18n="dev.mac.d">首次打开需在「系统设置 → 隐私与安全性」中允许；也可以先去掉隔离属性。</p>
+          <div class="code">
+            <code>xattr -cr /Applications/DownVid.app</code>
+            <button class="copy" type="button" data-copy data-i18n="dev.copy">复制</button>
+          </div>
+        </div>
+        <div class="dev-card">
+          <h3 data-i18n="dev.linux.t">Linux：AppImage 免安装</h3>
+          <p data-i18n="dev.linux.d">下载后加执行权限直接运行；deb / rpm 交给包管理器。</p>
+          <div class="code">
+            <code>chmod +x DownVid-*.AppImage &amp;&amp; ./DownVid-*.AppImage</code>
+            <button class="copy" type="button" data-copy data-i18n="dev.copy">复制</button>
+          </div>
+        </div>
+        <div class="dev-card">
+          <h3 data-i18n="dev.build.t">从源码构建</h3>
+          <p data-i18n="dev.build.d">需要 Node 22+ 与 pnpm；Go 边车会在启动时自动编译。</p>
+          <div class="code">
+            <code>pnpm install &amp;&amp; pnpm dev</code>
+            <button class="copy" type="button" data-copy data-i18n="dev.copy">复制</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 加入社区 ===== -->
+  <section class="section join">
+    <div class="wrap">
+      <h2 class="h2" data-i18n="join.title">加入开源社区</h2>
+      <p class="sub" data-i18n="join.sub">DownVid 是 MIT 协议的开源项目：欢迎提交 Issue、贡献代码，或者只是点个 Star。</p>
+      <div class="join-actions">
+        <a class="btn btn-primary" href="https://github.com/yxxbc/downvid">
+          <svg class="mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/></svg>
+          <span data-i18n="join.github">查看 GitHub</span>
+        </a>
+        <a class="btn btn-ghost" href="https://github.com/yxxbc/downvid/blob/main/docs/installation.md" data-i18n="join.docs">开发者文档</a>
+        <a class="btn btn-ghost" href="https://github.com/yxxbc/downvid/issues" data-i18n="foot.issues">问题反馈</a>
+        <a class="btn btn-ghost" href="https://github.com/yxxbc/downvid/blob/main/CHANGELOG.md" data-i18n="foot.changelog">更新日志</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== FAQ ===== -->
+  <section class="section alt" id="faq">
+    <div class="wrap">
+      <h2 class="h2" data-i18n="faq.title">常见问题</h2>
+      <p class="sub" data-i18n="faq.sub">更多问题见仓库文档。</p>
 
       <details>
         <summary data-i18n="faq.q1">提示缺少 yt-dlp 或 FFmpeg？</summary>
@@ -282,39 +713,129 @@ html.ready [data-i18n]{visibility:visible}
 </main>
 
 <footer>
-  <div class="wrap foot">
-    <div>
-      <strong>DownVid</strong> · <span data-i18n="foot.license">MIT 协议开源</span>
+  <div class="wrap">
+    <div class="foot-divider"></div>
+    <div class="foot">
+      <div class="foot-brand">
+        <img src="https://raw.githubusercontent.com/yxxbc/downvid/main/src/assets/logo.png" alt="" width="22" height="22">
+        <span>DownVid</span>
+      </div>
+      <p data-i18n="foot.license">MIT 协议开源</p>
+      <nav>
+        <a href="https://github.com/yxxbc/downvid" data-i18n="foot.repo">源码</a>
+        <a href="https://github.com/yxxbc/downvid/releases" data-i18n="foot.releases">发布版本</a>
+        <a href="https://github.com/yxxbc/downvid/issues" data-i18n="foot.issues">问题反馈</a>
+        <a href="https://github.com/yxxbc/downvid/blob/main/SECURITY.md" data-i18n="foot.security">安全政策</a>
+      </nav>
     </div>
-    <nav>
-      <a href="https://github.com/yxxbc/downvid" data-i18n="foot.repo">源码</a>
-      <a href="https://github.com/yxxbc/downvid/releases" data-i18n="foot.releases">发布版本</a>
-      <a href="https://github.com/yxxbc/downvid/issues" data-i18n="foot.issues">问题反馈</a>
-      <a href="https://github.com/yxxbc/downvid/blob/main/CHANGELOG.md" data-i18n="foot.changelog">更新日志</a>
-      <a href="https://github.com/yxxbc/downvid/blob/main/SECURITY.md" data-i18n="foot.security">安全政策</a>
-    </nav>
   </div>
 </footer>
 
+<!-- 平台图标：标准品牌标识（simple-icons）。主按钮与菜单里的图标都从这里克隆，只维护一份 -->
+<div id="osIcons" hidden aria-hidden="true">
+  <svg data-os="macos" viewBox="0 0 24 24"><path d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/></svg>
+  <svg data-os="windows" viewBox="0 0 24 24"><path d="M0,0H11.377V11.372H0ZM12.623,0H24V11.372H12.623ZM0,12.623H11.377V24H0Zm12.623,0H24V24H12.623"/></svg>
+  <svg data-os="linux" viewBox="0 0 24 24"><path d="M12.504 0c-.155 0-.315.008-.48.021-4.226.333-3.105 4.807-3.17 6.298-.076 1.092-.3 1.953-1.05 3.02-.885 1.051-2.127 2.75-2.716 4.521-.278.832-.41 1.684-.287 2.489a.424.424 0 00-.11.135c-.26.268-.45.6-.663.839-.199.199-.485.267-.797.4-.313.136-.658.269-.864.68-.09.189-.136.394-.132.602 0 .199.027.4.055.536.058.399.116.728.04.97-.249.68-.28 1.145-.106 1.484.174.334.535.47.94.601.81.2 1.91.135 2.774.6.926.466 1.866.67 2.616.47.526-.116.97-.464 1.208-.946.587-.003 1.23-.269 2.26-.334.699-.058 1.574.267 2.577.2.025.134.063.198.114.333l.003.003c.391.778 1.113 1.132 1.884 1.071.771-.06 1.592-.536 2.257-1.306.631-.765 1.683-1.084 2.378-1.503.348-.199.629-.469.649-.853.023-.4-.2-.811-.714-1.376v-.097l-.003-.003c-.17-.2-.25-.535-.338-.926-.085-.401-.182-.786-.492-1.046h-.003c-.059-.054-.123-.067-.188-.135a.357.357 0 00-.19-.064c.431-1.278.264-2.55-.173-3.694-.533-1.41-1.465-2.638-2.175-3.483-.796-1.005-1.576-1.957-1.56-3.368.026-2.152.236-6.133-3.544-6.139zm.529 3.405h.013c.213 0 .396.062.584.198.19.135.33.332.438.533.105.259.158.459.166.724 0-.02.006-.04.006-.06v.105a.086.086 0 01-.004-.021l-.004-.024a1.807 1.807 0 01-.15.706.953.953 0 01-.213.335.71.71 0 00-.088-.042c-.104-.045-.198-.064-.284-.133a1.312 1.312 0 00-.22-.066c.05-.06.146-.133.183-.198.053-.128.082-.264.088-.402v-.02a1.21 1.21 0 00-.061-.4c-.045-.134-.101-.2-.183-.333-.084-.066-.167-.132-.267-.132h-.016c-.093 0-.176.03-.262.132a.8.8 0 00-.205.334 1.18 1.18 0 00-.09.4v.019c.002.089.008.179.02.267-.193-.067-.438-.135-.607-.202a1.635 1.635 0 01-.018-.2v-.02a1.772 1.772 0 01.15-.768c.082-.22.232-.406.43-.533a.985.985 0 01.594-.2zm-2.962.059h.036c.142 0 .27.048.399.135.146.129.264.288.344.465.09.199.14.4.153.667v.004c.007.134.006.2-.002.266v.08c-.03.007-.056.018-.083.024-.152.055-.274.135-.393.2.012-.09.013-.18.003-.267v-.015c-.012-.133-.04-.2-.082-.333a.613.613 0 00-.166-.267.248.248 0 00-.183-.064h-.021c-.071.006-.13.04-.186.132a.552.552 0 00-.12.27.944.944 0 00-.023.33v.015c.012.135.037.2.08.334.046.134.098.2.166.268.01.009.02.018.034.024-.07.057-.117.07-.176.136a.304.304 0 01-.131.068 2.62 2.62 0 01-.275-.402 1.772 1.772 0 01-.155-.667 1.759 1.759 0 01.08-.668 1.43 1.43 0 01.283-.535c.128-.133.26-.2.418-.2zm1.37 1.706c.332 0 .733.065 1.216.399.293.2.523.269 1.052.468h.003c.255.136.405.266.478.399v-.131a.571.571 0 01.016.47c-.123.31-.516.643-1.063.842v.002c-.268.135-.501.333-.775.465-.276.135-.588.292-1.012.267a1.139 1.139 0 01-.448-.067 3.566 3.566 0 01-.322-.198c-.195-.135-.363-.332-.612-.465v-.005h-.005c-.4-.246-.616-.512-.686-.71-.07-.268-.005-.47.193-.6.224-.135.38-.271.483-.336.104-.074.143-.102.176-.131h.002v-.003c.169-.202.436-.47.839-.601.139-.036.294-.065.466-.065zm2.8 2.142c.358 1.417 1.196 3.475 1.735 4.473.286.534.855 1.659 1.102 3.024.156-.005.33.018.513.064.646-1.671-.546-3.467-1.089-3.966-.22-.2-.232-.335-.123-.335.59.534 1.365 1.572 1.646 2.757.13.535.16 1.104.021 1.67.067.028.135.06.205.067 1.032.534 1.413.938 1.23 1.537v-.043c-.06-.003-.12 0-.18 0h-.016c.151-.467-.182-.825-1.065-1.224-.915-.4-1.646-.336-1.77.465-.008.043-.013.066-.018.135-.068.023-.139.053-.209.064-.43.268-.662.669-.793 1.187-.13.533-.17 1.156-.205 1.869v.003c-.02.334-.17.838-.319 1.35-1.5 1.072-3.58 1.538-5.348.334a2.645 2.645 0 00-.402-.533 1.45 1.45 0 00-.275-.333c.182 0 .338-.03.465-.067a.615.615 0 00.314-.334c.108-.267 0-.697-.345-1.163-.345-.467-.931-.995-1.788-1.521-.63-.4-.986-.87-1.15-1.396-.165-.534-.143-1.085-.015-1.645.245-1.07.873-2.11 1.274-2.763.107-.065.037.135-.408.974-.396.751-1.14 2.497-.122 3.854a8.123 8.123 0 01.647-2.876c.564-1.278 1.743-3.504 1.836-5.268.048.036.217.135.289.202.218.133.38.333.59.465.21.201.477.335.876.335.039.003.075.006.11.006.412 0 .73-.134.997-.268.29-.134.52-.334.74-.4h.005c.467-.135.835-.402 1.044-.7zm2.185 8.958c.037.6.343 1.245.882 1.377.588.134 1.434-.333 1.791-.765l.211-.01c.315-.007.577.01.847.268l.003.003c.208.199.305.53.391.876.085.4.154.78.409 1.066.486.527.645.906.636 1.14l.003-.007v.018l-.003-.012c-.015.262-.185.396-.498.595-.63.401-1.746.712-2.457 1.57-.618.737-1.37 1.14-2.036 1.191-.664.053-1.237-.2-1.574-.898l-.005-.003c-.21-.4-.12-1.025.056-1.69.176-.668.428-1.344.463-1.897.037-.714.076-1.335.195-1.814.12-.465.308-.797.641-.984l.045-.022zm-10.814.049h.01c.053 0 .105.005.157.014.376.055.706.333 1.023.752l.91 1.664.003.003c.243.533.754 1.064 1.189 1.637.434.598.77 1.131.729 1.57v.006c-.057.744-.48 1.148-1.125 1.294-.645.135-1.52.002-2.395-.464-.968-.536-2.118-.469-2.857-.602-.369-.066-.61-.2-.723-.4-.11-.2-.113-.602.123-1.23v-.004l.002-.003c.117-.334.03-.752-.027-1.118-.055-.401-.083-.71.043-.94.16-.334.396-.4.69-.533.294-.135.64-.202.915-.47h.002v-.002c.256-.268.445-.601.668-.838.19-.201.38-.336.663-.336zm7.159-9.074c-.435.201-.945.535-1.488.535-.542 0-.97-.267-1.28-.466-.154-.134-.28-.268-.373-.335-.164-.134-.144-.333-.074-.333.109.016.129.134.199.2.096.066.215.2.36.333.292.2.68.467 1.167.467.485 0 1.053-.267 1.398-.466.195-.135.445-.334.648-.467.156-.136.149-.267.279-.267.128.016.034.134-.147.332a8.097 8.097 0 01-.69.468zm-1.082-1.583V5.64c-.006-.02.013-.042.029-.05.074-.043.18-.027.26.004.063 0 .16.067.15.135-.006.049-.085.066-.135.066-.055 0-.092-.043-.141-.068-.052-.018-.146-.008-.163-.065zm-.551 0c-.02.058-.113.049-.166.066-.047.025-.086.068-.14.068-.05 0-.13-.02-.136-.068-.01-.066.088-.133.15-.133.08-.031.184-.047.259-.005.019.009.036.03.03.05v.02h.003z"/></svg>
+</div>
+
 <script>
-// 中英双语：文案表 + 切换。纯前端实现，无后端、无构建步骤。
+// 中英双语 + 按系统直链下载。纯前端实现，无后端、无构建步骤。
+//
+// 下载区四步：识别系统与芯片 → 拉一次最新 Release（结果缓存 30 分钟）→
+// 在真实产物列表里选中对应安装包 → 把主按钮的 href 指向产物直链。
+// GitHub 对 Release 产物返回 Content-Disposition: attachment，所以点一下就下载，
+// 不会跳到 Releases 页面；任意一步失败（离线 / 403 限流 / 产物缺失 / 系统未识别）都退回
+// Releases 页面，不留死链。主按钮右边的箭头展开「所有平台与格式」，识别不准或替别人下载时用。
+//
 // 新增文案时两处都要补；缺 key 会保留 HTML 里的默认中文。
 const I18N = {
-  zh: {},   // 中文就是 HTML 里的原文，无需重复
+  // 中文默认值就写在 HTML 的 data-i18n 原文里；这里只列**脚本拼装**用得到的文案
+  zh: {
+    'hero.download': '下载最新版',
+    'plat.windows': 'Windows',
+    'plat.macos': 'macOS',
+    'plat.linux': 'Linux',
+    'dl.for': '下载 {platform} 版',
+    'dl.latest': '最新版',
+    'dl.about': '约',
+    'dl.checking': '正在获取最新版本…',
+    'dl.offline': '暂时拿不到最新版本信息，点击将打开 Releases 页面。',
+    'dl.missing': '最新版里没有找到对应安装包，请到 Releases 页面查看。',
+    'dl.unknown': '没识别出桌面系统，请从下面的列表里选。',
+    'dl.win.setup': 'Windows 安装版 (.exe)',
+    'dl.win.portable': 'Windows 便携版 (.exe)',
+    'dl.mac.arm': 'Apple 芯片 (.dmg)',
+    'dl.mac.intel': 'Intel 芯片 (.dmg)',
+    'dl.linux.appimage': 'x64 AppImage',
+    'dl.linux.appimage.arm': 'arm64 AppImage',
+    'dl.linux.deb': 'x64 .deb',
+    'dl.linux.rpm': 'x64 .rpm',
+    'dev.copy': '复制',
+    'dev.copied': '已复制',
+    'demo.start': '开始',
+    'demo.pause': '暂停',
+    'demo.detect': '检测依赖',
+    'demo.detecting': '检测中…',
+    'demo.ready': '已就绪',
+    'demo.check': '检查更新',
+    'demo.checking': '正在检查…',
+    'demo.latest': '已是最新',
+    'demo.offline': '暂时拿不到版本信息',
+    'demo.tabdownload': '解析下载',
+    'demo.tabhistory': '下载历史',
+    'demo.tababout': '关于软件',
+    'demo.title': '全平台视频下载',
+    'demo.subtitle': '输入链接即刻解析高清数字资产',
+    'demo.placeholder': '在此处粘贴需要解析的视频链接...',
+    'demo.paste': '粘贴链接',
+    'demo.parse': '解析视频信息',
+    'demo.parsing': '解析中...',
+    'demo.extracting': '正在提取视频元数据...',
+    'demo.usuallyseconds': '通常需要几秒',
+    'demo.elapsed': '已用 {seconds} 秒',
+    'demo.platforms': '支持解析平台',
+    'demo.result': '解析结果预览',
+    'demo.videohdr': '视频格式 (MP4) - 共 {count} 个',
+    'demo.audiohdr': '纯音频格式 - 共 {count} 个',
+    'demo.download': '立即下载所选资源',
+    'demo.downloadaudio': '下载纯音频',
+    'demo.downloading': '正在下载...',
+    'demo.queue': '任务队列',
+    'demo.active': '{count} 进行中',
+    'demo.queueempty': '暂无下载任务',
+    'demo.queuehint': '解析视频后点击下载按钮添加任务',
+    'demo.storage': '存储空间',
+    'demo.historyempty': '暂无下载记录',
+    'demo.about': '基于 yt-dlp 的开源桌面视频下载工具',
+    'demo.caption': '上面是应用界面的可交互演示——可以直接点',
+  },
   en: {
-    'nav.features': 'Features',
-    'nav.install': 'Download',
-    'nav.faq': 'FAQ',
-    'nav.github': 'GitHub',
+    'brand.tag': 'Open source',
+    'hero.eyebrow': 'Open source · Cross-platform · Free',
     'hero.title': 'Save the videos<br>you like, locally.',
     'hero.lede': 'An open-source desktop app for macOS, Windows and Linux. Powered by yt-dlp, supporting 1000+ sites, with a clean interface and no command-line flags to remember.',
     'hero.download': 'Download latest',
     'hero.source': 'View source',
+    'dl.menu': 'All platforms and formats',
+    'dl.all': 'All releases and artifacts',
+    'dl.for': 'Download for {platform}',
+    'dl.latest': 'Latest',
+    'dl.about': '~',
+    'dl.checking': 'Fetching the latest version…',
+    'dl.offline': "Couldn't fetch the latest version; the button opens the Releases page instead.",
+    'dl.missing': 'No matching package in the latest release — see the Releases page.',
+    'dl.unknown': 'Could not detect a desktop OS — pick one from the list below.',
+    'dl.win.setup': 'Windows installer (.exe)',
+    'dl.win.portable': 'Windows portable (.exe)',
+    'dl.mac.arm': 'Apple silicon (.dmg)',
+    'dl.mac.intel': 'Intel (.dmg)',
+    'dl.linux.appimage': 'x64 AppImage',
+    'dl.linux.appimage.arm': 'arm64 AppImage',
+    'dl.linux.deb': 'x64 .deb',
+    'dl.linux.rpm': 'x64 .rpm',
     'plat.macos': 'macOS',
     'plat.windows': 'Windows',
     'plat.linux': 'Linux',
-    'hero.downloads': 'Downloaded',
-    'hero.times': 'times',
     'feat.title': 'What it does',
     'feat.sub': 'Everything you need, and none of the things you should not have.',
     'feat.sites.t': '1000+ sites',
@@ -332,7 +853,7 @@ const I18N = {
     'ins.title': 'Three steps',
     'ins.sub': 'No command-line tools to install beforehand.',
     'ins.s1.t': 'Download the package',
-    'ins.s1.d': 'Pick .dmg / .exe / .AppImage for your OS; all artifacts are on the Releases page.',
+    'ins.s1.d': 'The page detects your system and downloads the matching package in one click — no extra pages.',
     'ins.s2.t': 'Paste a link',
     'ins.s2.d': 'Paste the video URL and choose a quality or format.',
     'ins.s3.t': 'Start downloading',
@@ -340,6 +861,56 @@ const I18N = {
     'ins.cta': 'Go to downloads',
     'ins.guide': 'Installation guide',
     'ins.note': 'Note: the macOS build is not code-signed, so the first launch needs to be allowed under System Settings → Privacy & Security.',
+    'dev.title': 'Install and run',
+    'dev.sub': 'Installation differs a little per platform — here are the usual steps.',
+    'dev.mac.t': 'macOS: the build is unsigned',
+    'dev.mac.d': 'Allow it under System Settings → Privacy & Security on first launch, or strip the quarantine attribute first.',
+    'dev.linux.t': 'Linux: AppImage needs no install',
+    'dev.linux.d': 'Add the executable bit and run it; .deb / .rpm go through your package manager.',
+    'dev.build.t': 'Build from source',
+    'dev.build.d': 'Needs Node 22+ and pnpm; the Go sidecar is compiled on startup.',
+    'dev.copy': 'Copy',
+    'dev.copied': 'Copied',
+    'demo.start': 'Start',
+    'demo.pause': 'Pause',
+    'demo.detect': 'Detect',
+    'demo.detecting': 'Detecting…',
+    'demo.ready': 'Ready',
+    'demo.check': 'Check for updates',
+    'demo.checking': 'Checking…',
+    'demo.latest': 'Up to date',
+    'demo.offline': 'Could not fetch the version',
+    'demo.tabdownload': 'Download',
+    'demo.tabhistory': 'History',
+    'demo.tababout': 'About',
+    'demo.title': 'Download any video',
+    'demo.subtitle': 'Paste a link and get the highest quality asset',
+    'demo.placeholder': 'Paste the video link here...',
+    'demo.paste': 'Paste',
+    'demo.parse': 'Parse',
+    'demo.parsing': 'Parsing...',
+    'demo.extracting': 'Extracting video metadata...',
+    'demo.usuallyseconds': 'Usually a few seconds',
+    'demo.elapsed': '{seconds}s elapsed',
+    'demo.platforms': 'Supported sites',
+    'demo.result': 'Result preview',
+    'demo.videohdr': 'Video formats (MP4) - {count} total',
+    'demo.audiohdr': 'Audio-only formats - {count} total',
+    'demo.download': 'Download the selected format',
+    'demo.downloadaudio': 'Download audio only',
+    'demo.downloading': 'Downloading...',
+    'demo.queue': 'Task queue',
+    'demo.active': '{count} active',
+    'demo.queueempty': 'No downloads yet',
+    'demo.queuehint': 'Parse a video, then hit the download button',
+    'demo.storage': 'Storage',
+    'demo.historyempty': 'No download history',
+    'demo.about': 'An open-source desktop video downloader built on yt-dlp',
+    'demo.caption': 'The app UI above is an interactive demo - go ahead and click',
+    'join.title': 'Join the open-source community',
+    'join.sub': 'DownVid is an MIT-licensed open-source project. File an issue, send a pull request, or just leave a star.',
+    'join.github': 'View on GitHub',
+    'join.docs': 'Developer docs',
     'faq.title': 'FAQ',
     'faq.sub': 'More in the repository docs.',
     'faq.q1': 'It says yt-dlp or FFmpeg is missing?',
@@ -359,7 +930,164 @@ const I18N = {
   },
 };
 
-const btn = document.getElementById('langBtn');
+// >>> 纯逻辑（tests/website-download.test.ts 从这段提取后单独执行，这里不要碰 DOM）
+// 仓库坐标：lint:website 会与 shared/app.ts 比对，换仓库时不会漏掉官网这一处
+const REPO = { owner: 'yxxbc', repo: 'downvid' };
+const RELEASES_URL = 'https://github.com/' + REPO.owner + '/' + REPO.repo + '/releases';
+const LATEST_URL = RELEASES_URL + '/latest';
+const RELEASE_API = 'https://api.github.com/repos/' + REPO.owner + '/' + REPO.repo + '/releases/latest';
+
+// 平台顺序与词条名。key 写字面量是为了让 lint:website 能核到中英词条
+const PLATFORMS = [
+  { os: 'windows', key: 'plat.windows' },
+  { os: 'macos', key: 'plat.macos' },
+  { os: 'linux', key: 'plat.linux' },
+];
+
+// 产物名模板：{version} 是版本号的位置。前缀与扩展名必须与 electron-builder.json5 的
+// artifactName 对得上（pnpm lint:website 会逐条比对），否则改名后官网会静默挑不到产物。
+// primary = 该平台主推的产物；arch 用来在 macOS / Linux 上区分芯片。
+const ARTIFACTS = {
+  windows: [
+    { name: 'DownVid-Setup-{version}.exe', key: 'dl.win.setup', arch: 'x64', primary: true },
+    { name: 'DownVid-Portable-{version}.exe', key: 'dl.win.portable', arch: 'x64' },
+  ],
+  macos: [
+    { name: 'DownVid-arm64-Mac-{version}.dmg', key: 'dl.mac.arm', arch: 'arm64', primary: true },
+    { name: 'DownVid-x64-Mac-{version}.dmg', key: 'dl.mac.intel', arch: 'x64', primary: true },
+  ],
+  linux: [
+    { name: 'DownVid-x86_64-Linux-{version}.AppImage', key: 'dl.linux.appimage', arch: 'x64', primary: true },
+    { name: 'DownVid-arm64-Linux-{version}.AppImage', key: 'dl.linux.appimage.arm', arch: 'arm64', primary: true },
+    { name: 'DownVid-amd64-Linux-{version}.deb', key: 'dl.linux.deb', arch: 'x64' },
+    { name: 'DownVid-x86_64-Linux-{version}.rpm', key: 'dl.linux.rpm', arch: 'x64' },
+  ],
+};
+
+/**
+ * 判断桌面系统。Android / iOS / ChromeOS 一律归到 other：
+ * 官网没有它们的安装包，把它们当 Linux 只会让用户下到一个装不上的包。
+ */
+function detectOS(nav) {
+  const ua = String((nav && nav.userAgent) || '');
+  const platform = String((nav && nav.platform) || (nav && nav.userAgentData && nav.userAgentData.platform) || '');
+  if (/android|iphone|ipod|ipad/i.test(ua)) return 'other';
+  // iPadOS 13 起 UA 与 Mac 一样，靠触摸点数区分
+  if (/mac/i.test(platform) && ((nav && nav.maxTouchPoints) || 0) > 1) return 'other';
+  if (/cros/i.test(platform + ' ' + ua)) return 'other';
+  if (/win/i.test(platform) || /windows/i.test(ua)) return 'windows';
+  if (/mac/i.test(platform) || /mac os x/i.test(ua)) return 'macos';
+  if (/linux|x11/i.test(platform) || /linux|x11/i.test(ua)) return 'linux';
+  return 'other';
+}
+
+/**
+ * 架构判断（同步那一半）。Safari / Firefox 拿不到架构：macOS 默认给 Apple 芯片
+ * （Intel 版固定列在菜单里，用户自己点得到），其余平台默认 x64。
+ * Chrome / Edge 会用 Client Hints 再修一次，见 archFromClientHints。
+ */
+function archOf(nav, os) {
+  const ua = String((nav && nav.userAgent) || '');
+  if (/aarch64|arm64|armv8/i.test(ua)) return 'arm64';
+  return os === 'macos' ? 'arm64' : 'x64';
+}
+
+/** 架构判断（Client Hints 那一半）；浏览器不支持时返回 null，调用方保持同步结果 */
+function archFromClientHints(userAgentData) {
+  if (!userAgentData || typeof userAgentData.getHighEntropyValues !== 'function') return Promise.resolve(null);
+  return userAgentData.getHighEntropyValues(['architecture']).then(function (hints) {
+    if (hints && hints.architecture === 'arm') return 'arm64';
+    if (hints && hints.architecture === 'x86') return 'x64';
+    return null;
+  }).catch(function () {
+    return null;
+  });
+}
+
+/** 'DownVid-Setup-{version}.exe' → /^DownVid-Setup-[0-9]+(?:\.[0-9]+)*\.exe$/ */
+function templateToRegex(template) {
+  const escaped = template.replace(/\./g, '\\.').replace(/\{/g, '\\{').replace(/\}/g, '\\}');
+  return new RegExp('^' + escaped.replace('\\{version\\}', '[0-9]+(?:\\.[0-9]+)*') + '$');
+}
+
+/** GitHub releases/latest 的响应 → 只保留产物名、直链与体积 */
+function normalizeRelease(json) {
+  if (!json || !Array.isArray(json.assets)) return null;
+  const tag = typeof json.tag_name === 'string' ? json.tag_name : '';
+  if (!tag) return null;
+  const assets = json.assets
+    .filter(a => a && typeof a.name === 'string' && typeof a.browser_download_url === 'string')
+    .map(a => ({ name: a.name, url: a.browser_download_url, size: typeof a.size === 'number' ? a.size : 0 }));
+  return assets.length ? { tag: tag, assets: assets } : null;
+}
+
+/**
+ * 在真实产物里挑出该平台该架构的安装包。
+ * 返回 { primary, others }：primary 是主按钮的目标，others 是同平台的其他格式。
+ * 对应架构缺失时退回该平台第一个主产物，一个都没有就返回 null ——
+ * 调用方据此退回 Releases 页面，而不是留一个死链。
+ */
+function selectDownload(release, os, arch) {
+  const empty = { primary: null, others: [] };
+  if (!release || !os || !ARTIFACTS[os]) return empty;
+  const matches = [];
+  for (const variant of ARTIFACTS[os]) {
+    const re = templateToRegex(variant.name);
+    const asset = release.assets.find(a => re.test(a.name));
+    if (asset) matches.push({ asset: asset, variant: variant });
+  }
+  if (!matches.length) return empty;
+  const primary =
+    matches.find(m => m.variant.primary && m.variant.arch === arch) ||
+    matches.find(m => m.variant.primary) ||
+    matches[0];
+  return { primary: primary, others: matches.filter(m => m !== primary) };
+}
+
+/** 菜单用的全量列表：每个平台里所有能匹配到的产物，识别出的平台排在最前面 */
+function listDownloads(release, preferredOS) {
+  if (!release) return [];
+  const order = PLATFORMS.map(p => p.os);
+  const at = order.indexOf(preferredOS);
+  if (at > 0) {
+    order.splice(at, 1);
+    order.unshift(preferredOS);
+  }
+  const groups = [];
+  for (const os of order) {
+    const items = [];
+    for (const variant of ARTIFACTS[os]) {
+      const re = templateToRegex(variant.name);
+      const asset = release.assets.find(a => re.test(a.name));
+      if (asset) items.push({ asset: asset, variant: variant });
+    }
+    if (items.length) groups.push({ os: os, items: items });
+  }
+  return groups;
+}
+
+function formatSize(bytes) {
+  if (!bytes || bytes < 1024) return '';
+  return Math.round(bytes / 1024 / 1024) + ' MB';
+}
+// <<< 纯逻辑
+
+const CACHE_KEY = 'downvid.latestRelease';
+const CACHE_TTL = 30 * 60 * 1000;   // 版本不会分钟级变化，刷新页面不该重复消耗 API 限额
+
+let current = initialLang();
+let release = null;
+let releaseFailed = false;
+const detectedOS = detectOS(navigator);
+let selectedOS = detectedOS;
+let selectedArch = archOf(navigator, selectedOS);
+
+/** 取词条：data-i18n 的中文原文在 HTML 里，脚本拼装的文案在 I18N.zh 里 */
+function t(key) {
+  const dict = I18N[current] || {};
+  if (Object.prototype.hasOwnProperty.call(dict, key)) return dict[key];
+  return Object.prototype.hasOwnProperty.call(I18N.zh, key) ? I18N.zh[key] : key;
+}
 
 function apply(lang) {
   const dict = I18N[lang] || {};
@@ -370,13 +1098,26 @@ function apply(lang) {
     const value = lang === 'zh' ? el.dataset.zh : (dict[key] || el.dataset.zh);
     if (value) el.innerHTML = value;
   });
+  // textarea 的 placeholder 不在 innerHTML 上，单独刷一遍
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    const key = el.getAttribute('data-i18n-placeholder');
+    if (!el.dataset.zhPh) el.dataset.zhPh = el.getAttribute('placeholder') || '';
+    const value = lang === 'zh' ? el.dataset.zhPh : (dict[key] || el.dataset.zhPh);
+    if (value) el.setAttribute('placeholder', value);
+  });
   document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
   document.documentElement.classList.add('ready');
-  btn.textContent = lang === 'zh' ? 'English' : '简体中文';
+  document.querySelectorAll('.locale-item').forEach(item => {
+    item.classList.toggle('is-active', item.getAttribute('data-lang') === lang);
+  });
   // 便于分享带语言的链接
   const url = new URL(location.href);
   if (lang === 'zh') url.searchParams.delete('lang'); else url.searchParams.set('lang', lang);
   history.replaceState(null, '', url);
+  // 文案换了，按钮上的系统名、提示、菜单与卡片演示都要跟着换
+  renderDownload();
+  syncDemos();
+  syncAppDemo();
 }
 
 function initialLang() {
@@ -386,11 +1127,694 @@ function initialLang() {
   return /^zh\b/i.test(navigator.language || '') ? 'zh' : 'en';
 }
 
-let current = initialLang();
+/** 平台图标只维护一份：从隐藏容器里克隆，主按钮与菜单共用 */
+function osIcon(os) {
+  const host = document.getElementById('osIcons');
+  if (!host || !os) return null;
+  const svg = host.querySelector('svg[data-os="' + os + '"]');
+  return svg ? svg.cloneNode(true) : null;
+}
+
+function closeMenu() {
+  const menu = document.getElementById('dlMenu');
+  const caret = document.getElementById('dlCaret');
+  if (menu) menu.hidden = true;
+  if (caret) caret.setAttribute('aria-expanded', 'false');
+}
+
+/**
+ * 把「当前系统 + 最新产物」映射到界面：主按钮直链产物，
+ * 展开菜单里列出全部平台与格式；拿不到产物时主按钮退回 Releases 页面。
+ */
+function renderDownload() {
+  const btnEl = document.getElementById('dlPrimary');
+  const labelEl = document.getElementById('dlPrimaryLabel');
+  const iconEl = document.getElementById('dlPrimaryIcon');
+  const noteEl = document.getElementById('dlNote');
+  const installEl = document.getElementById('dlInstall');
+  if (!btnEl || !labelEl || !noteEl) return;
+
+  const os = ARTIFACTS[selectedOS] ? selectedOS : null;
+  const picked = os && release ? selectDownload(release, os, selectedArch) : { primary: null, others: [] };
+
+  if (iconEl) {
+    iconEl.textContent = '';
+    const svg = osIcon(os);
+    if (svg) iconEl.appendChild(svg);
+  }
+  labelEl.textContent = os ? t('dl.for').replace('{platform}', t('plat.' + os)) : t('hero.download');
+
+  let href = LATEST_URL;
+  let note;
+  if (!os) {
+    note = t('dl.unknown');
+  } else if (!release) {
+    note = releaseFailed ? t('dl.offline') : t('dl.checking');
+  } else if (!picked.primary) {
+    note = t('dl.missing');
+  } else {
+    href = picked.primary.asset.url;
+    const parts = [t(picked.primary.variant.key), t('dl.latest') + ' ' + release.tag];
+    const size = formatSize(picked.primary.asset.size);
+    if (size) parts.push(t('dl.about') + ' ' + size);
+    note = parts.join(' · ');
+  }
+  btnEl.setAttribute('href', href);
+  if (installEl) installEl.setAttribute('href', href);
+  noteEl.textContent = note;
+
+  renderMenu(os);
+}
+
+/** 展开菜单：每个平台一组，组内列出该平台所有产物 */
+function renderMenu(currentOs) {
+  const host = document.getElementById('dlMenuGrid');
+  if (!host) return;
+  host.textContent = '';
+  const groups = release ? listDownloads(release, currentOs) : [];
+  if (!groups.length) {
+    const empty = document.createElement('p');
+    empty.className = 'dl-menu-empty';
+    empty.textContent = release ? t('dl.missing') : (releaseFailed ? t('dl.offline') : t('dl.checking'));
+    host.appendChild(empty);
+    return;
+  }
+  for (const group of groups) {
+    const box = document.createElement('div');
+    box.className = 'dl-group';
+    const title = document.createElement('p');
+    title.className = 'dl-group-title';
+    const icon = osIcon(group.os);
+    if (icon) title.appendChild(icon);
+    const name = document.createElement('span');
+    name.textContent = t('plat.' + group.os);
+    title.appendChild(name);
+    box.appendChild(title);
+    for (const item of group.items) {
+      const link = document.createElement('a');
+      link.className = 'dl-item';
+      link.setAttribute('href', item.asset.url);
+      const label = document.createElement('span');
+      label.textContent = t(item.variant.key);
+      link.appendChild(label);
+      const size = formatSize(item.asset.size);
+      if (size) {
+        const meta = document.createElement('span');
+        meta.className = 'dl-item-size';
+        meta.textContent = size;
+        link.appendChild(meta);
+      }
+      box.appendChild(link);
+    }
+    host.appendChild(box);
+  }
+}
+
+/** 最新版本结果缓存 30 分钟（sessionStorage）：版本不会分钟级变化，刷新不该重复请求 */
+function readCachedRelease() {
+  try {
+    const raw = sessionStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed.at !== 'number' || Date.now() - parsed.at > CACHE_TTL) return null;
+    const cached = parsed.release;
+    if (!cached || typeof cached.tag !== 'string' || !Array.isArray(cached.assets)) return null;
+    return cached;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedRelease(value) {
+  try {
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), release: value }));
+  } catch {
+    // 隐私模式 / 禁用存储：只是每次访问都重新请求，不影响下载
+  }
+}
+
+/** 拉一次最新 Release；失败就保持「去 Releases 页面」的兜底，不弹错误 */
+function loadRelease() {
+  release = readCachedRelease();
+  if (release) {
+    renderDownload();
+    return;
+  }
+  renderDownload();
+  fetch(RELEASE_API, { headers: { Accept: 'application/vnd.github+json' } })
+    .then(res => {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.json();
+    })
+    .then(json => {
+      release = normalizeRelease(json);
+      if (!release) throw new Error('unexpected payload');
+      writeCachedRelease(release);
+    })
+    .catch(() => { releaseFailed = true; })
+    .then(() => renderDownload());
+}
+
+// 顶栏：滚起来之后加深底色与投影（浮动胶囊「钉住」的视觉反馈）
+const headerEl = document.querySelector('header');
+function syncHeader() {
+  if (headerEl) headerEl.classList.toggle('is-stuck', document.documentElement.scrollTop > 12);
+}
+document.addEventListener('scroll', syncHeader, { passive: true });
+syncHeader();
+
+// 语言切换：分段控件（参考站点的 中文 / EN 切换）
+document.querySelectorAll('.locale-item').forEach(item => {
+  item.addEventListener('click', () => {
+    const next = item.getAttribute('data-lang');
+    if (next === current) return;
+    current = next;
+    apply(current);
+  });
+});
+
+// 下载菜单：点箭头展开，点空白 / Esc 收起，点中任意下载项后也收起
+const caret = document.getElementById('dlCaret');
+const menu = document.getElementById('dlMenu');
+if (caret && menu) {
+  caret.addEventListener('click', event => {
+    event.stopPropagation();
+    const open = menu.hidden;
+    menu.hidden = !open;
+    caret.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  document.addEventListener('click', event => {
+    if (menu.hidden) return;
+    if (menu.contains(event.target) || caret.contains(event.target)) return;
+    closeMenu();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape') closeMenu();
+  });
+  menu.addEventListener('click', event => {
+    if (event.target && event.target.closest && event.target.closest('a')) closeMenu();
+  });
+}
+
+// 代码块复制
+document.querySelectorAll('[data-copy]').forEach(button => {
+  button.addEventListener('click', () => {
+    const code = button.parentElement ? button.parentElement.querySelector('code') : null;
+    const text = code ? code.textContent : '';
+    const done = () => {
+      button.textContent = t('dev.copied');
+      setTimeout(() => { button.textContent = t('dev.copy'); }, 1600);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done, done);
+    } else {
+      done();
+    }
+  });
+});
+
+// ===== 卡片小演示：跟桌面端一样能点 =====
+// 分组单选（平台 / 画质 / 浏览器）、下载进度、依赖检测、检查更新。全部是纯前端演示，
+// 不联网、不改任何状态；「检查更新」用的是真实拉到的 Release 版本号。
+let syncDemos = function () {};
+
+function initDemos() {
+  // 分组单选：一组 .pick 里只选中一个；卡里若有 [data-pick-out]，顺便显示它对应的体积
+  document.querySelectorAll('[data-pick-set]').forEach(set => {
+    set.addEventListener('click', event => {
+      const pick = event.target && event.target.closest ? event.target.closest('[data-pick]') : null;
+      if (!pick || !set.contains(pick)) return;
+      set.querySelectorAll('[data-pick]').forEach(item => {
+        item.classList.toggle('is-on', item === pick);
+      });
+      const host = set.closest('.card-media');
+      const out = host ? host.querySelector('[data-pick-out]') : null;
+      if (out) out.textContent = pick.getAttribute('data-out') || '';
+    });
+  });
+
+  // 下载加速：开始 / 暂停，进度条与百分比一起走，走满自动停
+  const runButton = document.querySelector('[data-run]');
+  const runCard = runButton ? runButton.closest('.card-media') : null;
+  const runBar = runCard ? runCard.querySelector('[data-bar]') : null;
+  const runPercent = runCard ? runCard.querySelector('[data-percent]') : null;
+  let runValue = 0;
+  let runTimer = null;
+  const paintRun = () => {
+    if (runBar) runBar.style.width = runValue + '%';
+    if (runPercent) runPercent.textContent = Math.round(runValue) + '%';
+  };
+  const pressRun = () => {
+    if (!runButton) return;
+    runButton.setAttribute('aria-pressed', runTimer ? 'true' : 'false');
+    runButton.textContent = runTimer ? t('demo.pause') : t('demo.start');
+  };
+  const stopRun = () => {
+    if (runTimer) clearInterval(runTimer);
+    runTimer = null;
+  };
+  if (runButton) {
+    runButton.addEventListener('click', () => {
+      if (runTimer) {
+        stopRun();
+        pressRun();
+        return;
+      }
+      if (runValue >= 100) runValue = 0;
+      runTimer = setInterval(() => {
+        runValue = Math.min(100, runValue + 1);
+        paintRun();
+        if (runValue >= 100) {
+          stopRun();
+          pressRun();
+        }
+      }, 90);
+      pressRun();
+    });
+  }
+
+  // 依赖识别：点一下逐个「检出」来
+  const detectButton = document.querySelector('[data-detect]');
+  const detectCard = detectButton ? detectButton.closest('.card-media') : null;
+  const depRows = detectCard ? [...detectCard.querySelectorAll('[data-dep]')] : [];
+  if (detectButton) {
+    detectButton.addEventListener('click', () => {
+      if (detectButton.disabled) return;
+      detectButton.disabled = true;
+      detectButton.textContent = t('demo.detecting');
+      depRows.forEach(row => {
+        row.textContent = '···';
+        row.classList.remove('is-ok');
+      });
+      depRows.forEach((row, index) => {
+        setTimeout(() => {
+          row.textContent = t('demo.ready');
+          row.classList.add('is-ok');
+          if (index === depRows.length - 1) {
+            detectButton.disabled = false;
+            detectButton.textContent = t('demo.detect');
+          }
+        }, 340 * (index + 1));
+      });
+    });
+  }
+
+  // 检查更新：点一下用真实的最新版本作答
+  const updateButton = document.querySelector('[data-update]');
+  const updateCard = updateButton ? updateButton.closest('.card-media') : null;
+  const updateOut = updateCard ? updateCard.querySelector('[data-update-out]') : null;
+  const updateBar = updateCard ? updateCard.querySelector('[data-update-bar]') : null;
+  let updateState = 'idle';
+  const paintUpdate = () => {
+    if (!updateButton) return;
+    updateButton.disabled = updateState === 'checking';
+    updateButton.textContent = updateState === 'checking' ? t('demo.checking') : t('demo.check');
+    if (updateBar) updateBar.style.width = updateState === 'idle' ? '0%' : (updateState === 'checking' ? '40%' : '100%');
+    if (updateOut) {
+      if (updateState === 'checking') updateOut.textContent = '···';
+      else if (updateState === 'done') updateOut.textContent = release ? t('demo.latest') + ' · ' + release.tag : t('demo.offline');
+      else updateOut.textContent = '—';
+    }
+  };
+  if (updateButton) {
+    updateButton.addEventListener('click', () => {
+      if (updateState === 'checking') return;
+      updateState = 'checking';
+      paintUpdate();
+      setTimeout(() => {
+        updateState = 'done';
+        paintUpdate();
+      }, 900);
+    });
+  }
+
+  // 切语言时把演示区的文案（按钮、已就绪、检查结果）重刷一遍
+  syncDemos = function () {
+    if (runButton) runButton.textContent = runTimer ? t('demo.pause') : t('demo.start');
+    if (detectButton && !detectButton.disabled) detectButton.textContent = t('demo.detect');
+    depRows.forEach(row => {
+      if (row.classList.contains('is-ok')) row.textContent = t('demo.ready');
+    });
+    paintUpdate();
+  };
+
+  paintRun();
+  paintUpdate();
+}
+
+initDemos();
+// ===== hero 预览：应用主界面的可交互复刻 =====
+// 结构 / 文案 / 配色照 src/components/DownloadView.vue、UrlInput.vue、FormatSelector.vue、
+// DownloadQueue.vue 搬过来，只把真实的解析与下载换成本地动画。纯前端演示，不联网、不动任何状态。
+const DV_FORMATS = [
+  { quality: '4K', size: '2.28 GB' },
+  { quality: '2K', size: '1.00 GB' },
+  { quality: '1080P', size: '457.1 MB' },
+  { quality: '720P', size: '142.2 MB' },
+  { quality: '480P', size: '81.8 MB' },
+  { quality: '360P', size: '47.4 MB' },
+  { quality: '240P', size: '21.0 MB' },
+  { quality: '144P', size: '9.2 MB' },
+];
+const DV_AUDIO = [
+  { quality: '129.479kbps', size: '17.3 MB' },
+  { quality: '129.478kbps', size: '17.3 MB' },
+  { quality: '129.477kbps', size: '17.2 MB' },
+  { quality: '129.476kbps', size: '17.2 MB' },
+  { quality: '129.475kbps', size: '17.1 MB' },
+  { quality: '129.474kbps', size: '17.1 MB' },
+];
+const DV_SAMPLE_URL = 'https://youtu.be/n_PxJ2Pyecl';
+const DV_TITLE = 'Day Trip to Mt. Fuji Area from Tokyo | Winter Train Trip | JAPAN TRAVEL VLOG';
+const DV_FOLDER_ICON = '<svg viewBox="0 0 24 24" class="dv-folder"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8z"/></svg>';
+
+let syncAppDemo = function () {};
+
+function initAppDemo() {
+  const shell = document.getElementById('dvShell');
+  const stage = shell ? shell.querySelector('.dv-stage') : null;
+  if (!shell || !stage) return;
+
+  const textarea = document.getElementById('dvUrl');
+  const pasteButton = document.getElementById('dvPaste');
+  const parseButton = document.getElementById('dvParse');
+  const parseLabel = document.getElementById('dvParseLabel');
+  const result = document.getElementById('dvResult');
+  const parsingBar = document.getElementById('dvParsing');
+  const elapsedLabel = document.getElementById('dvElapsed');
+  const formatsHost = document.getElementById('dvFormats');
+  const audioHost = document.getElementById('dvAudioFormats');
+  const videoHeader = document.getElementById('dvVideoHeader');
+  const audioHeader = document.getElementById('dvAudioHeader');
+  const downloadButton = document.getElementById('dvDownload');
+  const downloadLabel = document.getElementById('dvDownloadLabel');
+  const queueHost = document.getElementById('dvQueue');
+  const queueEmpty = document.getElementById('dvQueueEmpty');
+  const activeBadge = document.getElementById('dvActive');
+  const sizeLabel = document.getElementById('dvSize');
+  const alt = document.getElementById('dvAlt');
+  const altHistory = document.getElementById('dvAltHistory');
+  const altAbout = document.getElementById('dvAltAbout');
+  const historyHost = document.getElementById('dvHistory');
+  const historyEmpty = document.getElementById('dvHistoryEmpty');
+  const aboutVersion = document.getElementById('dvAboutVersion');
+  const tabs = [...document.querySelectorAll('.dv-tab')];
+  const panels = [...document.querySelectorAll('[data-dv-panel="download"]')];
+
+  let mode = 'video';
+  let selectedVideo = 0;
+  let selectedAudio = 0;
+  let parsing = false;
+  let parseSeconds = 0;
+  let parseTimer = null;
+  let ticker = null;
+  const tasks = [];
+
+  // 画布按应用窗口的实际 CSS 宽度（1100px）设计，这里等比缩放到容器宽度
+  function fitDemo() {
+    const width = shell.clientWidth;
+    if (!width) return;
+    const scale = Math.min(1.08, width / 1100);
+    stage.style.setProperty('--dv-scale', String(scale));
+    shell.style.height = Math.round(822 * scale) + 'px';
+  }
+  fitDemo();
+  const view = document.defaultView;
+  if (view && view.addEventListener) view.addEventListener('resize', fitDemo);
+
+  function posterNode() {
+    const source = document.getElementById('dvPoster');
+    if (!source) return document.createElement('div');
+    const node = source.cloneNode(true);
+    node.removeAttribute('id');
+    return node;
+  }
+
+  function formatRow(item, index, kind) {
+    const on = (kind === 'video' ? selectedVideo : selectedAudio) === index;
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = on ? 'dv-format is-on' : 'dv-format';
+    row.setAttribute('aria-pressed', on ? 'true' : 'false');
+    const name = document.createElement('span');
+    name.className = 'dv-format-name';
+    name.textContent = item.quality;
+    const size = document.createElement('span');
+    size.className = 'dv-format-size';
+    size.textContent = item.size;
+    row.appendChild(name);
+    row.appendChild(size);
+    row.addEventListener('click', () => {
+      // 视频 / 纯音频二选一（对应应用里的 downloadMode），不要两行同时选中
+      if (kind === 'video') {
+        selectedVideo = index;
+        selectedAudio = -1;
+        mode = 'video';
+      } else {
+        selectedAudio = index;
+        selectedVideo = -1;
+        mode = 'audio';
+      }
+      renderFormats();
+      renderDownloadButton();
+    });
+    return row;
+  }
+
+  function renderFormats() {
+    if (formatsHost) {
+      formatsHost.textContent = '';
+      DV_FORMATS.forEach((item, index) => formatsHost.appendChild(formatRow(item, index, 'video')));
+    }
+    if (audioHost) {
+      audioHost.textContent = '';
+      DV_AUDIO.forEach((item, index) => audioHost.appendChild(formatRow(item, index, 'audio')));
+    }
+    if (videoHeader) videoHeader.textContent = t('demo.videohdr').replace('{count}', String(DV_FORMATS.length));
+    if (audioHeader) audioHeader.textContent = t('demo.audiohdr').replace('{count}', String(DV_AUDIO.length));
+    if (sizeLabel) {
+      const current = mode === 'audio' ? DV_AUDIO[selectedAudio] : DV_FORMATS[selectedVideo];
+      sizeLabel.textContent = current ? current.size : DV_FORMATS[0].size;
+    }
+  }
+
+  function renderDownloadButton() {
+    if (!downloadLabel || !downloadButton) return;
+    const downloading = tasks.some(task => task.status === 'downloading');
+    downloadLabel.textContent = downloading ? t('demo.downloading') : (mode === 'audio' ? t('demo.downloadaudio') : t('demo.download'));
+    downloadButton.disabled = downloading;
+  }
+
+  function taskCard(task) {
+    const card = document.createElement('div');
+    card.className = task.status === 'completed' ? 'dv-task is-done' : 'dv-task';
+    const meta = document.createElement('div');
+    meta.className = 'dv-task-meta';
+    const head = document.createElement('div');
+    head.className = 'dv-task-head';
+    const title = document.createElement('p');
+    title.className = 'dv-task-title';
+    title.textContent = DV_TITLE;
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'dv-x';
+    close.setAttribute('aria-label', 'remove');
+    close.textContent = '×';
+    close.addEventListener('click', () => {
+      const at = tasks.indexOf(task);
+      if (at >= 0) tasks.splice(at, 1);
+      renderQueue();
+      renderHistory();
+      renderDownloadButton();
+    });
+    head.appendChild(title);
+    head.appendChild(close);
+    meta.appendChild(head);
+
+    if (task.status === 'downloading') {
+      const status = document.createElement('div');
+      status.className = 'dv-task-status';
+      const info = document.createElement('span');
+      info.textContent = task.speed + ' - ETA ' + task.eta;
+      const percent = document.createElement('span');
+      percent.className = 'dv-pct';
+      percent.textContent = Math.round(task.progress) + '%';
+      status.appendChild(info);
+      status.appendChild(percent);
+      const track = document.createElement('div');
+      track.className = 'dv-bar-track';
+      const fill = document.createElement('span');
+      fill.style.width = task.progress + '%';
+      track.appendChild(fill);
+      meta.appendChild(status);
+      meta.appendChild(track);
+    } else {
+      const done = document.createElement('div');
+      done.className = 'dv-task-done';
+      const quality = document.createElement('span');
+      quality.textContent = task.quality;
+      const folder = document.createElement('span');
+      folder.innerHTML = DV_FOLDER_ICON;
+      done.appendChild(quality);
+      done.appendChild(folder);
+      meta.appendChild(done);
+    }
+
+    card.appendChild(posterNode());
+    card.appendChild(meta);
+    return card;
+  }
+
+  function renderQueue() {
+    if (!queueHost) return;
+    for (const node of [...queueHost.querySelectorAll('.dv-task')]) node.remove();
+    if (queueEmpty) queueEmpty.hidden = tasks.length > 0;
+    const downloading = tasks.filter(task => task.status === 'downloading').length;
+    if (activeBadge) activeBadge.textContent = t('demo.active').replace('{count}', String(downloading));
+    for (const task of tasks) queueHost.appendChild(taskCard(task));
+  }
+
+  function renderHistory() {
+    if (!historyHost) return;
+    historyHost.textContent = '';
+    const done = tasks.filter(task => task.status === 'completed');
+    if (historyEmpty) historyEmpty.hidden = done.length > 0;
+    for (const task of done) {
+      const row = document.createElement('div');
+      row.className = 'dv-history-row';
+      const title = document.createElement('p');
+      title.textContent = DV_TITLE;
+      const meta = document.createElement('span');
+      meta.textContent = task.quality + ' - ' + task.size;
+      row.appendChild(title);
+      row.appendChild(meta);
+      historyHost.appendChild(row);
+    }
+  }
+
+  function renderAlt(name) {
+    if (!alt) return;
+    alt.hidden = name === 'download';
+    if (altHistory) altHistory.hidden = name !== 'history';
+    if (altAbout) altAbout.hidden = name !== 'about';
+    if (name === 'history') renderHistory();
+    if (name === 'about' && aboutVersion) aboutVersion.textContent = release ? release.tag : 'v1.3.4';
+  }
+
+  function setTab(name) {
+    for (const tab of tabs) {
+      const on = tab.getAttribute('data-dv-tab') === name;
+      tab.classList.toggle('is-on', on);
+      tab.setAttribute('aria-selected', on ? 'true' : 'false');
+    }
+    for (const panel of panels) panel.hidden = name !== 'download';
+    renderAlt(name);
+  }
+
+  function tick() {
+    let busy = false;
+    for (const task of tasks) {
+      if (task.status !== 'downloading') continue;
+      task.progress = Math.min(100, task.progress + 2.4);
+      const remain = Math.max(0, Math.round((100 - task.progress) * 1.9));
+      task.eta = String(Math.floor(remain / 60)).padStart(2, '0') + ':' + String(remain % 60).padStart(2, '0');
+      if (task.progress >= 100) task.status = 'completed';
+      busy = true;
+    }
+    renderQueue();
+    renderHistory();
+    renderDownloadButton();
+    if (!busy && ticker) {
+      clearInterval(ticker);
+      ticker = null;
+    }
+  }
+
+  function startParse() {
+    if (parsing) return;
+    if (textarea && !textarea.value.trim()) textarea.value = DV_SAMPLE_URL;
+    parsing = true;
+    parseSeconds = 0;
+    if (result) result.hidden = true;
+    if (parsingBar) parsingBar.hidden = false;
+    if (elapsedLabel) elapsedLabel.textContent = t('demo.usuallyseconds');
+    if (parseButton) parseButton.disabled = true;
+    if (parseLabel) parseLabel.textContent = t('demo.parsing');
+    if (parseTimer) clearInterval(parseTimer);
+    parseTimer = setInterval(() => {
+      parseSeconds += 1;
+      if (elapsedLabel) elapsedLabel.textContent = t('demo.elapsed').replace('{seconds}', String(parseSeconds));
+    }, 1000);
+    setTimeout(() => {
+      if (parseTimer) clearInterval(parseTimer);
+      parseTimer = null;
+      parsing = false;
+      if (parsingBar) parsingBar.hidden = true;
+      if (parseButton) parseButton.disabled = false;
+      if (parseLabel) parseLabel.textContent = t('demo.parse');
+      renderFormats();
+      if (result) result.hidden = false;
+      renderDownloadButton();
+    }, 1500);
+  }
+
+  if (pasteButton) {
+    pasteButton.addEventListener('click', () => {
+      if (!textarea) return;
+      textarea.value = DV_SAMPLE_URL;
+      textarea.focus();
+    });
+  }
+  if (parseButton) parseButton.addEventListener('click', startParse);
+  if (downloadButton) {
+    downloadButton.addEventListener('click', () => {
+      const item = (mode === 'audio' ? DV_AUDIO[selectedAudio] : DV_FORMATS[selectedVideo]) || DV_FORMATS[0];
+      tasks.push({ quality: item.quality, size: item.size, progress: 0, speed: '5.4 MB/s', eta: '07:05', status: 'downloading' });
+      renderQueue();
+      renderHistory();
+      renderDownloadButton();
+      if (!ticker) ticker = setInterval(tick, 130);
+    });
+  }
+  for (const tab of tabs) {
+    tab.addEventListener('click', () => setTab(tab.getAttribute('data-dv-tab')));
+  }
+
+  // 切语言时把这块演示的文案重刷一遍
+  syncAppDemo = function () {
+    if (parseLabel) parseLabel.textContent = parsing ? t('demo.parsing') : t('demo.parse');
+    if (elapsedLabel && !parsing) elapsedLabel.textContent = t('demo.usuallyseconds');
+    if (aboutVersion) aboutVersion.textContent = release ? release.tag : 'v1.3.4';
+    renderFormats();
+    renderQueue();
+    renderHistory();
+    renderDownloadButton();
+  };
+
+  // 默认就是「已经粘贴并解析过、正在下载」的样子：一进页面就是完整界面
+  if (textarea) textarea.value = DV_SAMPLE_URL;
+  renderFormats();
+  if (result) result.hidden = false;
+  tasks.push({ quality: DV_FORMATS[0].quality, size: DV_FORMATS[0].size, progress: 12, speed: '5.4 MB/s', eta: '06:32', status: 'downloading' });
+  renderQueue();
+  renderHistory();
+  renderDownloadButton();
+  if (!ticker) ticker = setInterval(tick, 130);
+
+  fitDemo();
+}
+
+initAppDemo();
+
 apply(current);
-btn.addEventListener('click', () => {
-  current = current === 'zh' ? 'en' : 'zh';
-  apply(current);
+
+// 先按同步判断渲染，再用 Client Hints 修一次架构（Chrome / Edge 才有这个 API）
+loadRelease();
+archFromClientHints(navigator.userAgentData).then(hint => {
+  if (hint && hint !== selectedArch && selectedOS === detectedOS) {
+    selectedArch = hint;
+    renderDownload();
+  }
 });
 </script>
 </body>

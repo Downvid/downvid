@@ -210,15 +210,49 @@ Linux 用 `amd64`/`x86_64` 而不是 `x64`（与 electron-builder 的 `${arch}` 
 GitHub Pages **不再使用**：仓库从未在 Settings 里选过 Pages 源，`actions/configure-pages` 只会稳定报
 `Get Pages site failed`，那个工作流已删除。校验改由 `pnpm lint:website` 在三个 `ci-*.yml` 的 frontend job 跑。
 
-容易静默失败的四点（`lint:website` 全部覆盖）：
+容易静默失败的几点（`lint:website` 全部覆盖）：
 
-- **引用的仓库资源**（og:image、favicon、截图）走 `raw.githubusercontent.com/<owner>/<repo>/main/...`
+- **引用的仓库资源**（og:image、favicon、logo）走 `raw.githubusercontent.com/<owner>/<repo>/main/...`
   绝对地址，文件改名/删除后线上裂图，本地无提示
-- **中英词条双向成对**：`data-i18n` 占位 ↔ `I18N.en` 词条，缺英文会永远显示中文
+- **中英词条双向成对**：`data-i18n` 占位 ↔ `I18N.en` 词条，缺英文会永远显示中文；
+  脚本拼装的文案（下载区的 `t('...')`）还要在 `I18N.zh` 里补中文，否则界面直接把 key 显示出来
 - **配色是手抄的**：官网 `:root` 的 `--primary` 等必须与 `src/style.css` 的 `@theme` 一致
 - **零依赖**：除 Google Fonts 外不得外链脚本/样式（`.vercelignore` 只排除源码目录，不做校验）
-- **下载量是静态数字**：hero 的「已被下载 N 次」由 `pnpm website:stats` 刷新，
-  不接 shields.io / 不前端 fetch（理由见 `website/README.md`）；发布新版后顺手跑一次
+- **下载量 / 星标用 shields.io 徽章**：hero 用 README 同款徽章，数字实时，省掉
+  「发布后手动刷新」。徽章是 `<img>`，不违反零依赖约定；URL 里的仓库坐标由 `lint:website`
+  与 `shared/app.ts` 比对（写错只会静默显示 `no data`）。原先的
+  `scripts/gen-website-stats.mjs`（`pnpm website:stats`）已删除
+- **版式参考 deepseek.com/harness**：居中 hero + 大预览图、两列卡片网格、代码块 + 复制按钮、
+  居中的社区 CTA、极简页脚。配色仍必须取自 `src/style.css` 的 `@theme`，
+  取舍与细节写在 `website/README.md`
+- **顶栏在两种形态间切换**（`is-stuck`）：贴顶时是通栏细条，下滑超过 12px 才收成浮动圆角胶囊
+  并钉在顶部，滑回顶部自动还原；且**不放导航链接**——页面就是一路往下滑，品牌在左、语言切换在右。
+  别再加回「功能 / 下载 / FAQ」那排按钮
+- **「能做什么」的卡片是可点的**：平台 / 画质 / 浏览器分组单选 `data-pick-set`（画质还带出体积
+  `data-pick-out`）、下载加速开始 / 暂停、依赖逐个检测、检查更新用真实最新版本作答。
+  全部纯前端、不联网改状态；文案走 `t()`，切语言时由 `syncDemos()` 重刷——
+  新增演示按钮时记得把它挂进 `syncDemos`，否则切语言后文案不会更新
+- **hero 的预览是应用主界面的可交互复刻**（不是截图）：结构 / 文案 / 配色照
+  `src/components/` 里的下载界面组件搬，只把真实解析与下载换成本地动画；画布按应用窗口宽度
+  1100px 设计，再用 `transform: scale()` 等比缩放到容器宽度。**默认就是「已粘贴 + 已解析 +
+  正在下载」**的样子，一进页面就是完整界面。缩略图是 `src/assets/demo-thumb.jpg`
+  （从应用截图里裁的原链接预览图，自带时长角标），失败时退回内置 SVG。改应用界面时要同步
+  这一份，`lint:website` 会比对复刻里抄来的那批 `@theme` 颜色 token；切语言的文案重刷挂在
+  `syncAppDemo()` 上（新增按钮记得挂进去）
+- **平台图标只在 `#osIcons` 里维护一份**：脚本按 `data-os` 克隆给主按钮与下载菜单，
+  `lint:website` 会核它和脚本 `PLATFORMS` 双向对得上（键名写错只是没图标，不报错）
+- **下载按钮按系统直链产物**：hero 主按钮在浏览器里识别系统与芯片，再按 `index.html`
+  里的 `ARTIFACTS` 产物名模板，在 `releases/latest` 的产物列表里挑包，`href` 直接指向
+  产物直链——点击即下载，不跳转。结果在 `sessionStorage` 里缓存 30 分钟；离线 / 限流 /
+  产物缺失 / 系统未识别一律退回 Releases 页面（不留死链，也不弹错误框）。
+  `tests/website-download.test.ts` 用真实产物列表（含 `.blockmap`、`latest*.yml` 等干扰项）
+  钉住「哪个系统拿哪个包」
+- **产物名模板会静默失效**：`ARTIFACTS` 里的名字必须与 `electron-builder.json5` 的
+  `artifactName` 一致（`${arch}` 随 target 变化：AppImage / rpm 用 `x86_64`、deb 用
+  `amd64`、tar.gz 用 `x64`）。对不上时不会报错，只是所有平台都挑不到产物；
+  `lint:website` 比对配置文件，`tests/website-download.test.ts` 比对真实产物名，两条互补
+- **页面脚本里的仓库坐标**：下载按钮在运行时拼 `github.com` / `api.github.com` 地址，
+  `REPO` 必须与 `shared/app.ts` 一致——raw 链接那条检查覆盖不到它
 
 ---
 

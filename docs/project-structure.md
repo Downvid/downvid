@@ -44,8 +44,7 @@ downvid/
 | `gen-update-manifests.mjs` | 按最终产物重新生成 `latest*.yml` | 发布流程内自动 |
 | `gen-release-notes.mjs` | 生成 Release 正文（下载徽章 + 对照表） | 发布流程内自动 |
 | `lint-ipc.mjs` | 校验 IPC 三处同步、env.d.ts 约束、产物命名契约 | `pnpm lint:ipc`，CI 必跑 |
-| `lint-website.mjs` | 校验官网单文件、引用资源、中英词条成对、配色与应用一致 | `pnpm lint:website`，CI 必跑 |
-| `gen-website-stats.mjs` | 汇总 Releases 下载量写回官网 hero | `pnpm website:stats`，发布后手动跑 |
+| `lint-website.mjs` | 校验官网单文件、引用资源、中英词条成对、配色与应用一致、产物名模板与徽章坐标 | `pnpm lint:website`，CI 必跑 |
 
 ## 手动维护点（改代码前请先看）
 
