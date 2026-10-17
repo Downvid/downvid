@@ -351,6 +351,60 @@ const MODULES = {
       throw new Error('unknown kind ' + testCase.kind)
     },
   },
+  /**
+   * 下载历史。
+   *
+   * 交叉验证重点在 **Windows 路径归一**与「反复写同一文件只剩一条」——
+   * 这两块判错了不会报错，只会让用户看到重复历史、或重下时堆出多条记录。
+   */
+  history: {
+    tsFile: 'electron/history.ts',
+    goDir: 'app/internal/history',
+    goTest: 'TestCrossCheckHistory',
+    mocks: {},
+    buildCases() {
+      const rec = (filePath, id = 'first', extra = {}) => ({
+        id, filePath, title: '视频', thumbnail: '', url: 'https://example.com/video',
+        format: 'mp4', quality: '1080p', createdAt: '2026-10-14T00:00:00.000Z', ...extra,
+      })
+      const cases = []
+
+      // --- dedupe：各类路径归一与无效记录 ---
+      for (const [platform, list] of [
+        ['win32', [rec('C:\\Downloads\\VIDEO.mp4'), rec('c:/Downloads/video.mp4', 'second')]],
+        ['linux', [rec('/downloads/Video.mp4'), rec('/downloads/video.mp4', 'second')]],
+        ['linux', [rec(''), rec('/downloads/missing.mp4', 'ok')]],
+        ['win32', [rec('C:\\a\\sub\\..\\b.mp4', 'x'), rec('C:\\a\\b.mp4', 'y')]],
+        ['win32', [rec('C:\\a\\..\\..\\..\\x.mp4', 'deep')]],
+        ['darwin', [rec('/a/./b/../c.mp4', 'x'), rec('/a/c.mp4', 'y')]],
+        ['linux', [rec('/a/b.mp4', 'a'), rec('/a/b.mp4', 'b')]],
+      ]) {
+        cases.push({ kind: 'dedupe', platform, list })
+      }
+
+      // --- upsert：反复写同一文件 / 不同文件 / 上限 ---
+      const big = Array.from({ length: 100 }, (_, i) => rec(`/downloads/${i}.mp4`, String(i)))
+      const upserts = [
+        { name: 'repeat', platform: 'win32', history: [rec('C:\\Downloads\\video.mp4')], incoming: rec('C:\\Downloads\\video.mp4', 'ignored', { title: '新标题' }), id: 'retry1', createdAt: '2026-10-15' },
+        { name: 'case-diff', platform: 'win32', history: [rec('C:\\Downloads\\VIDEO.mp4')], incoming: rec('c:/Downloads/sub/../video.mp4', 'second'), id: 'second', createdAt: 'later' },
+        { name: 'new-file', platform: 'win32', history: [rec('C:\\Downloads\\video-1080.mp4')], incoming: rec('C:\\Downloads\\video-720.mp4', 'q'), id: 'q', createdAt: 'later' },
+        { name: 'at-limit', platform: 'linux', history: big, incoming: big[99], id: 'unused', createdAt: 'later' },
+        { name: 'over-limit', platform: 'linux', history: [...big, rec('/downloads/extra.mp4', 'extra')], incoming: rec('/downloads/new.mp4', 'new'), id: 'new', createdAt: 'later' },
+      ]
+      for (const u of upserts) cases.push({ kind: 'upsert', ...u })
+
+      return cases
+    },
+    tsCall(mod, testCase) {
+      if (testCase.kind === 'dedupe') {
+        return mod.dedupeHistory(testCase.list, testCase.platform)
+      }
+      if (testCase.kind === 'upsert') {
+        return mod.upsertHistory(testCase.history, testCase.incoming, testCase.id, testCase.createdAt, testCase.platform)
+      }
+      throw new Error('unknown kind ' + testCase.kind)
+    },
+  },
 }
 
 const selected = onlyModule ? { [onlyModule]: MODULES[onlyModule] } : MODULES
