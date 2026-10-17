@@ -26,6 +26,7 @@ import (
 
 	"github.com/Downvid/downvid/app/internal/deps"
 	"github.com/Downvid/downvid/app/internal/download"
+	"github.com/Downvid/downvid/app/internal/image"
 	"github.com/Downvid/downvid/app/internal/parse"
 	"github.com/Downvid/downvid/app/internal/settings"
 	"github.com/Downvid/downvid/app/internal/shell"
@@ -688,4 +689,31 @@ func (a *App) settingsStore() *settings.Store {
 		a.settings = settings.NewStore(filepath.Join(a.dataDir, "settings.json"))
 	}
 	return a.settings
+}
+
+// ===== 远程图片（B 站封面防盗链）=====
+
+// FetchImage 抓取远程图片并返回 data URL。
+//
+// B 站（以及部分其他站点）的缩略图有防盗链：不带 Referer 直接请求会 403
+// 或返回占位图。浏览器里 `<img src>` 拿不到，所以由主进程代抓。
+//
+// 失败时返回空串而不是抛错：前端用它渲染缩略图，失败应当退化成占位图，
+// 弹错误框对用户没有价值。
+func (a *App) FetchImage(url string, referer string) string {
+	a.mu.Lock()
+	client := a.imageClient
+	if client == nil {
+		client = image.NewClient()
+		a.imageClient = client
+	}
+	a.mu.Unlock()
+
+	data, err := client.Fetch(url, referer)
+	if err != nil {
+		// 记日志而不是抛给前端：封面加载失败不是用户需要处理的事
+		log.Printf("[downvid] 抓取图片失败 %s：%v", url, err)
+		return ""
+	}
+	return data
 }

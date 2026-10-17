@@ -50,7 +50,7 @@
 
 ## 进行中
 
-### 后端补齐（按 UI 需要排序）—— 4/5 完成
+### 后端补齐（按 UI 需要排序）—— **全部完成**
 
 - [x] `DepsDownload` —— 依赖下载 + 流式进度（`internal/deps`，12 条测试）
 - [x] `OpenPath` / `ShowInFolder` / `OpenExternal` —— 打开文件/目录/链接
@@ -58,12 +58,19 @@
 - [x] `GetDiskSpace` —— 磁盘剩余空间（目录不存在时退到最近祖先）
 - [x] `SettingsGet` / `SettingsSet` —— 设置存到后端（`internal/settings`）
       → 与 TS 版字段名/默认值逐字一致，损坏时报错并留备份
-- [ ] `FetchImage` —— 带 Referer 抓图（B 站封面防盗链）
+- [x] `FetchImage` —— 带 Referer 抓图（`internal/image`，含大小与类型限制）
 
 ### UI 迁移（你负责）
 
 - [ ] 把 `demo/` 定为正式 `src/`，删掉我早期的验证页
 - [ ] store 接后端（3 处：`finishParse` / 进度订阅 / `togglePause`）
+
+---
+
+### UI 对接（下一步）
+
+- [ ] 你的 store 接后端（`demo/lib/backend.ts` 已就绪，需扩到 deps / settings / shell）
+- [ ] 把 `demo/` 定为正式 `src/`，删掉早期验证页
 
 ---
 

@@ -35,6 +35,7 @@ import (
 	"github.com/Downvid/downvid/app/internal/deps"
 	"github.com/Downvid/downvid/app/internal/download"
 	"github.com/Downvid/downvid/app/internal/history"
+	"github.com/Downvid/downvid/app/internal/image"
 	"github.com/Downvid/downvid/app/internal/parse"
 	"github.com/Downvid/downvid/app/internal/settings"
 	"github.com/Downvid/downvid/app/internal/shell"
@@ -69,6 +70,9 @@ type App struct {
 
 	// 设置存储（惰性创建）
 	settings *settings.Store
+
+	// 图片抓取客户端（惰性创建）
+	imageClient *image.Client
 
 	// 下载相关（由 bindings_download.go 使用）
 	runner           *download.Runner
