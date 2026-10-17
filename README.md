@@ -321,13 +321,11 @@ DownVid is released under the [MIT License](./LICENSE).
 
 For the project name, logo, and third-party service attribution, see the [Brand and Trademark Usage Policy](./TRADEMARKS.md).
 
-DownVid started from [Videdown](https://github.com/cshuangyy/videdown) and has since been substantially
-modified, refactored and extended. Thanks to cshuangyy for the original work; the original copyright and
-license notice is preserved in [LICENSE](./LICENSE).
+DownVid is developed and maintained by the [Downvid](https://github.com/Downvid) organization.
+Copyright and license notices for all code in this repository are recorded in [LICENSE](./LICENSE).
 
 Thanks also to the community contributors and to the maintainers of the projects we depend on:
 
-- [Videdown](https://github.com/cshuangyy/videdown) — the original project
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) — extraction engine
 - [FFmpeg](https://ffmpeg.org/) — audio and video processing
 - [Electron](https://www.electronjs.org/) · [Vue.js](https://vuejs.org/) · [Tailwind CSS](https://tailwindcss.com/) — app stack

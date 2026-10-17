@@ -60,6 +60,8 @@
     "sync:doc-numbers": "node scripts/sync-doc-numbers.mjs",
     "sync:toolchain": "node scripts/sync-toolchain-versions.mjs",
     "crosscheck:port": "node scripts/crosscheck-port.mjs",
+    "gen:contributors": "node scripts/gen-contributors.mjs",
+    "lint:attribution": "node scripts/lint-attribution.mjs",
     "typecheck:docker": "tsc -p docker/server/tsconfig.json --noEmit",
     "build:docker:web": "vite build --config docker/web/vite.config.ts",
     "deps:build": "bash scripts/build-backend.sh",

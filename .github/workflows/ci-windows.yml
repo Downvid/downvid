@@ -146,6 +146,11 @@ jobs:
       - name: 代码来源审计
         run: pnpm audit:provenance
 
+      # MIT 要求「substantial portions」附带版权声明。上游代码未归零前删掉声明
+      # 会让许可证失效，而删一行 LICENSE 不会让任何测试变红——所以单独拦。
+      - name: 署名合规（上游版权声明 ↔ 剩余上游代码）
+        run: pnpm lint:attribution
+
       # 架构边界：core/ 不得 import electron、前端不得直接用主进程实现等七条规则。
       # 违反时类型检查与单测都不会红，只在容器/前端运行时静默失效（见 docs/provenance/architecture.md §3.2）
       - name: 架构边界校验

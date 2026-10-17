@@ -55,6 +55,8 @@ const HUMAN_IDENTITY_TOKENS = [
   'linuztx',
   'Glaroday',
   '37446275+Glaroday',
+  'glaroday',
+  '37446275+glaroday',
 ]
 
 /**

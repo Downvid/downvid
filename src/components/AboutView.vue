@@ -219,7 +219,7 @@
       <!-- Copyright -->
       <div class="text-center pt-4">
         <p class="text-xs text-on-surface-variant/60">© 2026 DownVid</p>
-        <p class="text-xs text-on-surface-variant/40 mt-1">Based on <a href="https://github.com/cshuangyy/videdown" class="hover:underline">Videdown</a> by cshuangyy (MIT License)</p>
+        <p class="text-xs text-on-surface-variant/40 mt-1"><a href="https://github.com/Downvid/downvid/blob/main/LICENSE" class="hover:underline">MIT License</a></p>
       </div>
     </div>
 
