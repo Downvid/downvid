@@ -103,6 +103,15 @@
 
 ### 修复
 
+- **装了 Node 22 却报「YouTube 解析需要可运行的 Node.js 22+ 或 Deno 2.3+」**（#62、#64、#65、#66、#67、#71、#75、#80
+  反复出现的同一句报错）：macOS 从 Finder / 程序坞启动的应用只有 `/usr/bin:/bin:/usr/sbin:/sbin`，
+  Linux 从桌面启动也不读 `.zshrc` / `.bashrc`——而 nvm、fnm、mise、asdf 正是在这些文件里把 node 加进 PATH 的，
+  Homebrew 的 `node@22` 这类 keg-only 版本和 MacPorts 也要用户自己改 PATH。于是终端里 `node -v` 明明是 v22，
+  应用却一个运行时都找不到。现在 JS 运行时探测在原有候选之后，再按安装目录兜底：nvm / fnm / mise / asdf
+  的版本目录（只取 Node ≥22 / Deno ≥2.3，从新到旧）、Volta、n、Homebrew `node@NN`、MacPorts / Snap /
+  Linuxbrew / Nix，以及 Windows 上的 nvm-windows（`nvm use` 没有管理员权限时版本装好了却不在 PATH 里）、
+  fnm 与 mise（通常只在 PowerShell profile 里激活）、Volta（`bin\` 里只有 `node.cmd`）。
+  兜底排在所有原有候选**之后**，原来能找到运行时的用户选中的仍是同一个。
 - **YouTube「页面需要重载」时的回退策略静默退化**：`nextYoutubeRetry` 会**按 yt-dlp 版本**
   选兼容客户端（`>= 2026.10.10` 用 `default,web_embedded`，更早用 `web_safari`），
   但上一次为了省掉「为拿版本号多跑一次 `--version`」，传给它的版本号被写死成了空串 ——
