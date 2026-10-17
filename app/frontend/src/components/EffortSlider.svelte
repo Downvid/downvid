@@ -24,6 +24,7 @@
    * 表现是「macOS 上好看、Linux 上露出一截原生轨道」。bits-ui 用 role=slider
    * 的 div，完全不依赖原生控件的样式能力。
    */
+  import { untrack } from 'svelte'
   import { Slider } from 'bits-ui'
   import { CONNECTION_STOPS, nearestConnectionStop } from '../lib/mock'
   import { t } from '../lib/i18n.svelte'
@@ -45,22 +46,65 @@
   let canvas = $state<HTMLCanvasElement | null>(null)
   let dark = $state(false)
 
-  /** bits-ui 用「索引」作为滑块值（0..MAX_INDEX），与 STOPS 下标一一对应 */
-  const index = $derived(Math.max(0, STOPS.indexOf(nearestConnectionStop(value))))
-  const current = $derived(STOPS[index])
-  // bits-ui 在拖动中会连续上抛值；用本地值保证 thumb 跟手，
-  // 而 onchange 只在松手/键盘确认时写回（避免每移动一像素就写一次设置）
-  // 用 $derived 的���源值做初值；后续由 bits-ui 的 onValueChange 驱动。
-  // 不用 `$effect(() => { localIndex = index })`——那在 `value` 未变时会
-  // 反复覆写用户正在拖的位置（且触发 state_referenced_locally 警告）。
-  let localIndex = $state(0)
-  // 外部改了 value（比如设置页同步过来）时，对齐到对应档位
+  /**
+   * 滑块值就是**档位下标**（0..MAX_INDEX），不是连接数。
+   *
+   * ## 这里曾经有一个让「鼠标拖不动」的 bug
+   *
+   * 第一版写的是：
+   *
+   *     const index = $derived(Math.max(0, STOPS.indexOf(nearestConnectionStop(value))))
+   *     $effect.pre(() => { if (index !== localIndex && !dragging) localIndex = index })
+   *
+   * 看起来是「外部改了 value 就对齐档位」，实际却把拖动结果吃掉了：
+   *
+   *   1. 拖动 → bits-ui 写 `value` = 3（下标）
+   *   2. `index` 把它当**连接数**去归一化 → `nearestConnectionStop(3)` = 4
+   *      → `STOPS.indexOf(4)` = **0**
+   *   3. `$effect.pre` 发现 `0 !== 3` 且已松手（dragging=false）→ 把 localIndex 拉回 0
+   *
+   * 表现就是**鼠标完全拖不动**，而键盘能用（键盘走 `onValueCommit`，
+   * 那条路径里 `commit()` 直接改的是 `localIndex`，没经过归一化）。
+   *
+   * 修法：`index` 直接就是 `localIndex`，不经过 `nearestConnectionStop`。
+   * 那个函数只在**外部传入的连接数** → 档位的那一次转换里用（见 `initialIndex`）。
+   */
+  /**
+   * 外部连接数 → 档位下标。
+   *
+   * `untrack` 是**刻意的**：这里只想读一次初值，不想让 `value` 的变化
+   * 重新触发整个派生链（那会与 `lastExternal` 的外部同步逻辑打架）。
+   * 不加 `untrack` 时 Svelte 会警告 `state_referenced_locally`——
+   * 那个警告正是提醒「你在捕获初始值而不是建立依赖」，与这里的意图一致。
+   */
+  const initialIndex = untrack(() =>
+    Math.max(0, STOPS.indexOf(nearestConnectionStop(value))),
+  )
+
+  /** bits-ui 的滑块值（档位下标）。初值来自外部传入的连接数。 */
+  let localIndex = $state<number>(initialIndex)
+
+  /** 当前档位下标（就是滑块值本身） */
+  const index = $derived(localIndex)
+  const current = $derived(STOPS[index] ?? STOPS[0])
+
+  /**
+   * 外部改了 `value`（比如设置页同步过来）时对齐。
+   *
+   * **只在外部值真的变了时对齐**：用 `lastExternal` 记住上次处理过的外部值，
+   * 否则拖拽过程中每次 `localIndex` 变化都会触发这里，
+   * 而 `value` 是 bind 过去的、此时已等于 `localIndex`，会形成自激。
+   */
+  let lastExternal = $state(untrack(() => value))
   $effect.pre(() => {
-    const target = index
-    if (Math.abs(target - localIndex) > 0.001 && !dragging) localIndex = target
+    if (value === lastExternal) return
+    lastExternal = value
+    const target = Math.max(0, STOPS.indexOf(nearestConnectionStop(value)))
+    if (target !== localIndex) localIndex = target
   })
 
   const percent = $derived((localIndex / MAX_INDEX) * 100)
+
   const labels = $derived([
     t('settings.effortLight'),
     t('settings.effortBalanced'),
@@ -146,13 +190,29 @@
       - aria-valuenow / aria-valuetext / role=slider
     视觉完全由下面的元素决定。
   -->
+  <!--
+    **必须用 `bind:value`，不能用 `value=`。**
+
+    这是能否拖动的**根本原因**，也是我排查最久的一处：
+    bits-ui 的 `updateValue()` 内部是
+
+        this.opts.value.current = snapValueToCustomSteps(...)
+
+    也就是说它**直接给 `value` 赋值**。单向 `value={localIndex}` 时，
+    `opts.value.current` 拿到的是 `$props()` 解构后的**普通变量快照**，
+    改它不会触发 Svelte 的响应式——表现为：
+
+      - 键盘能用（键盘走 `onValueChange` 回调，我手动赋值了）
+      - **鼠标拖拽完全不动**（走 `updateValue` 直接改内部引用）
+
+    `value` 在 bits-ui 里声明为 `$bindable()`，用 `bind:` 才能双向同步。
+  -->
   <Slider.Root
     type="single"
     min={0}
     max={MAX_INDEX}
     step={1}
-    value={localIndex}
-    onValueChange={(v) => { localIndex = Number(v) }}
+    bind:value={localIndex}
     onValueCommit={(v) => commit(v)}
     onPointerDown={() => (dragging = true)}
     onPointerUp={() => (dragging = false)}
@@ -279,7 +339,7 @@
     width: 100%;
     height: 26px;
     border-radius: 999px;
-    touch-action: pan-y;
+    touch-action: none;
     user-select: none;
     -webkit-user-select: none;
   }
