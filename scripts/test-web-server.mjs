@@ -106,18 +106,36 @@ function cleanup() {
 process.on('exit', cleanup)
 process.on('SIGINT', () => { cleanup(); process.exit(1) })
 
-// 等待服务就绪
+// 等待服务就绪。
+//
+// ## 为什么要记录每一次失败的原因
+//
+// 这条循环失败时原来只打印 serverLogs，而日志里明明是
+// `WebUI 服务已启动：http://127.0.0.1:6667/` —— 服务起来了、探活却失败，
+// 说明问题在 fetch 这一侧。但旧输出把这条最关键的线索藏住了，
+// 只能看到「未能在 10 秒内就绪」，排查得从头再来。
+//
+// 现在把最后一次 fetch 的错误也打出来（ECONNREFUSED / 超时 / 非 200 各不相同）。
+//
+// 上限从 10 秒放宽到 30 秒（120 × 250ms）：CI 的 runner 与本地机器在
+// 冷启动上差一个数量级，而这段代码**已经**打印了「服务已启动」——
+// 也就是说服务确实起来了，只是探活没等到。为一条与业务无关的
+// 就绪等待把整条流水线判红，代价远大于多等 20 秒。
 let ready = false
-for (let i = 0; i < 40; i++) {
+let lastError = ''
+for (let i = 0; i < 120; i++) {
   try {
     const res = await fetch(`http://127.0.0.1:${PORT}/healthz`)
     if (res.ok) { ready = true; break }
-  } catch {}
+    lastError = `HTTP ${res.status}`
+  } catch (e) {
+    lastError = e?.cause?.code || e?.name || String(e)
+  }
   await new Promise(r => setTimeout(r, 250))
 }
 
 if (!ready) {
-  console.error('[test:web-server] 服务未能在 10 秒内就绪。输出：')
+  console.error(`[test:web-server] 服务未能在 30 秒内就绪（端口 ${PORT}，最后错误：${lastError}）。输出：`)
   console.error(serverLogs)
   process.exit(1)
 }
