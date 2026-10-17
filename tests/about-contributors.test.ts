@@ -29,7 +29,7 @@ const CHANGELOG = fs.readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf8')
  * 名单快照。**改名单时这个数组要一起改**——这是刻意的：删掉一位贡献者应当是一次
  * 显式决定（附理由的提交），而不是顺手改模板时被带走。
  */
-const EXPECTED_LOGINS = ['yxxbc', 'cshuangyy', 'hailaij', 'jwfstars', 'zerow', 'linuztx']
+const EXPECTED_LOGINS = ['yxxbc', 'cshuangyy', 'hailaij', 'jwfstars', 'zerow', 'linuztx', 'Glaroday']
 
 /**
  * 仓库历史里出现过的**人**的署名 token（显示名或邮箱里的账号部分）。
@@ -51,7 +51,10 @@ const HUMAN_IDENTITY_TOKENS = [
   '108041876+hailaij',
   'jwfstars',
   'zerow',
+  // 显示名是实名 `The Master` 之外的 `QingYuan Li`，账号在 noreply 邮箱里
   'linuztx',
+  'Glaroday',
+  '37446275+Glaroday',
 ]
 
 /**

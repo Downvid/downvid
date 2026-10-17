@@ -275,6 +275,9 @@ const CONTRIBUTORS = [
   { login: 'jwfstars', url: 'https://github.com/jwfstars', role: 'CONTRIBUTOR' },
   { login: 'zerow', url: 'https://github.com/zerow', role: 'CONTRIBUTOR' },
   { login: 'linuztx', url: 'https://github.com/linuztx', role: 'CONTRIBUTOR' },
+  // 容器镜像（#70）的完整实现：原生 WebUI + WebSocket RPC 桥 + electron-shim。
+  // 归档时补登——名单漏人不会报错，只会让那位贡献者从界面上消失。
+  { login: 'Glaroday', url: 'https://github.com/Glaroday', role: 'CONTRIBUTOR' },
 ]
 
 /** 头像地址：固定名单用 GitHub 头像，不依赖接口 */
