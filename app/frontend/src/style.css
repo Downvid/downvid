@@ -1,27 +1,254 @@
-/* 最小样式：先把链路验证清楚，视觉层在后续阶段按 src/style.css 的 @theme 迁移 */
-:root {
-  color-scheme: light dark;
-  --primary: #7c3aed;
-  --surface: #ffffff;
-  --on-surface: #1c1b1f;
-  --on-surface-variant: #49454f;
-  --outline: #79747e;
-  --error: #ba1a1a;
-  font-family: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+/*
+  DownVid 前端样式（Svelte 版）。
+  
+  **@theme 块从 src/style.css 原样搬来**：那是配色的唯一来源，
+  官网（website/index.html）与容器端也都比对它。改这里等于改整站视觉，
+  不要「顺手优化」其中的色值。
+  
+  与 Vue 版的差异只有三处：
+  1. 去掉了 Vue 特有的 scoped 样式依赖（Svelte 自带作用域）
+  2. `#app` 由 `mount()` 挂载，高度改为 100dvh（移动端地址栏收缩时更准）
+  3. 加了 PWA 需要的 `overscroll-behavior`（避免下拉刷新打断下载进度）
+*/
+
+@import 'tailwindcss';
+@import '@material-symbols/font-400/outlined.css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-error-dim: #791903;
+  --color-on-background: #3b3125;
+  --color-primary-dim: #7b4700;
+  --color-on-secondary-fixed-variant: #435f6d;
+  --color-on-surface-variant: #695d50;
+  --color-on-primary-fixed: #271300;
+  --color-tertiary-container: #ffb99f;
+  --color-on-secondary-fixed: #264350;
+  --color-secondary: #466370;
+  --color-surface: #fff8f4;
+  --color-outline: #86786a;
+  --color-error-container: #fd795a;
+  --color-surface-dim: #e8d7c6;
+  --color-tertiary-fixed: #ffb99f;
+  --color-on-secondary-container: #395663;
+  --color-on-secondary: #f3faff;
+  --color-secondary-dim: #3a5764;
+  --color-surface-container-high: #f5e6d6;
+  --color-on-primary-container: #4a2800;
+  --color-on-tertiary-fixed: #4c2211;
+  --color-surface-container: #fbebdd;
+  --color-on-tertiary: #fff7f5;
+  --color-secondary-fixed: #c9e7f7;
+  --color-on-primary-fixed-variant: #563000;
+  --color-inverse-surface: #120d08;
+  --color-inverse-primary: #ff9800;
+  --color-surface-variant: #f1e0ce;
+  --color-surface-container-lowest: #ffffff;
+  --color-background: #fff8f4;
+  --color-primary-fixed-dim: #ec8c00;
+  --color-on-surface: #3b3125;
+  --color-tertiary-dim: #784632;
+  --color-surface-container-highest: #f1e0ce;
+  --color-on-tertiary-fixed-variant: #6f3e2a;
+  --color-outline-variant: #bfaf9f;
+  --color-secondary-fixed-dim: #bbd9e9;
+  --color-primary: #8c5100;
+  --color-inverse-on-surface: #a59b92;
+  --color-surface-container-low: #fff1e5;
+  --color-primary-container: #ff9800;
+  --color-on-error: #fff7f6;
+  --color-error: #a73b21;
+  --color-on-error-container: #6e1400;
+  --color-tertiary: #86523d;
+  --color-secondary-container: #c9e7f7;
+  --color-primary-fixed: #ff9800;
+  --color-on-tertiary-container: #643622;
+  --color-tertiary-fixed-dim: #efac92;
+  --color-on-primary: #fff7f4;
+  --color-surface-tint: #8c5100;
+  --color-surface-bright: #fff8f4;
+
+  --font-headline: Plus Jakarta Sans, Noto Sans SC, sans-serif;
+  --font-body: Inter, Noto Sans SC, sans-serif;
+  --font-label: Inter, Noto Sans SC, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, Liberation Mono,
+    Courier New, monospace;
+
+  --radius: 0.125rem;
+  --radius-lg: 0.25rem;
+  --radius-xl: 0.5rem;
+  --radius-full: 0.75rem;
+  --radius-sm: 0.125rem;
+  --radius-md: 0.375rem;
+
+  --shadow-ambient: 0 8px 32px rgba(59, 49, 37, 0.06);
+  --shadow-sticky-up: 0 -4px 12px rgba(0, 0, 0, 0.05);
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --surface: #1c1b1f;
-    --on-surface: #e6e1e5;
-    --on-surface-variant: #cac4d0;
-    --outline: #938f99;
+
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
   }
 }
-* { box-sizing: border-box; }
-body {
-  margin: 0;
-  background: var(--surface);
-  color: var(--on-surface);
-  min-height: 100vh;
+
+:root {
+  font-family: 'Inter', 'Noto Sans SC', system-ui, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: light;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
-#app { min-height: 100vh; }
+
+html, body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100%;
+  background-color: var(--color-surface);
+  color: var(--color-on-surface);
+  /* 移动端下拉刷新会打断下载进度 → 关掉 */
+  overscroll-behavior: none;
+}
+
+#app {
+  width: 100%;
+  /* dvh 在移动端地址栏收缩时不会跳变（vh 会） */
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.font-headline { font-family: var(--font-headline); }
+.font-body { font-family: var(--font-body); }
+.font-mono { font-family: var(--font-mono); }
+
+.gradient-btn {
+  background: linear-gradient(135deg, var(--color-primary), var(--color-primary-container));
+  color: var(--color-on-primary);
+  transition: all 0.2s ease;
+}
+.gradient-btn:hover { background: linear-gradient(180deg, var(--color-primary), var(--color-primary-container)); }
+.gradient-btn:active { transform: scale(0.98); }
+
+.gradient-btn-orange {
+  background: linear-gradient(135deg, rgb(255, 179, 71) 0%, rgb(255, 152, 0) 100%);
+  color: var(--color-on-primary-fixed);
+}
+.gradient-btn-orange:hover {
+  background: linear-gradient(135deg, rgb(255, 167, 46) 0%, rgb(230, 137, 0) 100%);
+}
+
+.focus-glow:focus-within { box-shadow: 0 0 0 2px rgba(140, 81, 0, 0.2); }
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #fff8f4;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #f1e0ce;
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #bfaf9f;
+}
+
+/* Selection */
+::selection {
+  background: #ff9800;
+  color: #4a2800;
+}
+
+/* Animations */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* 不确定进度条：解析阶段拿不到真实进度，只表示"正在进行"。
+   与 pulse 的区别是它在横向滑动而非明暗变化，更像系统原生的 indeterminate 进度。 */
+@keyframes parse-bar {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+.animate-parse-bar {
+  animation: parse-bar 1.4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* 尊重用户的"减少动态效果"设置 */
+@media (prefers-reduced-motion: reduce) {
+  .animate-parse-bar {
+    animation: none;
+    width: 100%;
+    opacity: 0.6;
+  }
+}
+
+/* Line clamp */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Material Icons */
+.material-icons {
+  font-family: 'Material Icons';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
