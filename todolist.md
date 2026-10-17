@@ -62,8 +62,9 @@
 
 ### UI 迁移（你负责）
 
-- [ ] 把 `demo/` 定为正式 `src/`，删掉我早期的验证页
+- [x] **`demo/` → `src/`**（正式前端），旧验证页已删除
 - [ ] store 接后端（3 处：`finishParse` / 进度订阅 / `togglePause`）
+- [x] 加速滑块接入能量辐射层（参照 dsh-reasoning-effort）
 
 ---
 

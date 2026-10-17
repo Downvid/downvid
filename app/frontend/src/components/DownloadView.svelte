@@ -1,207 +1,702 @@
 <script lang="ts">
-  /**
-   * 下载主视图：粘贴链接 → 解析 → 选格式 → 下载。
-   *
-   * 迁移自 `src/components/DownloadView.vue`（220 行）。
-   *
-   * ## 旧版的一个问题，这次顺手修掉
-   *
-   * 旧版把**整套解析流程写在视图里**：URL 正则提取、协议校验、调 IPC、
-   * 封面转 base64、缺依赖兜底、错误分类、`setInterval` 计时器——159 行脚本
-   * 里只有一小半是渲染。
-   *
-   * 这让「解析」这件事无法复用（容器端要重写一遍），也无法单测。
-   * 现在拆成两部分：
-   *   - `parse.ts`：纯逻辑（URL 校验、错误分类、状态计算）——可单测
-   *   - 本组件：只负责渲染与调用
-   *
-   * ## 解析计时器
-   *
-   * 旧版用 `setInterval` 且有两个出口（完成 / 卸载），漏一个就会泄漏。
-   * Svelte 5 里用 `$effect` 返回清理函数，结构上只有一个出口。
-   */
-  import MaterialIcon from './MaterialIcon.svelte'
-  import UrlInput from './UrlInput.svelte'
-  import FormatSelector from './FormatSelector.svelte'
-  import { t } from '../i18n/index.svelte'
-  import { validateUrl, describeParseError } from '../lib/parse-url'
-  import type { VideoInfo, VideoFormat, AudioFormat, AudioTrack } from '../types'
+  import Icon from './Icon.svelte'
+  import CaptureBar from './CaptureBar.svelte'
+  import ParsePanel from './ParsePanel.svelte'
+  import ParseResult from './ParseResult.svelte'
+  import ActivityPanel from './ActivityPanel.svelte'
+  import EffortSlider from './EffortSlider.svelte'
+  import { app } from '../lib/store.svelte'
+  import { t } from '../lib/i18n.svelte'
+  import { SAMPLE_URL } from '../lib/mock'
+  import { formatClock } from '../lib/format'
 
-  interface Props {
-    /** 后端解析函数（桌面走 Wails 绑定，容器走 WebSocket RPC） */
-    onParse: (url: string) => Promise<VideoInfo>
-    onDownload: (payload: DownloadPayload) => Promise<void>
-    /** 依赖缺失时跳设置页 */
-    onopenSettings?: () => void
+  const recent = $derived(app.history.slice(0, 4))
+
+  let dragging = $state(false)
+  let dragDepth = 0
+
+  function isLinkDrag(event: DragEvent): boolean {
+    const types = event.dataTransfer?.types
+    if (!types) return false
+    return Array.from(types).some((type) => type === 'text/uri-list' || type === 'text/plain')
   }
 
-  export interface DownloadPayload {
-    url: string
-    formatId: string
-    downloadMode: 'video' | 'audio' | 'subtitle'
-    hasAudio: boolean
-    subtitles: string[]
-    filenameTemplate: string
+  function onDragEnter(event: DragEvent): void {
+    if (!isLinkDrag(event)) return
+    event.preventDefault()
+    dragDepth += 1
+    dragging = true
   }
 
-  let { onParse, onDownload, onopenSettings }: Props = $props()
-
-  let url = $state('')
-  let parsing = $state(false)
-  let parsed = $state<VideoInfo | null>(null)
-  let parseError = $state('')
-  let elapsed = $state(0)
-  let downloading = $state(false)
-  let downloadError = $state('')
-
-  let selectedFormat = $state<VideoFormat | null>(null)
-  let selectedAudioFormat = $state<AudioFormat | null>(null)
-  let selectedAudioTrack = $state<AudioTrack | null>(null)
-  let selectedSubtitles = $state<string[]>([])
-  let downloadMode = $state<'video' | 'audio' | 'subtitle'>('video')
-
-  /**
-   * 解析计时器。
-   *
-   * `$effect` 的清理函数在 `parsing` 变 false 或组件卸载时都会跑——
-   * 只有一个出口，不会漏。旧版的 `setInterval` + 手工 `clearElapsed`
-   * 有两个出口，漏一个就是永久泄漏（每秒一次 setState，界面会越来越慢）。
-   */
-  $effect(() => {
-    if (!parsing) return
-    elapsed = 0
-    const timer = setInterval(() => { elapsed += 0.1 }, 100)
-    return () => clearInterval(timer)
-  })
-
-  async function parse() {
-    parseError = ''
-    const invalid = validateUrl(url)
-    if (invalid) {
-      // 本地就能判定的错误不必往返后端——省一次网络，错误也更即时
-      parseError = t(invalid)
-      return
-    }
-
-    parsing = true
-    parsed = null
-    try {
-      const info = await onParse(url.trim())
-      parsed = info
-      // 默认选中第一个视频格式：让「粘贴 → 解析 → 下载」能一路点完，
-      // 不必先去勾一个选项（旧版也是这样）
-      selectedFormat = info.formats?.[0] ?? null
-      downloadMode = 'video'
-    } catch (e) {
-      parseError = describeParseError(String((e as Error)?.message ?? e))
-    } finally {
-      parsing = false
-    }
+  function onDragOver(event: DragEvent): void {
+    if (!isLinkDrag(event)) return
+    event.preventDefault()
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
   }
 
-  async function download() {
-    if (!parsed || downloading) return
-    downloadError = ''
-    downloading = true
-    try {
-      await onDownload({
-        url: parsed.webpageUrl || url.trim(),
-        formatId:
-          downloadMode === 'audio'
-            ? (selectedAudioFormat?.formatId ?? selectedFormat?.formatId ?? '')
-            : (selectedFormat?.formatId ?? ''),
-        downloadMode,
-        hasAudio: selectedFormat?.hasAudio ?? false,
-        subtitles: selectedSubtitles,
-        filenameTemplate: '%(title)s.%(ext)s',
-      })
-    } catch (e) {
-      downloadError = String((e as Error)?.message ?? e)
-    } finally {
-      downloading = false
-    }
+  function onDragLeave(event: DragEvent): void {
+    if (!isLinkDrag(event)) return
+    dragDepth = Math.max(0, dragDepth - 1)
+    if (dragDepth === 0) dragging = false
   }
 
-  const canParse = $derived(url.trim().length > 0 && !parsing)
+  function onDrop(event: DragEvent): void {
+    event.preventDefault()
+    dragDepth = 0
+    dragging = false
+    const text =
+      event.dataTransfer?.getData('text/uri-list') || event.dataTransfer?.getData('text/plain') || ''
+    if (!text.trim()) return
+    app.url = text.trim()
+    app.parse()
+  }
+
+  function onWindowDragOver(event: DragEvent): void {
+    if (isLinkDrag(event)) event.preventDefault()
+  }
+
+  function onWindowDrop(event: DragEvent): void {
+    if (isLinkDrag(event)) event.preventDefault()
+  }
+
+  function endDrag(): void {
+    dragging = false
+    dragDepth = 0
+  }
+
+  function useSample(): void {
+    app.url = SAMPLE_URL
+    app.parse()
+  }
+
+  function openRecent(): void {
+    app.setTab('history')
+  }
+
+  function openCookieSettings(): void {
+    app.setTab('settings')
+    app.settingsSection = 'network'
+  }
+
 </script>
 
-<div class="flex flex-col gap-4">
-  <UrlInput
-    value={url}
-    isParsing={parsing}
-    oninput={(v) => { url = v }}
-    onparse={parse}
-    {onopenSettings}
-  />
+<svelte:window
+  ondragover={onWindowDragOver}
+  ondrop={onWindowDrop}
+  ondragend={endDrag}
+/>
 
-  {#if parsing}
-    <div class="flex flex-col gap-2 p-4 bg-surface-container-low rounded-md border border-outline-variant/10">
-      <div class="flex items-center justify-between text-xs">
-        <span class="flex items-center gap-2 text-on-surface-variant">
-          <MaterialIcon name="sync" size={14} class="animate-spin" />
-          {t('url.parsing')}
-        </span>
-        <span class="font-mono text-on-surface-variant">{elapsed.toFixed(1)}s</span>
-      </div>
-      <!-- 不确定进度：解析阶段拿不到真实进度，只表示「正在进行」 -->
-      <div class="h-1 rounded-full bg-outline-variant/25 overflow-hidden">
-        <div class="h-full w-1/3 rounded-full bg-tertiary animate-parse-bar"></div>
-      </div>
-      {#if elapsed > 8}
-        <p class="text-[11px] text-on-surface-variant">
-          {t('url.parseSlowHint')}
-        </p>
-      {/if}
-    </div>
-  {/if}
-
-  {#if parseError}
-    <div class="flex items-start gap-3 p-4 bg-error-container/25 rounded-md border border-error/30">
-      <MaterialIcon name="error" size={20} class="text-error shrink-0 mt-0.5" />
-      <div class="flex-1">
-        <p class="text-sm font-medium text-on-surface">{t('url.parseFailed')}</p>
-        <p class="text-xs text-on-surface-variant mt-1 leading-relaxed">{parseError}</p>
+<div
+  class="download-view"
+  ondragenter={onDragEnter}
+  ondragover={onDragOver}
+  ondragleave={onDragLeave}
+  ondrop={onDrop}
+>
+  {#if dragging}
+    <div class="drop-overlay" aria-hidden="true">
+      <div class="drop-frame">
+        <Icon name="move_to_inbox" size={26} />
+        <strong>{t('drop.title')}</strong>
+        <span>{t('drop.hint')}</span>
       </div>
     </div>
   {/if}
 
-  {#if parsed}
-    <div class="enter">
-      <FormatSelector
-        videoInfo={parsed}
-        {selectedFormat}
-        {selectedAudioFormat}
-        {selectedAudioTrack}
-        {selectedSubtitles}
-        {downloadMode}
-        isDownloading={downloading}
-        onselectVideo={(f) => { selectedFormat = f; selectedAudioFormat = null; downloadMode = 'video' }}
-        onselectAudio={(f) => { selectedAudioFormat = f; downloadMode = 'audio' }}
-        onselectTrack={(tk) => { selectedAudioTrack = tk }}
-        onselectSubtitle={(lang) => {
-          selectedSubtitles = selectedSubtitles.includes(lang)
-            ? selectedSubtitles.filter((l) => l !== lang)
-            : [...selectedSubtitles, lang]
-          downloadMode = selectedSubtitles.length ? 'subtitle' : 'video'
-        }}
-        ondownload={download}
-      />
-    </div>
-  {/if}
+  {#if app.parseState === 'idle'}
+    <section class="home">
+      <h1 class="sr-only">{t('hero.eyebrow')}</h1>
 
-  {#if downloadError}
-    <div class="flex items-start gap-3 p-3 bg-error-container/25 rounded-md border border-error/30">
-      <MaterialIcon name="error" size={18} class="text-error shrink-0 mt-0.5" />
-      <p class="text-xs text-on-surface-variant flex-1">{downloadError}</p>
-    </div>
-  {/if}
+      <header class="home-head">
+        <span class="eyebrow">{t('hero.eyebrow')}</span>
+        <button class="link-btn" onclick={useSample}>
+          {t('hero.sample')}
+          <Icon name="arrow_forward" size={13} />
+        </button>
+      </header>
 
-  {#if !parsed && !parsing && !parseError && !canParse}
-    <!-- 空态：告诉用户下一步做什么，而不是一片空白 -->
-    <div class="flex flex-col items-center justify-center py-16 text-center">
-      <MaterialIcon name="link" size={40} class="text-outline-variant/40 mb-3" />
-      <p class="text-sm font-medium text-on-surface-variant">{t('url.emptyTitle')}</p>
-      <p class="text-xs text-outline mt-1">{t('url.emptyHint')}</p>
-    </div>
+      <div class="capture-block">
+        <CaptureBar />
+        <EffortSlider
+          compact
+          label={t('settings.accel')}
+          value={app.settings.maxConnections}
+          onchange={(value) => app.updateSetting('maxConnections', value)}
+        />
+      </div>
+
+      <ActivityPanel />
+
+      <section class="recent">
+        <div class="section-head">
+          <div class="section-title">
+            <span class="section-label">{t('hero.recent')}</span>
+            <span class="section-count num">{String(recent.length).padStart(2, '0')}</span>
+          </div>
+          <button class="link-btn" onclick={() => app.setTab('history')}>
+            {t('hero.recentAll')}
+            <Icon name="arrow_forward" size={13} />
+          </button>
+        </div>
+
+        <div class="recent-bento">
+          {#if recent[0]}
+            <button
+              class="feature"
+              title={t('history.view')}
+              onclick={openRecent}
+            >
+              <span class="feature-frame">
+                <span
+                  class="feature-thumb"
+                  style="background-image:url({recent[0].thumbnail})"
+                ></span>
+                <span class="feature-shade"></span>
+                <span class="feature-index num">01</span>
+                <span class="feature-quality num">{recent[0].quality}</span>
+                <span class="feature-copy">
+                  <span class="feature-title">{recent[0].title}</span>
+                  <span class="feature-meta num">
+                    {recent[0].ext} · {app.formatBytes(recent[0].sizeBytes)} · {formatClock(recent[0].createdAt)}
+                  </span>
+                </span>
+                <span class="feature-action"><Icon name="history" size={16} /></span>
+              </span>
+            </button>
+          {/if}
+
+          <div class="recent-list">
+            {#each recent.slice(1) as item, index (item.id)}
+              <button class="recent-row" onclick={openRecent}>
+                <span class="row-index num">{String(index + 2).padStart(2, '0')}</span>
+                <span class="row-thumb" style="background-image:url({item.thumbnail})"></span>
+                <span class="row-main">
+                  <span class="row-title">{item.title}</span>
+                  <span class="row-meta num">
+                    {item.quality} · {item.ext} · {app.formatBytes(item.sizeBytes)}
+                  </span>
+                </span>
+                <span class="row-time num">{formatClock(item.createdAt)}</span>
+                <span class="row-arrow"><Icon name="north_east" size={13} /></span>
+              </button>
+            {/each}
+          </div>
+        </div>
+      </section>
+    </section>
+  {:else if app.parseState === 'parsing'}
+    <section class="working">
+      <div class="working-head">
+        <span class="eyebrow">{t('parsing.eyebrow')}</span>
+      </div>
+      <CaptureBar compact />
+      <ParsePanel />
+    </section>
+  {:else if app.parseState === 'error'}
+    <section class="working">
+      <div class="working-head">
+        <span class="eyebrow">{t('error.eyebrow')}</span>
+      </div>
+      <CaptureBar compact />
+
+      <div class="parse-error view-enter">
+        <div class="error-icon">
+          <Icon name="error" size={22} />
+        </div>
+        <div class="error-body">
+          <h2>{t('error.title')}</h2>
+          <p class="error-message">{app.parseError}</p>
+          <p class="error-hint">{t('error.hint')}</p>
+
+          {#if app.parseErrorDetail}
+            <details class="error-details">
+              <summary>
+                <Icon name="code" size={13} />
+                <span>Extractor output</span>
+              </summary>
+              <pre class="scroll">{app.parseErrorDetail}</pre>
+            </details>
+          {/if}
+
+          <div class="error-actions">
+            <button class="btn btn-primary" onclick={() => app.parse()}>
+              <Icon name="refresh" size={16} />
+              <span>{t('error.retry')}</span>
+            </button>
+            <button class="btn btn-ghost" onclick={openCookieSettings}>
+              <Icon name="cookie" size={16} />
+              <span>{t('error.settings')}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+  {:else if app.parseState === 'done' && app.video}
+    <section class="working working--result">
+      <div class="working-head">
+        <div class="result-nav">
+          <button class="btn btn-ghost btn-sm back-btn" onclick={() => app.clearResult()}>
+            <Icon name="arrow_back" size={15} />
+            <span>{t('result.back')}</span>
+          </button>
+          <span class="eyebrow">{t('result.eyebrow')}</span>
+        </div>
+      </div>
+      <CaptureBar compact />
+      <ParseResult />
+    </section>
   {/if}
 </div>
+
+<style>
+  .download-view {
+    position: relative;
+    min-height: 100%;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+  .working {
+    max-width: 760px;
+    margin: 0 auto;
+    padding-top: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .working--result {
+    max-width: 900px;
+  }
+  .working-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 22px;
+  }
+  .result-nav {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .back-btn {
+    padding: 0 9px;
+  }
+
+  /* ---------- 首屏 ---------- */
+  .home {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-top: 0;
+  }
+  .home-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    min-height: 18px;
+  }
+
+  .capture-block {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .link-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--accent-deep);
+    font-family: var(--font-ui);
+    font-size: 11px;
+    font-weight: 600;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    text-decoration-color: color-mix(in oklab, var(--accent-deep) 30%, transparent);
+  }
+  .link-btn:hover {
+    text-decoration-color: currentColor;
+  }
+
+  /* ---------- 区块标题 ---------- */
+  .section-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding-bottom: 9px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 10px;
+  }
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-label {
+    font-family: var(--font-code);
+    font-size: 9.5px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--color-on-surface-variant);
+  }
+  .section-count {
+    font-size: 9.5px;
+    color: var(--color-on-surface-variant);
+    opacity: 0.65;
+  }
+
+  /* ---------- 最近下载：主卡 + 列表 ---------- */
+  .recent-bento {
+    display: grid;
+    grid-template-columns: minmax(0, 1.22fr) minmax(0, 1fr);
+    gap: 14px;
+    align-items: stretch;
+  }
+
+  .feature {
+    display: block;
+    padding: 0;
+    border: 0;
+    background: none;
+    text-align: left;
+  }
+  .feature-frame {
+    position: relative;
+    display: block;
+    aspect-ratio: 21 / 9;
+    border-radius: var(--radius-card);
+    border: 1px solid var(--rule);
+    background: var(--paper-sunk);
+    overflow: hidden;
+  }
+  .feature-shade {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      to top,
+      color-mix(in oklab, var(--panel-dark) 88%, transparent) 0%,
+      color-mix(in oklab, var(--panel-dark) 34%, transparent) 46%,
+      transparent 72%
+    );
+  }
+  .feature-thumb {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+    transition: transform 420ms var(--ease-out);
+  }
+  .feature:hover .feature-thumb {
+    transform: scale(1.035);
+  }
+  .feature-index {
+    position: absolute;
+    top: 8px;
+    left: 9px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: color-mix(in oklab, var(--panel-dark) 70%, transparent);
+    color: var(--panel-dark-fg);
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .feature-quality {
+    position: absolute;
+    top: 8px;
+    right: 9px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: color-mix(in oklab, var(--panel-dark) 62%, transparent);
+    color: var(--panel-dark-fg);
+    font-size: 9px;
+  }
+  .feature-action {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    opacity: 0;
+    transition: opacity var(--dur-base) var(--ease-out);
+  }
+  .feature-action :global(.msi) {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: color-mix(in oklab, var(--panel-dark) 74%, transparent);
+    color: var(--panel-dark-fg);
+    font-size: 16px !important;
+  }
+  .feature:hover .feature-action {
+    opacity: 1;
+  }
+  .feature-copy {
+    position: absolute;
+    left: 12px;
+    right: 44px;
+    bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    color: var(--panel-dark-fg);
+  }
+  .feature-title {
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 600;
+    line-height: 1.3;
+    letter-spacing: -0.02em;
+    color: var(--panel-dark-fg);
+    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.25);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .feature-meta {
+    font-size: 9.5px;
+    color: color-mix(in oklab, var(--panel-dark-fg) 72%, transparent);
+  }
+
+  .recent-list {
+    display: flex;
+    flex-direction: column;
+    border-top: 1px solid var(--rule);
+  }
+  .recent-row {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 22px 58px minmax(0, 1fr) auto 16px;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 8px 6px;
+    border: 0;
+    border-bottom: 1px solid var(--rule);
+    background: none;
+    text-align: left;
+    transition: background-color var(--dur-fast) var(--ease-out);
+  }
+  .recent-row:last-child {
+    border-bottom: 0;
+  }
+  .recent-row:hover {
+    background: color-mix(in oklab, var(--accent-wash) 40%, transparent);
+  }
+  .row-index {
+    font-size: 10px;
+    color: var(--accent-deep);
+  }
+  .row-thumb {
+    display: block;
+    width: 58px;
+    height: 33px;
+    border-radius: var(--radius-small);
+    border: 1px solid var(--rule);
+    background-color: var(--paper-sunk);
+    background-size: cover;
+    background-position: center;
+  }
+  .row-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .row-title {
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .row-meta {
+    font-size: 9px;
+    color: var(--color-on-surface-variant);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .row-time {
+    font-size: 9px;
+    color: var(--color-on-surface-variant);
+  }
+  .row-arrow {
+    display: grid;
+    place-items: center;
+    color: var(--color-on-surface-variant);
+    opacity: 0;
+    transition: opacity var(--dur-base) var(--ease-out);
+  }
+  .recent-row:hover .row-arrow {
+    opacity: 1;
+    color: var(--accent-deep);
+  }
+
+  /* ---------- 拖放区 ---------- */
+  .drop-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    display: grid;
+    place-items: center;
+    border: 1px dashed color-mix(in oklab, var(--accent-deep) 48%, transparent);
+    border-radius: 12px;
+    background: color-mix(in oklab, var(--paper) 88%, transparent);
+  }
+  .drop-frame {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+    padding: 26px 42px;
+    border: 1px dashed color-mix(in oklab, var(--accent-deep) 35%, transparent);
+    border-radius: 10px;
+    background: var(--paper-raised);
+    box-shadow: var(--shadow-sheet);
+  }
+  .drop-frame :global(.msi) {
+    color: var(--accent-deep);
+  }
+  .drop-frame strong {
+    font-family: var(--font-display);
+    font-size: 15px;
+    letter-spacing: -0.02em;
+    color: var(--ink-strong);
+  }
+  .drop-frame span {
+    font-size: 11.5px;
+    color: var(--color-on-surface-variant);
+  }
+
+  /* ---------- 解析失败 ---------- */
+  .parse-error {
+    display: flex;
+    gap: 14px;
+    padding: 20px;
+    border: 1px solid color-mix(in oklab, var(--danger) 26%, transparent);
+    border-radius: 10px;
+    background: color-mix(in oklab, var(--danger) 4%, var(--paper-raised));
+  }
+  .error-icon {
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    flex: none;
+    border-radius: 8px;
+    background: color-mix(in oklab, var(--danger) 10%, transparent);
+    color: var(--danger);
+  }
+  .error-body {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+  }
+  .error-body h2 {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--ink-strong);
+  }
+  .error-message {
+    margin: 0;
+    font-size: 12px;
+    color: var(--danger);
+  }
+  .error-hint {
+    margin: 0;
+    font-size: 11.5px;
+    line-height: 1.65;
+    color: var(--color-on-surface-variant);
+  }
+  .error-details {
+    font-size: 11px;
+    color: var(--color-on-surface-variant);
+  }
+  .error-details summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    color: var(--color-on-surface-variant);
+  }
+  .error-details pre {
+    margin: 8px 0 0;
+    padding: 10px 12px;
+    max-height: 120px;
+    overflow: auto;
+    border-radius: 6px;
+    border: 1px solid var(--rule);
+    background: var(--paper-deep);
+    font-family: var(--font-code);
+    font-size: 10px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .error-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  /* 桌面最小窗口 1000×700：首页必须一屏看完 */
+  @media (max-height: 820px) and (min-width: 821px) {
+    .home {
+      gap: 7px;
+    }
+    .capture-block {
+      gap: 6px;
+    }
+    .section-head {
+      padding-bottom: 6px;
+      margin-bottom: 8px;
+    }
+    .feature-frame {
+      aspect-ratio: 3.15 / 1;
+    }
+    .feature-title {
+      font-size: 14px;
+    }
+    .feature-meta {
+      font-size: 9px;
+    }
+    .recent-row {
+      padding: 4px 6px;
+    }
+    .recent-row .row-thumb {
+      width: 48px;
+      height: 27px;
+    }
+    .row-title {
+      font-size: 11px;
+    }
+  }
+
+  @media (max-width: 760px) {
+    .recent-bento {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .recent-list {
+      border-top: 0;
+    }
+    .recent-row {
+      min-height: 62px;
+      border-top: 1px solid var(--rule);
+    }
+  }
+</style>

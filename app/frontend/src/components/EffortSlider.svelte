@@ -126,6 +126,7 @@
   class:is-compact={compact}
   class:is-dragging={dragging}
   class:is-hot={index >= 2}
+  class:is-top={index === STOPS.length - 1}
 >
   <div class="effort-head">
     {#if label}<span class="effort-title">{label}</span>{/if}
@@ -292,6 +293,14 @@
     mix-blend-mode: screen;
     /* 浅色主题下 screen 会让橙色发白，改用 multiply 更贴合纸感 */
     z-index: 1;
+    transition: filter 140ms var(--ease-out);
+  }
+  /* 拖动时整片能量增亮：给「正在用力」的即时反馈。
+     参考实现用的是 saturate/brightness/contrast 三项，
+     这里保留同样的比例——只调 brightness 会变得「刺眼但不鲜艳」。 */
+  .is-dragging .effort-radiation {
+    filter: saturate(1.45) brightness(1.28) contrast(1.06);
+    transition: none;
   }
   :global([data-theme='light']) .effort-radiation,
   :global(.theme-light) .effort-radiation {
@@ -419,6 +428,18 @@
     pointer-events: none;
     z-index: 2;
   }
+  /* 最高档：整条轨道极缓呼吸（1.9s）。
+     参考实现的 `re-effort-dark-breathe` 做的是同一件事——
+     静置时也有「满负荷」的暗示，而不是完全静止。
+     reduced-motion 下由文件末尾的全局规则关掉。 */
+  @keyframes effort-breathe {
+    0%, 100% { filter: brightness(1); }
+    50% { filter: brightness(1.06); }
+  }
+  .effort.is-top .effort-track {
+    animation: effort-breathe 1.9s ease-in-out infinite;
+  }
+
   .is-dragging .effort-thumb,
   .effort:hover .effort-thumb {
     box-shadow:
@@ -427,7 +448,13 @@
   }
   .is-dragging .effort-thumb {
     transform: translate(-50%, -50%) scale(1.12);
+  }  /* 拖动时拇指微放大：给出「抓住了」的触觉替代反馈。
+     1.07 是参考实现的取值——再大就显得笨重。 */
+  .is-dragging .effort-thumb {
+    transform: translate(-50%, -50%) scale(1.07);
+    transition: none;
   }
+
 
   .effort-input {
     position: absolute;

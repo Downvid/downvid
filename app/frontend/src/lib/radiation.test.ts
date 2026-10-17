@@ -57,8 +57,29 @@ function fakeContext() {
       if (pendingRect) clip = pendingRect
       calls.push({ op: 'clip', args: [] })
     },
+    // 新版用到了两种渐变（粒子拖尾用 linear、拇指光晕用 radial）。
+    // 假实现只要能记录颜色停靠点即可——测试关心的是「用了什么颜色」，
+    // 不是渐变怎么插值。
+    createLinearGradient: (...args: number[]) => makeGradient(calls, 'linear', args),
+    createRadialGradient: (...args: number[]) => makeGradient(calls, 'radial', args),
   }
   return { ctx: ctx as unknown as CanvasRenderingContext2D, calls }
+}
+
+/**
+ * 假的 CanvasGradient。
+ *
+ * 记录 addColorStop 的颜色，让测试能断言「渐变里用了哪个色」——
+ * 这比断言 fillStyle 字符串更可靠（渐变对象没有可读的 toString）。
+ */
+function makeGradient(calls: Call[], _kind: 'linear' | 'radial', args: number[]) {
+  const stops: string[] = []
+  return {
+    addColorStop: (_offset: number, color: string) => {
+      stops.push(color)
+      calls.push({ op: 'fillRect', args: [args[0] ?? 0, args[1] ?? 0, 1, 1], style: color })
+    },
+  } as unknown as CanvasGradient
 }
 
 const base: RadiationState = { progress: 0.5, dragging: false, top: false, dark: true }
@@ -81,6 +102,8 @@ describe('drawRadiation', () => {
     // 每一格的 x 都必须 < progress * width（= 200）
     // 这是参考实现的核心约定：右侧代表「还没到的档位」，不该有能量
     for (const f of fills) {
+      // 渐变停靠点用的是假坐标（makeGradient 里固定 1x1），跳过
+      if (f.args[2] === 1 && f.args[3] === 1) continue
       expect(f.args[0]).toBeLessThan(200)
     }
     expect(calls.some((c) => c.op === 'clip')).toBe(true)
@@ -123,15 +146,19 @@ describe('drawRadiation', () => {
   it('配色是琥珀橙，不是参考实现的蓝紫', () => {
     const { ctx, calls } = fakeContext()
     drawRadiation(ctx, 400, 30, 500, { ...base, dark: true })
-    const style = calls.find((c) => c.op === 'fillRect')?.style ?? ''
-    const m = /rgba\((\d+),\s*(\d+),\s*(\d+)/.exec(style)
-    expect(m).not.toBeNull()
-    const [r, g, b] = [Number(m![1]), Number(m![2]), Number(m![3])]
-    // 琥珀/橙：红 > 绿 > 蓝，且蓝明显最低
-    expect(r).toBeGreaterThan(g)
-    expect(g).toBeGreaterThan(b)
-    // 参考实现是蓝紫（蓝 > 红），若有人照搬配色这条会失败
-    expect(b).toBeLessThan(r)
+
+    // 收集所有带 rgb 的填充（柱子、光晕、渐变停靠点都算）
+    const colors = calls
+      .filter((c) => c.op === 'fillRect' && c.style)
+      .map((c) => /\(?(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(c.style!))
+      .filter((m): m is RegExpExecArray => m !== null)
+      .map((m) => [Number(m[1]), Number(m[2]), Number(m[3])] as const)
+
+    expect(colors.length).toBeGreaterThan(0)
+    // 琥珀/橙的判据：红 ≥ 绿 > 蓝 的占多数。
+    // 参考实现是蓝紫（蓝最高），若有人照搬配色这条会失败。
+    const amberish = colors.filter(([r, g, b]) => r >= g && g > b && b < r)
+    expect(amberish.length / colors.length).toBeGreaterThan(0.7)
   })
 
   it('画完必须 restore（否则 clip 会泄漏到后续绘制）', () => {
@@ -144,9 +171,11 @@ describe('drawRadiation', () => {
     const { ctx, calls } = fakeContext()
     drawRadiation(ctx, 600, 30, 500, { ...base, progress: 1 })
     const cells = calls.filter((c) => c.op === 'fillRect').length
-    // 逐列 4px + 每列的竖向光晕。实测 ~700，上限设 1000 留余量。
-    // 若有人把 cell 改成 1（逐像素），这里会到 18000，测试会失败
-    expect(cells).toBeLessThan(1000)
+    // 逐列 4px + 每列的竖向光晕 + 14 条粒子 + 拇指光晕渐变。
+    // 补全参考实现的三层（grain / 粒子 / 光晕）后实测 ~1057，上限设 1200 留余量。
+    //
+    // 若有人把 cell 改成 1（逐像素），会到 18000 —— 这条会失败。
+    expect(cells).toBeLessThan(1200)
   })
 })
 

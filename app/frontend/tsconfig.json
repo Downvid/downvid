@@ -15,8 +15,6 @@
   "include": [
     "src/**/*.ts",
     "src/**/*.svelte",
-    "demo/**/*.ts",
-    "demo/**/*.svelte",
-    "demo/**/*.svelte.ts"
+    "src/**/*.svelte.ts"
   ]
 }
