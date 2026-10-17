@@ -24,7 +24,6 @@
   <a href="https://github.com/yxxbc/downvid/actions/workflows/ci-windows.yml"><img src="https://img.shields.io/github/actions/workflow/status/yxxbc/downvid/ci-windows.yml?branch=main&label=CI%20Windows&logo=github-actions&logoColor=white&color=16a34a" alt="CI Windows" /></a>
   <a href="https://github.com/yxxbc/downvid/actions/workflows/codeql.yml"><img src="https://img.shields.io/github/actions/workflow/status/yxxbc/downvid/codeql.yml?branch=main&label=CodeQL&logo=github-actions&logoColor=white&color=16a34a" alt="CodeQL" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-7c3aed?style=flat&logo=open-source-initiative&logoColor=white" alt="MIT License" /></a>
-  <a href="https://trendshift.io/repositories/180707?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-180707" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/180707/daily?language=TypeScript" alt="yxxbc%2Fdownvid | Trendshift" width="250" height="55"/></a>
 </p>
 
 <p>
@@ -42,7 +41,11 @@
 <p>
   <strong>简体中文</strong> | <a href="./README.md">English</a>
 </p>
-<a href="https://www.producthunt.com/products/github-460eee39-2e5c-447d-b207-531e944feebd?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-downvid" target="_blank" rel="noopener noreferrer"><img alt="Downvid - Downvid | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1280091&amp;theme=light&amp;t=1792127974682"></a>
+
+<p>
+  <a href="https://www.producthunt.com/products/github-460eee39-2e5c-447d-b207-531e944feebd?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-downvid" target="_blank" rel="noopener noreferrer"><img alt="Downvid - Downvid | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1280091&amp;theme=light&amp;t=1792127974682"></a>
+  <a href="https://trendshift.io/repositories/180707?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-180707" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/180707/daily?language=TypeScript" alt="yxxbc/downvid | Trendshift" width="250" height="55" /></a>
+</p>
 </div>
 
 ---
