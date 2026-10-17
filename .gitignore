@@ -80,3 +80,6 @@ docker/node_modules/
 
 # 一次性 QA 脚本（本机截图/抓取用，硬编码了本机浏览器路径，不入库）
 .qa/
+
+# wails dev 生成的临时 plist（Info.plist 才需要提交）
+app/build/darwin/Info.dev.plist

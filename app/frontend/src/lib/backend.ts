@@ -279,6 +279,8 @@ export async function parseUrl(url: string, proxy = ''): Promise<ParseOutcome> {
 // ===== 下载 =====
 
 export interface StartDownloadParams {
+  /** 文件名模板（来自用户设置；后端会在缺少清晰度字段时自动补 `[height]p`） */
+  filenameTemplate?: string
   taskId: string
   url: string
   formatId: string
@@ -309,7 +311,10 @@ export async function startDownload(
       hasAudio: p.hasAudio,
       subtitles: p.subtitles,
       outputDir: p.outputDir,
-      filenameTemplate: '%(title)s.%(ext)s',
+      // 用**用户设置**里的模板。早先这里写死 `'%(title)s.%(ext)s'`,
+      // 于是设置页改了文件名模板对下载毫无影响——用户改完再下载，
+      // 文件名还是老样子。
+      filenameTemplate: p.filenameTemplate,
     })
     return { ok: res.ok, message: res.error, missingKind: res.missingKind }
   } catch (e) {

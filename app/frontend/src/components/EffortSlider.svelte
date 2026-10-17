@@ -174,7 +174,24 @@
   })
 </script>
 
-<div class="effort" class:is-compact={compact}>
+<!--
+  `dragging` 用外层容器的指针事件驱动，**不挂在 Slider.Root 上**：
+  bits-ui 的 Root 类型只接受它自己声明过的 props，`onPointerDown` 不在其中
+  （类型检查会报错，运行时也不会被转发到真正的 DOM 节点上）。
+  挂在容器上还能顺带覆盖「在轨道空白处按下」的情况——那同样该算拖拽中。
+
+  `pointercancel` / `lostpointercapture` 必须一起处理：拖到窗口外松手时
+  浏览器只发这两个事件，不补发 pointerup，否则 `dragging` 会永远卡在 true，
+  辐射层就一直保持「拖拽中」的高亮。
+-->
+<div
+  class="effort"
+  class:is-compact={compact}
+  onpointerdown={() => (dragging = true)}
+  onpointerup={() => (dragging = false)}
+  onpointercancel={() => (dragging = false)}
+  onlostpointercapture={() => (dragging = false)}
+>
   <div class="effort-head">
     {#if label}<span class="effort-title">{label}</span>{/if}
     <span class="effort-readout">
@@ -214,8 +231,6 @@
     step={1}
     bind:value={localIndex}
     onValueCommit={(v) => commit(v)}
-    onPointerDown={() => (dragging = true)}
-    onPointerUp={() => (dragging = false)}
     aria-label={label || t('settings.maxConnections')}
     class="effort-slider"
     data-top={localIndex === MAX_INDEX ? '' : undefined}

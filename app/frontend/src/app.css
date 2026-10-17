@@ -979,8 +979,14 @@ select.field {
     grid-template-columns: minmax(0, 1fr) 312px;
   }
 }
+/* 880~760 之间：侧栏再收一档，否则内容区被压到 480 以下，格式卡片必然换行 */
+@media (max-width: 860px) {
+  .workarea.with-rail {
+    grid-template-columns: minmax(0, 1fr) 268px;
+  }
+}
 @media (max-height: 760px) {
-  /* 桌面最小窗口 1000×700：把纵向留白压一点，保证首页和解析结果都能完整看到 */
+  /* 小窗口（最小 880×560）：把纵向留白压一点，保证首页和解析结果都能完整看到 */
   .view {
     padding-top: 14px;
     padding-bottom: 14px;

@@ -75,22 +75,25 @@ type App struct {
 	imageClient *image.Client
 
 	// 下载相关（由 bindings_download.go 使用）
-	runner           *download.Runner
-	proxy            string
-	accelEnabled     bool
-	accelConnections int
+	runner *download.Runner
+
+	// proxy 是**当前生效**的代理。
+	//
+	// 与加速设置不同，它必须缓存在内存里：`Parse` 每次都会带上它，
+	// 而每次解析都去读一次设置文件纯属浪费。启动时从设置载入（见 startup），
+	// `UpdateSettings` / `ResetSettings` 写回（见 syncRuntimeSettings）。
+	proxy string
 
 	mu sync.Mutex
 }
 
 // NewApp 构造绑定对象。
+//
+// 加速设置**不放在这里**：它必须每次从 settings.json 读（见
+// bindings_download.go 的 acceleration）。留一份内存副本就会有
+// 「设置页显示 16、实际跑 8」这种漂移，而那正是之前的 bug。
 func NewApp() *App {
-	return &App{
-		runner: download.NewRunner(),
-		// 默认开启加速、8 连接——与 shared/acceleration.ts 的 normalizeAcceleration 一致
-		accelEnabled:     true,
-		accelConnections: 8,
-	}
+	return &App{runner: download.NewRunner()}
 }
 
 // startup 是 Wails 的启动回调，拿到可用于发事件的 context。
@@ -104,6 +107,14 @@ func (a *App) startup(ctx context.Context) {
 	if err := os.MkdirAll(a.downloadsDir, 0o755); err != nil {
 		log.Printf("[downvid] 无法创建下载目录 %s：%v", a.downloadsDir, err)
 	}
+
+	// 把设置里「运行时要用到」的字段载入内存。
+	//
+	// 不做这一步的话，**重启后代理设置不生效**：settings.json 里有 proxy，
+	// 但内存里的 a.proxy 只在 NewApp() 里被置空过，之后没人读文件。
+	// 用户会以为「代理设置丢了」，实际是从来没被读回来。
+	a.syncRuntimeSettings()
+
 	log.Printf("[downvid] version=%s dataDir=%s downloads=%s", version, a.dataDir, a.downloadsDir)
 }
 

@@ -44,7 +44,7 @@
 
   <span class="grow"></span>
 
-  <button class="status-btn" onclick={() => app.toast(t('toast.folder'))} title={t('status.openFolder')}>
+  <button class="status-btn" onclick={() => app.openDownloadDir()} title={t('status.openFolder')}>
     <Icon name="folder" size={13} />
     <span>{t('status.storage', { size: app.freeStorageLabel })}</span>
   </button>

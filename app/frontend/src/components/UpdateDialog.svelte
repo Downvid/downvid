@@ -4,7 +4,7 @@
   import { t } from '../lib/i18n.svelte'
   
   const percent = $derived(
-    app.update.status === 'downloading' ? Math.round(app.update.progress * 100) : 0,
+    app.updateInfo.status === 'downloading' ? Math.round(app.updateInfo.progress * 100) : 0,
   )
 </script>
 
@@ -21,7 +21,7 @@
       <div class="dialog-heading">
         <h2 id="update-title">{t('update.title')}</h2>
         <p class="num">
-          {t('update.subtitle', { version: app.updateState.version ?? '', size: '', date: app.updateState.date ?? '' })}
+          {t('update.subtitle', { version: app.updateInfo.version ?? '', size: '', date: app.updateInfo.date ?? '' })}
         </p>
       </div>
       <button class="icon-btn" title={t('common.close')} aria-label={t('common.close')} onclick={() => (app.dialog = 'none')}>
@@ -39,18 +39,18 @@
         </ul>
       </section>
 
-      {#if app.update.status === 'downloading'}
+      {#if app.updateInfo.status === 'downloading'}
         <section class="progress-block">
           <div class="progress-row">
             <span>{t('update.downloading', { percent })}</span>
             <span class="num">{percent}%</span>
           </div>
           <div class="progress-track">
-            <div class="progress-fill" style="transform:scaleX({app.update.progress})"></div>
+            <div class="progress-fill" style="transform:scaleX({app.updateInfo.progress})"></div>
           </div>
           <p class="progress-hint">{t('about.update')} · 24.8 MB</p>
         </section>
-      {:else if app.update.status === 'ready'}
+      {:else if app.updateInfo.status === 'downloaded'}
         <section class="ready-block">
           <Icon name="download_done" size={18} />
           <div>
@@ -62,10 +62,10 @@
     </div>
 
     <footer class="dialog-foot">
-      {#if app.update.status === 'downloading'}
+      {#if app.updateInfo.status === 'downloading'}
         <span class="foot-hint">{t('update.doNotClose')} · 24.8 MB</span>
         <button class="btn btn-ghost" onclick={() => (app.dialog = 'none')}>{t('common.close')}</button>
-      {:else if app.update.status === 'ready'}
+      {:else if app.updateInfo.status === 'downloaded'}
         <button class="btn btn-ghost" onclick={() => (app.dialog = 'none')}>{t('update.later')}</button>
         <button class="btn btn-primary" onclick={() => app.installUpdate()}>
           <Icon name="restart_alt" size={16} />

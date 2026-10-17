@@ -206,27 +206,28 @@ func TestScanRespectsDeadline(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resetScanBudget()
-	scanDeadline = time.Now().Add(-1 * time.Second) // 已过期
-	if got := scanDir(root, BinaryName(KindFFmpeg), 0); got != "" {
+	b := newBudget()
+	b.scanDeadline = time.Now().Add(-1 * time.Second) // 已过期
+	if got := scanDir(b, root, BinaryName(KindFFmpeg), 0); got != "" {
 		t.Errorf("超过时限仍继续扫描：%s", got)
 	}
 }
 
-// findOne 必须重置时限，否则第一个依赖超时后其余都扫不了。
+// 保底扫描开始前必须拿到**新鲜的**扫描时限。
 //
-// 断言「时限被换成了比原来更晚的值」，而不是「时限在当前时间之后」：
-// 后者依赖**扫描实际耗时**——Windows 上 ffprobe 缺失会真的扫满 3 秒预算，
-// 时限随之落在过去，断言失败；macOS 上候选目录命中、不触发扫描，断言通过。
-// 同一份代码两个平台结论不同，说明断言选错了对象（CI 抓到的就是这个）。
-func TestFindOneResetsScanDeadline(t *testing.T) {
-	stale := time.Now().Add(-1 * time.Second)
-	scanDeadline = stale
-
-	_ = FindOne(KindFFprobe, Options{ManagedDir: t.TempDir()})
-
-	if !scanDeadline.After(stale) {
-		t.Errorf("FindOne 未重置扫描时限：仍是 %v", scanDeadline)
+// 断言「扫描一开始的时限在当前时间之后」，而不是「探测结束后包里某个
+// 全局变量比之前更晚」：后者依赖扫描实际耗时与包级状态，在 Windows 上
+// （ffprobe 缺失会真的扫满预算）与 macOS 上（候选目录命中、不扫描）
+// 会得出相反结论——同一份代码两个平台结论不同，说明断言选错了对象。
+func TestScanBudgetResetIsFresh(t *testing.T) {
+	b := newBudget()
+	b.scanDeadline = time.Now().Add(-time.Second) // 假装上一轮已过期
+	b.resetScan()
+	if b.scanExpired(time.Now()) {
+		t.Errorf("resetScan 之后仍判定为过期：%v", b.scanDeadline)
+	}
+	if b.scanDirsLeft != scanMaxDirs {
+		t.Errorf("resetScan 之后目录预算 = %d，期望 %d", b.scanDirsLeft, scanMaxDirs)
 	}
 }
 

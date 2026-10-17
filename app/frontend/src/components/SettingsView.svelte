@@ -9,7 +9,8 @@
   import Icon from './Icon.svelte'
   import EffortSlider from './EffortSlider.svelte'
   import { app } from '../lib/store.svelte'
-  import type { SettingsSection } from '../lib/store.svelte'
+  import type { SettingsSection } from '../lib/types'
+  import type { DepItem } from '../lib/types'
   import { t } from '../lib/i18n.svelte'
   import { APP_VERSION } from '../lib/constants'
   import type { AppSettings as DemoSettings } from '../lib/settings'
@@ -20,7 +21,7 @@
     { id: 'acceleration', key: 'settings.navAcceleration', icon: 'speed' },
     { id: 'deps', key: 'settings.navDeps', icon: 'dns' },
     { id: 'update', key: 'settings.navUpdate', icon: 'system_update' },
-    { id: 'interface', key: 'settings.navInterface', icon: 'palette' },
+    { id: 'appearance', key: 'settings.navInterface', icon: 'palette' },
   ]
 
   const qualityOptions = [
@@ -59,7 +60,9 @@
     { value: 'round', key: 'settings.radiusRound' },
   ] as const
 
-  const aria2Dep = $derived(app.deps.find((dep) => dep.id === 'aria2c') ?? null)
+  // 注意：后端的 kind 是 `aria2`，`aria2c` 只是二进制名。按 'aria2c' 找会永远
+  // 匹配不到（加速页长期显示「未找到」就是这么来的）。
+  const aria2Dep = $derived(app.deps.find((dep) => dep.id === 'aria2') ?? null)
 
   type TextKey = 'downloadDir' | 'filenameTemplate' | 'cookieFile' | 'proxy'
 
@@ -92,12 +95,15 @@
   }
 
   function onCheckUpdate(): void {
-    if (app.update.status === 'checking') return
-    if (app.update.status === 'available') app.openUpdateDialog()
+    if (app.updateInfo.status === 'checking') return
+    if (app.updateInfo.status === 'available') app.openUpdateDialog()
     else void app.checkUpdate()
   }
 
-  function depSourceLabel(dep: { source: 'system' | 'managed' | 'none' }): string {
+  function depSourceLabel(dep: DepItem): string {
+    // 后端可能给 system / managed / manual / scanned，还有空串（未找到）。
+    // 早先这里只声明了 'none'，而实际数据里根本没有 'none' 这个值：
+    // 于是「找到的依赖」也会走到 else 分支，全部显示成「系统安装」。
     return dep.source === 'managed' ? t('settings.depsManaged') : t('settings.depsSystem')
   }
 </script>
@@ -152,7 +158,7 @@
               class="icon-btn icon-btn--bordered"
               title={t('status.openFolder')}
               aria-label={t('status.openFolder')}
-              onclick={() => app.toast(t('toast.folder'))}
+              onclick={() => app.openDownloadDir()}
             >
               <Icon name="folder" size={16} />
             </button>
@@ -229,7 +235,7 @@
                 class="icon-btn icon-btn--bordered"
                 title={t('settings.cookieFile')}
                 aria-label={t('settings.cookieFile')}
-                onclick={() => app.toast(t('toast.folder'))}
+                onclick={() => app.openCookieDir()}
               >
                 <Icon name="folder" size={16} />
               </button>
@@ -332,7 +338,7 @@
                 </span>
               {:else}
                 <span class="status-note">{t('settings.aria2Missing')}</span>
-                <button type="button" class="btn btn-ghost btn-sm" onclick={() => app.installDep('aria2c')}>
+                <button type="button" class="btn btn-ghost btn-sm" onclick={() => app.installDep('aria2')}>
                   <Icon name="download" size={14} />
                   <span>{t('settings.depsDownload')}</span>
                 </button>
@@ -489,14 +495,14 @@
             type="button"
             class="btn btn-primary"
             onclick={onCheckUpdate}
-            disabled={app.update.status === 'checking'}
+            disabled={app.updateInfo.status === 'checking'}
           >
-            {#if app.update.status === 'checking'}
+            {#if app.updateInfo.status === 'checking'}
               <Icon name="progress_activity" size={15} class="spin" />
               <span>{t('settings.checking')}</span>
-            {:else if app.update.status === 'available'}
+            {:else if app.updateInfo.status === 'available'}
               <Icon name="new_releases" size={15} />
-              <span>{t('about.updateAvailable', { version: app.updateState.version ?? '' })}</span>
+              <span>{t('about.updateAvailable', { version: app.updateInfo.version ?? '' })}</span>
             {:else}
               <Icon name="refresh" size={15} />
               <span>{t('settings.checkNow')}</span>

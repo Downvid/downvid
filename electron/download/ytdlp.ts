@@ -111,13 +111,53 @@ export interface BuildArgsContext {
   jsRuntime: JsRuntime | null
 }
 
+
+/** 设置里没指定时的默认模板（与 frontend/src/lib/settings.ts 的默认值逐字一致） */
+const DEFAULT_FILENAME_TEMPLATE = '%(title)s.%(ext)s'
+
+/**
+ * 自动追加的清晰度后缀。
+ *
+ * 用 `%(height,format_id)s` 而不是 `%(height)sp`：高度可能不存在
+ * （纯音频、本地文件、某些直链），那时 `%(height)sp` 会渲染成 `[NAp]`。
+ * yt-dlp 的 `%(a,b)s` 取第一个非空值，退到 format_id 至少有 `mp4` 可读。
+ *
+ * yt-dlp **没有**「值为空就整段消失」的写法——试过 `%(h&{}|…)s` 与
+ * `%(h>0&…)s`，都会把 `%s` 当字面量输出。
+ */
+const QUALITY_SUFFIX = ' [%(height,format_id)s]'
+
+/**
+ * 模板里是否已经有区分清晰度的字段。
+ *
+ * 除了 `%(height)s` 这类占位符，**字面量的 `[1080p]` 也算**：
+ * 前端已经按当前所选格式补过后缀（它知道 height，能避免把没有分辨率
+ * 的格式写成 `[NAp]`），后端再补一次会变成 `标题 [1080p] [NAp].mp4`。
+ */
+const HAS_QUALITY_FIELD = /%\((?:height|resolution|format_id|format|quality)\)|\[\d{3,4}p\]/
+
 export function buildYtdlpArgs(options: DownloadOptions, outputDir: string, ctx: BuildArgsContext): string[] {
   const isSubtitleOnly = options.downloadMode === 'subtitle'
   const isAudioOnly = options.downloadMode === 'audio'
   const isYoutube = options.url.includes('youtube.com') || options.url.includes('youtu.be')
   const connections = accelerationConnections(options.acceleration)
-  const userTemplate = options.filenameTemplate || '%(title)s'
-  const completeTemplate = userTemplate.includes('%(ext)') ? userTemplate : `${userTemplate}.%(ext)s`
+  const userTemplate = options.filenameTemplate || DEFAULT_FILENAME_TEMPLATE
+  let completeTemplate = userTemplate.includes('%(ext)') ? userTemplate : `${userTemplate}.%(ext)s`
+  // 模板里没有任何区分清晰度的字段时补一个 `[height]p`。
+  //
+  // 默认模板 `%(title)s.%(ext)s` 会让同一视频的 1080P 与 4K 算出同一个文件名：
+  // 先下 1080P 再下 4K 时，yt-dlp 发现文件已存在就**跳过并报成功**，
+  // 用户以为下到了 4K，实际还是原来那个文件。
+  //
+  // 不用 `--force-overwrites` 绕过的原因：它与 `--no-continue` 等价，
+  // 会把「暂停后从 .part 续传」一起关掉。靠文件名区分清晰度更安全。
+  if (!HAS_QUALITY_FIELD.test(completeTemplate)) {
+    const idx = completeTemplate.lastIndexOf('.%(ext)s')
+    completeTemplate =
+      idx >= 0
+        ? `${completeTemplate.slice(0, idx)}${QUALITY_SUFFIX}${completeTemplate.slice(idx)}`
+        : `${completeTemplate}${QUALITY_SUFFIX}`
+  }
   const useAria2 = !isSubtitleOnly && connections > 1 && !!ctx.aria2Path
   const outputTemplate = useAria2 ? completeTemplate : path.join(outputDir, completeTemplate)
 

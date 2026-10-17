@@ -21,14 +21,14 @@
   const sponsorMailto = $derived(contactMailto({ subject: t('about.mailSubjectSponsor') }))
   const businessMailto = $derived(contactMailto({ subject: t('about.mailSubjectBusiness') }))
 
-  const checking = $derived(app.update.status === 'checking')
-  const available = $derived(app.update.status === 'available')
+  const checking = $derived(app.updateInfo.status === 'checking')
+  const available = $derived(app.updateInfo.status === 'available')
 
   const updateLabel = $derived(
     checking
       ? t('settings.checking')
       : available
-        ? t('about.updateAvailable', { version: app.updateState.version ?? '' })
+        ? t('about.updateAvailable', { version: app.updateInfo.version ?? '' })
         : t('about.update'),
   )
 
@@ -44,13 +44,13 @@
   ] as const
 
   /** 语言 / 框架用官方品牌图标，yt-dlp 不是语言，用下载图标区分。 */
-  const techStack = [
+  const techStack: ReadonlyArray<{ name: string; icon?: string; material?: string }> = [
     { name: 'Go', icon: goIcon },
     { name: 'Wails', icon: wailsIcon },
     { name: 'Svelte 5', icon: svelteIcon },
     { name: 'TypeScript', icon: typescriptIcon },
     { name: 'yt-dlp', icon: '', material: 'download' },
-  ] as const
+  ]
 
   const releases = $derived([
     {
@@ -300,7 +300,7 @@
             {#if techItem.icon}
               <img class="tech-icon" src={techItem.icon} alt="" width="13" height="13" />
             {:else}
-              <Icon name={techItem.material} size={13} />
+              <Icon name={techItem.material ?? 'download'} size={13} />
             {/if}
             <span>{techItem.name}</span>
           </span>

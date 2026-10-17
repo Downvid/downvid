@@ -1,8 +1,15 @@
 /**
- * 演示入口自己的词表（key 命名与 src/i18n/core.ts 保持一致）。
+ * 界面词表（中英双语）。
  *
- * 为什么自包含：这是独立预览入口，迁移中的 i18n 文件正在被另一条工作线改动；
- * 演示需要保证随时可跑。合并时把新增 key 并回 core.ts 即可。
+ * 两层结构：`messages[locale][key]`。缺失的 key 依次回退到：
+ * 当前语言 → 中文 → key 本身（见文件末尾的 `t()`）。
+ *
+ * ## 加词条的两条规矩
+ *
+ * 1. **中英必须成对**。只加中文时英文界面会显示中文；只加英文时中文界面
+ *    会退回英文。两种都很难在开发时发现（要手动切语言才看得到）。
+ * 2. **不要留「演示」「模拟」「demo」这类词**。词条会被真的渲染到产品界面上，
+ *    而开发期留下的占位文案一旦漏删，用户看到的就是「（演示）」。
  */
 export type Locale = 'zh-CN' | 'en-US'
 export const LOCALES: Locale[] = ['zh-CN', 'en-US']
@@ -42,7 +49,6 @@ const messages: Record<Locale, Record<string, string>> = {
 
     'hero.recent': '最近下载',
     'hero.recentAll': '查看全部',
-    'hero.sample': '试试示例链接',
 
     'capture.placeholder': '粘贴视频链接…',
     'capture.paste': '粘贴',
@@ -60,7 +66,11 @@ const messages: Record<Locale, Record<string, string>> = {
 
     'error.eyebrow': '解析失败',
     'error.invalidLink': '请输入有效的链接',
-    'error.sampleMessage': '该视频需要登录才能访问（演示）',
+    'error.parseFailed': '解析失败，请稍后重试',
+    'error.downloadFailed': '下载失败',
+    'error.openFolderFailed': '无法打开文件夹',
+    'error.saveFailed': '保存设置失败',
+    'error.sampleMessage': '该视频需要登录才能访问',
     'error.title': '这个链接没有解析成功',
     'error.hint': '检查链接是否完整、视频是否公开；需要登录的视频请在设置中配置 Cookie。',
     'error.retry': '重试',
@@ -70,9 +80,10 @@ const messages: Record<Locale, Record<string, string>> = {
     'result.formats': '{count} 个格式',
     'result.change': '换一个链接',
     'result.back': '返回',
-    'result.already': '这个视频已经在下载历史里',
-    'result.alreadyHint': '已下载过，不会重复加入下载队列。',
-    'result.alreadyToast': '已下载过，已跳到下载历史',
+    'result.already': '这个清晰度已经下载过',
+    'result.alreadyHint': '这一清晰度已下载，换一个清晰度可以继续下载。',
+    'result.alreadyToast': '这个清晰度已经下载过',
+    'result.alreadyOtherQuality': '换清晰度可以再下一次',
     'result.openHistory': '查看下载历史',
     'history.view': '查看下载历史',
     'result.clear': '清除结果',
@@ -180,10 +191,11 @@ const messages: Record<Locale, Record<string, string>> = {
     'settings.cookieManual': '手动导入文件',
     'settings.cookieHint': '用于需要登录的站点（抖音 / B 站 / YouTube）。',
     'settings.cookieFile': 'Cookie 文件',
+    'settings.cookieFileMissing': '还没有选择 Cookie 文件',
     'settings.proxy': '代理地址',
     'settings.proxyHint': '支持 http / https / socks5，留空表示直连。',
     'settings.testProxy': '测试',
-    'settings.proxyOk': '代理可用（演示）',
+    'settings.proxyOk': '代理可用',
     'settings.accel': '下载加速',
     'settings.accelHint': 'HTTP 传输使用多连接；HLS / DASH 保持原生。',
     'settings.maxConnections': '每个任务的最大连接数',
@@ -200,6 +212,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'settings.aria2Missing': '未安装，使用内置分块下载器',
     'settings.depsTitle': '运行时依赖',
     'settings.depsHint': '优先使用系统已安装的版本，缺失时由 DownVid 下载到托管目录。',
+    'settings.depsNotInstalledYet': '还没有下载过依赖',
     'settings.depsRecheck': '重新检测',
     'settings.depsChecking': '检测中…',
     'settings.depsSystem': '系统',
@@ -280,7 +293,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'about.update': '检查更新',
     'about.upToDate': '已是最新版本',
     'about.updateAvailable': '新版本 v{version} 可用',
-    'about.buildValue': '2026.10.17 · demo',
+    'about.buildValue': '2026.10.17',
     'about.licenseValue': 'MIT License',
 
     'update.title': '发现新版本',
@@ -293,6 +306,8 @@ const messages: Record<Locale, Record<string, string>> = {
     'update.ready': '下载完成，准备安装',
     'update.readyHint': '点击「重启并安装」完成更新，应用会自动重新打开。',
     'update.doNotClose': '下载过程中请勿关闭应用',
+    'update.offline': '检查更新失败，请检查网络后重试',
+    'update.manualDownload': '请到 Releases 页面手动下载这一版',
     'update.error': '更新检查失败，请检查网络后重试。',
     'update.note1': '解析链路增加 bilibili Cookie 失效检测，失效时给出可操作的提示。',
     'update.note2': '下载队列支持拖动排序；暂停任务不再占用并发槽位。',
@@ -315,20 +330,25 @@ const messages: Record<Locale, Record<string, string>> = {
     'toast.copied': '已复制链接',
     'toast.queued': '已加入下载队列',
     'toast.completed': '「{title}」下载完成',
-    'toast.folder': '已打开所在文件夹（演示）',
     'toast.deleted': '记录已删除',
     'toast.cleared': '历史已清空',
     'toast.settingsSaved': '设置已保存',
     'toast.settingsReset': '设置已重置',
     'toast.updateNone': '已是最新版本',
-    'toast.updateReady': '更新已下载，重启后生效（演示）',
+    'toast.updateReady': '更新已下载，重启后生效',
     'toast.depsReady': '依赖检测完成',
-    'toast.aria2': 'aria2 已安装（演示）',
+    'toast.aria2': 'aria2 已安装',
     'toast.parseFirst': '先输入一个链接',
-    'toast.demoHint': '这是 UI 演示：数据为模拟。顶部右侧的 DEMO 可以切换状态与语言。',
-    'toast.proxyOk': '代理可用（演示）',
-    'toast.fileMissing': '本地文件不存在（演示）',
+    'toast.proxyOk': '代理可用',
+    'toast.fileMissing': '本地文件不存在',
     'toast.updateDownloaded': '更新已下载',
+    'toast.pasteFailed': '无法读取剪贴板',
+    'toast.proxyFormatOk': '代理格式正确（未做连通性测试）',
+    'toast.proxyFormatBad': '代理格式不对，应形如 http://127.0.0.1:7890',
+    'toast.depsMissing': '缺少 {count} 个必需依赖',
+    'toast.depInstalled': '依赖已安装',
+    'toast.depInstallFailed': '依赖安装失败',
+    'toast.upToDate': '已是最新版本',
   },
   'en-US': {
     'common.cancel': 'Cancel',
@@ -364,7 +384,6 @@ const messages: Record<Locale, Record<string, string>> = {
 
     'hero.recent': 'Recent',
     'hero.recentAll': 'View all',
-    'hero.sample': 'Try a sample link',
 
     'capture.placeholder': 'Paste a video link…',
     'capture.paste': 'Paste',
@@ -382,7 +401,11 @@ const messages: Record<Locale, Record<string, string>> = {
 
     'error.eyebrow': 'PARSE FAILED',
     'error.invalidLink': 'Enter a valid link',
-    'error.sampleMessage': 'This video requires sign-in (demo)',
+    'error.parseFailed': 'Parsing failed. Please try again.',
+    'error.downloadFailed': 'Download failed',
+    'error.openFolderFailed': 'Could not open the folder',
+    'error.saveFailed': 'Could not save settings',
+    'error.sampleMessage': 'This video requires sign-in',
     'error.title': 'That link did not parse',
     'error.hint': 'Check that the link is complete and the video is public. For login-only videos, configure cookies in Settings.',
     'error.retry': 'Retry',
@@ -392,9 +415,10 @@ const messages: Record<Locale, Record<string, string>> = {
     'result.formats': '{count} formats',
     'result.change': 'Use another link',
     'result.back': 'Back',
-    'result.already': 'This video is already in your download history',
-    'result.alreadyHint': 'Already downloaded — it will not be queued again.',
-    'result.alreadyToast': 'Already downloaded — opening history',
+    'result.already': 'This quality is already downloaded',
+    'result.alreadyHint': 'Already downloaded — pick another quality to download again.',
+    'result.alreadyToast': 'This quality is already downloaded',
+    'result.alreadyOtherQuality': 'Pick another quality to download again',
     'result.openHistory': 'Open download history',
     'history.view': 'Open download history',
     'result.clear': 'Clear result',
@@ -502,10 +526,11 @@ const messages: Record<Locale, Record<string, string>> = {
     'settings.cookieManual': 'Manual file',
     'settings.cookieHint': 'Used by sites that require login (Douyin / Bilibili / YouTube).',
     'settings.cookieFile': 'Cookie file',
+    'settings.cookieFileMissing': 'No cookie file selected yet',
     'settings.proxy': 'Proxy',
+    'settings.proxyOk': 'Proxy reachable',
     'settings.proxyHint': 'http / https / socks5. Leave empty for a direct connection.',
     'settings.testProxy': 'Test',
-    'settings.proxyOk': 'Proxy reachable (demo)',
     'settings.accel': 'Download acceleration',
     'settings.accelHint': 'HTTP transfers use multiple connections; HLS / DASH stay native.',
     'settings.maxConnections': 'Max connections per task',
@@ -522,6 +547,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'settings.aria2Missing': 'Not installed — using the built-in chunked downloader',
     'settings.depsTitle': 'Runtime dependencies',
     'settings.depsHint': 'System installs are preferred; DownVid only downloads what is missing.',
+    'settings.depsNotInstalledYet': 'No dependency has been downloaded yet',
     'settings.depsRecheck': 'Re-check',
     'settings.depsChecking': 'Checking…',
     'settings.depsSystem': 'System',
@@ -602,7 +628,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'about.update': 'Check for updates',
     'about.upToDate': 'You are up to date',
     'about.updateAvailable': 'v{version} is available',
-    'about.buildValue': '2026.10.17 · demo',
+    'about.buildValue': '2026.10.17',
     'about.licenseValue': 'MIT License',
 
     'update.title': 'New version available',
@@ -615,6 +641,8 @@ const messages: Record<Locale, Record<string, string>> = {
     'update.ready': 'Downloaded and ready to install',
     'update.readyHint': 'Click “Restart and install”. The app will reopen automatically.',
     'update.doNotClose': 'Don’t close the app while downloading',
+    'update.offline': 'Could not check for updates. Check your network and retry.',
+    'update.manualDownload': 'Please download this version manually from the Releases page',
     'update.error': 'Update check failed. Check your network and try again.',
     'update.note1': 'bilibili cookie expiry is now detected and explained in the parse error.',
     'update.note2': 'Queue reordering; paused tasks no longer occupy a concurrency slot.',
@@ -637,20 +665,25 @@ const messages: Record<Locale, Record<string, string>> = {
     'toast.copied': 'Link copied',
     'toast.queued': 'Added to the download queue',
     'toast.completed': '“{title}” finished downloading',
-    'toast.folder': 'Opened the folder (demo)',
     'toast.deleted': 'Record deleted',
     'toast.cleared': 'History cleared',
     'toast.settingsSaved': 'Settings saved',
     'toast.settingsReset': 'Settings reset',
     'toast.updateNone': 'You are up to date',
-    'toast.updateReady': 'Update downloaded; applies after restart (demo)',
+    'toast.updateReady': 'Update downloaded; applies after restart',
     'toast.depsReady': 'Dependency check complete',
-    'toast.aria2': 'aria2 installed (demo)',
+    'toast.aria2': 'aria2 installed',
     'toast.parseFirst': 'Enter a link first',
-    'toast.demoHint': 'This is a UI demo: data is simulated. Use DEMO at the top right to switch states and language.',
-    'toast.proxyOk': 'Proxy reachable (demo)',
-    'toast.fileMissing': 'The local file does not exist (demo)',
+    'toast.proxyOk': 'Proxy reachable',
+    'toast.fileMissing': 'The local file does not exist',
     'toast.updateDownloaded': 'Update downloaded',
+    'toast.pasteFailed': 'Could not read the clipboard',
+    'toast.proxyFormatOk': 'Proxy format looks valid (connectivity is not tested)',
+    'toast.proxyFormatBad': 'Invalid proxy format — expected something like http://127.0.0.1:7890',
+    'toast.depsMissing': '{count} required dependencies are missing',
+    'toast.depInstalled': 'Dependency installed',
+    'toast.depInstallFailed': 'Could not install the dependency',
+    'toast.upToDate': 'You are on the latest version',
   },
 }
 

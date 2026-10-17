@@ -3,6 +3,15 @@ import path from 'node:path'
 import { buildYtdlpArgs, buildFormatSelector, type DownloadOptions } from '../electron/download/ytdlp'
 
 /**
+ * 自动追加的清晰度后缀。与 electron/download/ytdlp.ts 的 QUALITY_SUFFIX 一致。
+ *
+ * 用它拼预期值而不是写死字面量：后缀本身是「行为的一部分」，
+ * 用例要钉住的是**位置与次数**（扩展名前、只出现一次），
+ * 而不是把常量抄两遍。
+ */
+const QUALITY_SUFFIX = ' [%(height,format_id)s]'
+
+/**
  * yt-dlp 参数组装。
  *
  * 这是纯函数（依赖路径与 JS 运行时由调用方传入），因此可以不起进程直接断言。
@@ -83,16 +92,20 @@ describe('buildYtdlpArgs', () => {
 
   it('输出模板包含用户设置的文件名模板', () => {
     const args = buildYtdlpArgs({ ...base, filenameTemplate: '%(title)s-%(id)s' }, OUT_DIR, ctx)
-    expect(valueAfter(args, '-o')).toBe(path.join(OUT_DIR, '%(title)s-%(id)s.%(ext)s'))
+    expect(valueAfter(args, '-o')).toBe(
+      path.join(OUT_DIR, `%(title)s-%(id)s${QUALITY_SUFFIX}.%(ext)s`),
+    )
   })
 
   it('完整模板保留扩展名占位符，不重复追加', () => {
     const args = buildYtdlpArgs({ ...base, filenameTemplate: '%(title)s.%(ext)s' }, OUT_DIR, ctx)
-    expect(valueAfter(args, '-o')).toBe(path.join(OUT_DIR, '%(title)s.%(ext)s'))
+    expect(valueAfter(args, '-o')).toBe(path.join(OUT_DIR, `%(title)s${QUALITY_SUFFIX}.%(ext)s`))
   })
 
   it('未设置模板时自动追加一次扩展名', () => {
-    expect(valueAfter(buildYtdlpArgs(base, OUT_DIR, ctx), '-o')).toBe(path.join(OUT_DIR, '%(title)s.%(ext)s'))
+    expect(valueAfter(buildYtdlpArgs(base, OUT_DIR, ctx), '-o')).toBe(
+      path.join(OUT_DIR, `%(title)s${QUALITY_SUFFIX}.%(ext)s`),
+    )
   })
 
   it('字幕模式：跳过下载、写字幕、转 srt，且不需要 ffmpeg', () => {
@@ -140,7 +153,7 @@ describe('buildYtdlpArgs', () => {
     expect(valueAfter(args, '--downloader-args')).toContain('--max-connection-per-server=12 --split=12')
     expect(valueAfter(args, '--downloader-args')).toContain('--check-certificate=true')
     expect(valueAfter(args, '--concurrent-fragments')).toBe('12')
-    expect(valueAfter(args, '-o')).toBe('%(title)s.%(ext)s')
+    expect(valueAfter(args, '-o')).toBe(`%(title)s${QUALITY_SUFFIX}.%(ext)s`)
     expect(args).toContain(`temp:${path.join(OUT_DIR, '.downvid-aria2')}`)
   })
 

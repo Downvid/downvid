@@ -30,8 +30,21 @@ func main() {
 		Title:     "DownVid",
 		Width:     1200,
 		Height:    900,
-		MinWidth:  1000,
-		MinHeight: 700,
+		MinWidth:  880,
+		MinHeight: 560,
+
+		// 窗口必须能自由缩放。
+		//
+		// 初值 1200×900 与 Electron 版一致，但**最小尺寸不能照抄**：
+		// Electron 版设的是 1000×700，在 13 寸笔记本的多窗口并排
+		// （1280×800 的一半）上直接缩不下去，等于「窗口不能调整」。
+		// 880×560 是布局真正能用的下限——侧栏 240 + 内容区 640，
+		// 低于这个宽度格式卡片会挤成两行、EffortSlider 的刻度会重叠。
+		//
+		// DisableResize 显式写 false 而不是省掉：这个字段的默认值看起来
+		// 是 false，但一旦有人在别处复制这段配置时漏了它、又碰巧
+		// 把 MinWidth 设得很大，症状就是「拖不动窗口」而没有任何报错。
+		DisableResize: false,
 
 		AssetServer: &assetserver.Options{Assets: assets},
 

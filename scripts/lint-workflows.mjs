@@ -126,6 +126,17 @@ for (const file of files) {
     if (!/timeout-minutes:/.test(job.body)) {
       problems.push(`${where} 没有 timeout-minutes（卡住会占满默认 6 小时配额）`)
     }
+
+    // `docker exec <容器> <命令>` 不走 shell：`command` / `test` / `[` 这些是
+    // **shell 内建命令，没有可执行文件**。Docker 会去 PATH 里找同名程序，
+    // 必然失败（exit 127），报错却长成「依赖不在 PATH 中」的样子
+    // ——docker 工作流的冒烟曾因此长期红，而镜像其实完全正常。
+    for (const m of commandLines.matchAll(/docker\s+exec\s+(?:[^\n]*?)\s(?:-u\s+\S+\s+)?(command|test|\/usr\/bin\/test)\b/g)) {
+      problems.push(
+        `${where} 用了 \`docker exec ... ${m[1]}\`：${m[1]} 是 shell 内建命令，` +
+          '容器里没有对应可执行文件，必然 exit 127。改成 `docker exec <容器> sh -c "…"`。',
+      )
+    }
   }
 }
 

@@ -127,8 +127,15 @@ export interface TaskItem {
   statusMessage?: string
 }
 
-/** 一个运行依赖（对应后端 `deps.Status`） */
+/** 一个运行依赖（对应后端 `deps.Result` / `Dependency`） */
 export interface DepItem {
+  /**
+   * 后端返回的 kind（`yt-dlp` / `ffmpeg` / `ffprobe` / `aria2`）。
+   *
+   * **注意不是二进制名**：aria2 的可执行文件叫 `aria2c`，但 kind 是 `aria2`。
+   * 曾经设置页按 `aria2c` 查找，于是「加速页永远显示未找到 aria2c」
+   * 而后端其实已经探测到了——两种命名混用不会有任何报错。
+   */
   id: string
   name: string
   /** 是否已找到 */
@@ -137,7 +144,7 @@ export interface DepItem {
   optional: boolean
   path?: string
   version?: string
-  /** 来源：system / managed / manual */
+  /** 来源：system / managed / manual / scanned */
   source?: string
   /** 找到了但版本过旧 */
   stale?: boolean
@@ -145,6 +152,17 @@ export interface DepItem {
   reason?: string
   /** 二进制形态（仅 yt-dlp）：zipapp 启动 0.4s / native 首次 9~12s */
   form?: string
+
+  /** ===== 以下是**界面态**，不是后端字段 ===== */
+
+  /** 三态：`ready` 可用 / `outdated` 版本过旧 / `missing` 未找到 */
+  status: 'ready' | 'outdated' | 'missing'
+  /** 是否为必需依赖（`!optional` 的镜像，模板里读起来更顺） */
+  required: boolean
+  /** 正在下载安装 */
+  busy: boolean
+  /** 安装进度 0..1 */
+  progress: number
 }
 
 /** 更新状态机 */

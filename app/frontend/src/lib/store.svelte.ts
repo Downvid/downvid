@@ -79,6 +79,8 @@ import type {
   VideoInfo,
 } from './types'
 import { detectPlatform, extractUrl, hostOf, platformName } from './url'
+import { findExistingDownload } from './dedupe'
+import { applyQualityDisambiguation } from './filename'
 import { dayGroup, formatBytes as formatBytesUtil } from './format'
 
 export type ParseState = 'idle' | 'parsing' | 'done' | 'error'
@@ -93,24 +95,53 @@ const TICK_MS = 200
  * 那两项后端也给了（`optional`），但 `id`/`name` 得在这里补。
  * 补而不是让后端加：显示名要翻译，不该由后端给死中文。
  */
-function toDepItems(list: Array<{ kind: string; found: boolean; path?: string; version?: string; source?: string; reason?: string }>): DepItem[] {
+function toDepItems(
+  list: Array<{
+    kind: string
+    found: boolean
+    optional?: boolean
+    stale?: boolean
+    path?: string
+    version?: string
+    source?: string
+    reason?: string
+    form?: string
+  }>,
+  /** 上一次的界面态（busy / progress）：探测不该把「正在下载」冲掉 */
+  previous: DepItem[] = [],
+): DepItem[] {
   const labels: Record<string, string> = {
     'yt-dlp': 'yt-dlp',
     ffmpeg: 'FFmpeg',
     ffprobe: 'FFprobe',
+    // key 是**后端 kind**（aria2），显示名才是二进制名（aria2c）。
+    // 早先整个前端用 'aria2c' 当 id，于是 `deps.find(id==='aria2c')` 永远
+    // 找不到——加速页就一直显示「未找到 aria2c」，而后端其实探测到了。
     aria2: 'aria2c',
   }
   const optional = new Set(['ffprobe', 'aria2'])
-  return list.map((d) => ({
-    id: d.kind,
-    name: labels[d.kind] ?? d.kind,
-    found: d.found,
-    optional: optional.has(d.kind),
-    path: d.path,
-    version: d.version,
-    source: d.source,
-    reason: d.reason,
-  }))
+  return list.map((d) => {
+    const prev = previous.find((p) => p.id === d.kind)
+    return {
+      id: d.kind,
+      name: labels[d.kind] ?? d.kind,
+      found: d.found,
+      // 后端给了 optional 就用后端的（单一真相），没有才退回本地表
+      optional: d.optional ?? optional.has(d.kind),
+      path: d.path,
+      version: d.version,
+      source: d.source,
+      reason: d.reason,
+      form: d.form,
+      stale: d.stale,
+      required: !(d.optional ?? optional.has(d.kind)),
+      // 「找到了但版本过旧」与「压根没找到」是两种处置：前者要引导更新，
+      // 后者要引导安装。界面上的圆点颜色与按钮文案都靠这个区分。
+      status: d.found ? 'ready' : d.stale ? 'outdated' : 'missing',
+      busy: prev?.busy ?? false,
+      progress: prev?.progress ?? 0,
+    }
+  })
 }
 
 function uid(): string {
@@ -131,7 +162,6 @@ class AppStore {
   parseError = $state('')
   parseErrorDetail = $state('')
   url = $state('')
-  alreadyDownloaded = $state<HistoryItem | null>(null)
   video = $state<VideoInfo | null>(null)
   mode = $state<Mode>('video')
   selectedFormatId = $state<string | null>(null)
@@ -160,10 +190,22 @@ class AppStore {
   depsPromptProgress = $state(0)
 
   // ===== 更新 =====
-  updateState = $state<{ status: UpdateStatus; progress: number; version?: string; notes?: string; summary?: string }>({
-    status: 'idle',
-    progress: 0,
-  })
+  /**
+   * 更新检查/下载的状态快照。
+   *
+   * 叫 `updateInfo` 而不是 `update`：`AppStore` 上已经有一个 `update(patch)`
+   * 方法（写设置）。同名会让组件里 `app.update.status` 解析成**方法对象**，
+   * 于是 `status` 永远是 undefined——界面上的更新按钮因此从来不会变状态。
+   */
+  updateInfo = $state<{
+    status: UpdateStatus
+    progress: number
+    version?: string
+    notes?: string
+    summary?: string
+    /** Release 发布时间（ISO），仅用于展示 */
+    date?: string
+  }>({ status: 'idle', progress: 0 })
 
   // ===== 公告 =====
   announcementRead = $state(false)
@@ -329,7 +371,6 @@ class AppStore {
 
     this.url = extracted
     this.video = null
-    this.alreadyDownloaded = null
     this.parseState = 'parsing'
     this.parseStage = 0
     this.parseElapsed = 0
@@ -354,7 +395,6 @@ class AppStore {
 
       this.video = outcome.video
       this.parseState = 'done'
-      this.alreadyDownloaded = this.findExistingDownload(outcome.video, extracted)
       this.applyDefaults(outcome.video)
 
       // B 站封面有防盗链，得由主进程代抓（带 Referer）
@@ -380,24 +420,37 @@ class AppStore {
   clearResult(): void {
     this.parseState = 'idle'
     this.video = null
-    this.alreadyDownloaded = null
     this.selectedFormatId = null
     this.selectedAudioId = null
     this.selectedTrackId = null
     this.subtitles = []
   }
 
-  /** 同一视频（URL 相同）且文件还在，视为已经下载过 */
-  private findExistingDownload(video: VideoInfo, url: string): HistoryItem | null {
-    const normalize = (v: string): string => v.trim().toLowerCase().replace(/\s+/g, ' ')
-    return (
-      this.history.find(
-        (h) =>
-          h.fileExists &&
-          (normalize(h.url) === normalize(url) ||
-            normalize(h.title) === normalize(video.title)),
-      ) ?? null
-    )
+  /**
+   * 找出「这条视频 + 这个清晰度 + 这个模式」已经下过的那条历史。
+   *
+   * ## 为什么必须带上清晰度
+   *
+   * 早先只比 URL（`normalize(h.url) === normalize(url)`），于是
+   * **下过 1080P 就再也下不了 4K**：解析完成后 `alreadyDownloaded` 非空，
+   * 底部按钮直接变成「打开历史」，用户完全没有别的入口。
+   * 而「同一个视频想要另一个清晰度」恰恰是最常见的一次重复使用——
+   * 手机上是 720P、投屏前要 4K，或者先要视频后要音频。
+   *
+   * 现在的判据是三件事都相同：URL、清晰度、模式（视频/音频/字幕）。
+   * 任一不同就允许再下一次，历史里会多一条——**这是对的**：
+   * 它们本来就是两个文件。
+   *
+   * 标题兜底只在 URL 为空时启用：只比标题会把「同名不同视频」
+   * （如两个都叫《预告片》）误判成重复。
+   */
+  private findExistingDownload(
+    video: VideoInfo,
+    url: string,
+    pick: { quality: string; mode: Mode } | null,
+  ): HistoryItem | null {
+    // 判据抽在 lib/dedupe.ts：那里是不碰 runes 的纯函数，vitest 能直接测。
+    return findExistingDownload(this.history, video, url, pick)
   }
 
   /** 默认选中第一个格式（让「粘贴 → 解析 → 下载」能一路点完） */
@@ -445,13 +498,28 @@ class AppStore {
   // ============================================================
 
   /** 当前选中的格式（视频 / 音频 / 字幕三选一） */
-  private currentPick(): { formatId: string; quality: string; ext: string; totalBytes: number; hasAudio: boolean } | null {
+  private currentPick(): {
+    formatId: string
+    quality: string
+    ext: string
+    totalBytes: number
+    hasAudio: boolean
+    /** 分辨率高度；0 / undefined 表示这一格式没有高度（纯音频、直链等） */
+    height?: number
+  } | null {
     const v = this.video
     if (!v) return null
     if (this.mode === 'video') {
       const f = v.formats.find((x) => x.id === this.selectedFormatId)
       return f
-        ? { formatId: f.id, quality: f.label, ext: f.ext, totalBytes: f.sizeBytes, hasAudio: Boolean(f.hasAudio) }
+        ? {
+            formatId: f.id,
+            quality: f.label,
+            ext: f.ext,
+            totalBytes: f.sizeBytes,
+            hasAudio: Boolean(f.hasAudio),
+            height: f.height,
+          }
         : null
     }
     if (this.mode === 'audio') {
@@ -463,6 +531,23 @@ class AppStore {
     return f
       ? { formatId: f.id, quality: t('mode.subtitle'), ext: 'SRT', totalBytes: 0, hasAudio: false }
       : null
+  }
+
+  /**
+   * 当前「视频 + 清晰度 + 模式」是否已经下过。
+   *
+   * **必须是派生值，不能是解析时算一次的状态**：用户解析完会换清晰度，
+   * 早先算一次的实现会让「换成 4K 之后」仍然显示「已下载过」，
+   * 而且底部按钮停在该分支上，根本没有再次下载的入口。
+   */
+  get alreadyDownloaded(): HistoryItem | null {
+    const video = this.video
+    if (!video || this.parseState !== 'done') return null
+    const pick = this.currentPick()
+    return this.findExistingDownload(video, this.url || video.url, {
+      quality: pick?.quality ?? '',
+      mode: this.mode,
+    })
   }
 
   /** 是否可下载（界面的按钮 enable 条件） */
@@ -482,9 +567,12 @@ class AppStore {
     const pick = this.currentPick()
     if (!video || !pick) return
 
+    // 这一清晰度确实已下过：提示并停在当前页，**不跳走**。
+    //
+    // 早先这里会自动跳到历史页，用户想换清晰度还得再点回来；
+    // 现在留在原地，用户直接改选清晰度就能继续下一次。
     if (this.alreadyDownloaded) {
       this.toast(t('result.alreadyToast'), 'info')
-      this.setTab('history')
       return
     }
 
@@ -514,7 +602,10 @@ class AppStore {
   }
 
   /** 真正发起一次下载（也用于重试） */
-  private async launch(task: TaskItem, pick: { formatId: string; hasAudio: boolean }): Promise<void> {
+  private async launch(
+    task: TaskItem,
+    pick: { formatId: string; hasAudio: boolean; height?: number },
+  ): Promise<void> {
     const res = await startDownload({
       taskId: task.id,
       url: task.url,
@@ -523,6 +614,15 @@ class AppStore {
       hasAudio: pick.hasAudio,
       subtitles: this.subtitles,
       outputDir: this.settings.downloadDir,
+      // 有分辨率才让它进文件名。
+      //
+      // 纯音频/直链这类没有高度的格式，`%(height)s` 会渲染成 `NA`，
+      // 产物名就成了 `标题 [NAp].mp4`。这里提前删掉那个占位符，
+      // 比让 yt-dlp 事后回退到 format_id（`[mp4]`）更干净。
+      filenameTemplate: applyQualityDisambiguation(
+        this.settings.filenameTemplate,
+        pick.height,
+      ),
     })
 
     if (!res.ok) {
@@ -691,9 +791,44 @@ class AppStore {
     this.tasks = this.tasks.filter((x) => x.status !== 'completed')
   }
 
-  async openTaskFolder(): Promise<void> {
-    const dir = this.settings.downloadDir
-    const res = await openPath(dir || (await managedDir()))
+  /**
+   * 打开下载目录（状态栏的文件夹按钮、设置页目录旁的按钮都走这里）。
+   *
+   * 设置里没指定目录时退到系统「下载」目录（后端给的默认值），
+   * **不要**退到托管目录——那里放的是 yt-dlp/ffmpeg，不是用户的视频。
+   */
+  async openDownloadDir(): Promise<void> {
+    let dir = this.settings.downloadDir
+    if (!dir) dir = await defaultDownloadDir()
+    if (!dir) {
+      this.toast(t('error.openFolderFailed'), 'error')
+      return
+    }
+    const res = await openPath(dir)
+    if (!res.ok) this.toast(res.message || t('error.openFolderFailed'), 'error')
+  }
+
+  /** 打开 Cookie 文件所在的目录 */
+  async openCookieDir(): Promise<void> {
+    const file = this.settings.cookieFile.trim()
+    if (!file) {
+      this.toast(t('settings.cookieFileMissing'), 'info')
+      return
+    }
+    // 用「在文件管理器中显示」而不是「打开目录」：直接跳到该文件上，
+    // 比让用户在目录里自己找更省事
+    const res = await showInFolder(file)
+    if (!res.ok) this.toast(res.message || t('error.openFolderFailed'), 'error')
+  }
+
+  /** 打开依赖托管目录（设置页「运行依赖」里的入口） */
+  async openDepsDir(): Promise<void> {
+    const dir = await managedDir()
+    if (!dir) {
+      this.toast(t('settings.depsNotInstalledYet'), 'info')
+      return
+    }
+    const res = await openPath(dir)
     if (!res.ok) this.toast(res.message || t('error.openFolderFailed'), 'error')
   }
 
@@ -764,11 +899,33 @@ class AppStore {
     if (!res.ok) this.toast(res.message || t('error.saveFailed'), 'error')
   }
 
-  /** 组件用的入口（保留旧名，避免改一堆调用点） */
-  updateSetting(patch: Partial<AppSettings>): void {
-    this.update(patch)
+  /**
+   * 改设置。**两种调用形式都支持**，因为它们各自更顺手：
+   *
+   *   updateSetting('maxConnections', 16)          // 单字段，组件里最常见
+   *   updateSetting({ theme: 'dark', radius: 'round' }) // 一次改多个
+   *
+   * ## 为什么必须显式实现两种，而不是只留 patch 形式
+   *
+   * 组件里写的是 `updateSetting('maxConnections', value)` 这种**两参数**形式。
+   * 只声明 `(patch)` 时，运行时会调用 `{...settings, ...'maxConnections'}`——
+   * 把字符串按字符下标展开成 `{0:'m',1:'a',...}`，**设置一个字段都没改**，
+   * 而且不报错。表现就是「滑块拖了、界面数值变了、重启又回去」。
+   *
+   * 这不是假设：`.svelte` 里的类型错误 `tsc` 检查不到（它不解析 .svelte），
+   * 于是这个错签名的调用一直存在，直到接入 svelte-check 才暴露。
+   */
+  updateSetting<K extends keyof AppSettings>(key: K, value: AppSettings[K]): void
+  updateSetting(patch: Partial<AppSettings>): void
+  updateSetting(keyOrPatch: keyof AppSettings | Partial<AppSettings>, value?: unknown): void {
+    if (typeof keyOrPatch === 'string') {
+      this.update({ [keyOrPatch]: value } as Partial<AppSettings>)
+      return
+    }
+    this.update(keyOrPatch)
   }
 
+  /** 写入并落盘。字段级的副作用（主题/圆角/语言）在这里统一触发 */
   update(patch: Partial<AppSettings>): void {
     this.settings = { ...this.settings, ...patch }
     if (patch.theme) this.applyTheme(patch.theme)
@@ -811,7 +968,7 @@ class AppStore {
   /** 首屏静默探测：失败不弹错（缺依赖时解析会给出可行动提示） */
   private async checkDepsSilently(): Promise<void> {
     const list = await detectDeps()
-    if (list) this.deps = toDepItems(list)
+    if (list) this.deps = toDepItems(list, this.deps)
   }
 
   async checkDeps(interactive = false): Promise<void> {
@@ -819,7 +976,7 @@ class AppStore {
     this.depsChecking = true
     try {
       const list = await detectDeps()
-      if (list) this.deps = toDepItems(list)
+      if (list) this.deps = toDepItems(list, this.deps)
       if (interactive) {
         const missing = this.deps.filter((d) => !d.found && !d.optional)
         this.toast(
@@ -832,21 +989,45 @@ class AppStore {
     }
   }
 
+  /**
+   * 安装（或更新）一个依赖。
+   *
+   * `kind` 是**后端 kind**：`yt-dlp` / `ffmpeg` / `ffprobe` / `aria2`。
+   * 传二进制名（`aria2c`）会被后端当成未知种类静默忽略——下载「完成」了
+   * 但什么都没装上，所以调用方一律用 `dep.id` 而不是 `dep.name`。
+   */
   async installDep(kind: string): Promise<void> {
     this.depsPromptBusy = true
     this.depsPromptProgress = 0
+    // 让这一行立刻进入「下载中」：接口是异步的，用户点了按钮要马上有反应
+    this.deps = this.deps.map((d) => (d.id === kind ? { ...d, busy: true, progress: 0 } : d))
+
+    const unsubscribe = await onDepsProgress((p) => {
+      const ev = p as { event?: string; tool?: string; downloaded?: number; total?: number; message?: string }
+      // tool 是依赖种类；老版本边车可能不带它，那就按「当前正在装的那个」算
+      if (ev.event === 'progress' && (!ev.tool || ev.tool === kind)) {
+        const ratio = ev.total ? (ev.downloaded ?? 0) / ev.total : 0
+        this.depsPromptProgress = ratio
+        this.deps = this.deps.map((d) =>
+          d.id === kind ? { ...d, busy: true, progress: ratio } : d,
+        )
+      }
+    })
+
     try {
       const res = await installDeps({ only: [kind] })
       if (!res.ok) {
         this.toast(res.message || t('toast.depInstallFailed'), 'error')
         return
       }
-      // 装完重新探测：界面必须立刻看到新状态
+      // 装完重新探测：界面必须立刻看到新状态（版本号、来源都可能变）
       await this.checkDeps(false)
       this.toast(t('toast.depInstalled'), 'success')
     } finally {
+      unsubscribe()
       this.depsPromptBusy = false
       this.depsPromptProgress = 0
+      this.deps = this.deps.map((d) => (d.id === kind ? { ...d, busy: false, progress: 0 } : d))
     }
   }
 
@@ -881,34 +1062,37 @@ class AppStore {
   // ============================================================
 
   async checkUpdate(silent = false): Promise<void> {
-    if (this.updateState.status === 'checking') return
-    this.updateState = { status: 'checking', progress: 0 }
+    if (this.updateInfo.status === 'checking') return
+    this.updateInfo = { status: 'checking', progress: 0 }
 
     const res = await backendCheckUpdate(this.settings.updateSource)
     if (!res) {
-      this.updateState = { status: 'error', progress: 0, summary: t('update.offline') }
+      this.updateInfo = { status: 'error', progress: 0, summary: t('update.offline') }
       if (!silent) this.toast(t('update.offline'), 'error')
       return
     }
 
     if (!res.hasUpdate) {
-      this.updateState = { status: 'latest', progress: 0, version: res.currentVersion }
+      this.updateInfo = { status: 'latest', progress: 0, version: res.currentVersion }
       if (!silent) this.toast(t('toast.upToDate'), 'info')
       return
     }
 
-    this.updateState = {
+    this.updateInfo = {
       status: 'available',
       progress: 0,
       version: res.version,
       notes: res.notes,
       summary: res.summary,
+      // 发布时间来自 Release 的 releaseDate：更新弹窗里要显示「这版是哪天的」，
+      // 早先模板读 `date`、快照里却没有这个字段，于是永远渲染成空串。
+      date: res.date,
     }
     this.dialog = 'update'
   }
 
   openUpdateDialog(): void {
-    if (this.updateState.status === 'idle') {
+    if (this.updateInfo.status === 'idle') {
       void this.checkUpdate()
       return
     }
@@ -935,8 +1119,8 @@ class AppStore {
    * 如实告知用户去 Releases 页面手动下载，而不是假装下载成功。
    */
   async downloadUpdate(): Promise<void> {
-    if (this.updateState.version) {
-      await openExternal(`${REPO_RELEASES}/tag/v${this.updateState.version}`)
+    if (this.updateInfo.version) {
+      await openExternal(`${REPO_RELEASES}/tag/v${this.updateInfo.version}`)
     } else {
       await openExternal(REPO_RELEASES)
     }

@@ -53,7 +53,7 @@
           </span>
           <span class="done-title">{task.title}</span>
           {#if task.status === 'completed'}
-            <button class="icon-btn done-btn" title={t('queue.openFolder')} aria-label={t('queue.openFolder')} onclick={() => app.openTaskFolder()}>
+            <button class="icon-btn done-btn" title={t('queue.openFolder')} aria-label={t('queue.openFolder')} onclick={() => app.openDownloadDir()}>
               <Icon name="folder_open" size={15} />
             </button>
           {:else}

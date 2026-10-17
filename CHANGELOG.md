@@ -14,7 +14,7 @@
 - **新增 `pnpm audit:provenance`**：从仓库内的上游快照（`scripts/data/provenance/upstream/`，
   Videdown `0c620c1`）现场重算「上游代码还剩多少」，并校验登记表
   `scripts/data/provenance/registry.json` 覆盖了每个上游衍生的文件。实测上游 2707 条有效源码行中
-  1239 行（45.8%）仍逐字保留；`backend/`、`docker/`、`scripts/`、`tests/`、`website/` 全部无上游成分。
+  1241 行（45.8%）仍逐字保留；`backend/`、`docker/`、`scripts/`、`tests/`、`website/` 全部无上游成分。
   新增上游衍生文件却不登记、或文档里的数字与实测不一致，CI 会红叉。已挂到三个 `ci-*.yml` 的 frontend job。
 - 修正 `docs/server-mode.md` 的状态（Docker / WebUI 早已实现并发布，文档仍写着「设计稿，尚未实现」），
   两个 README 的文档索引同步更新。

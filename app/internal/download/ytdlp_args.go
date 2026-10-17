@@ -13,6 +13,7 @@ package download
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -138,6 +139,15 @@ func AccelerationConnections(a *Acceleration) int {
 	return n.MaxConnections
 }
 
+// NormalizeAccelerationPtr 是 NormalizeAcceleration 的指针版。
+//
+// 调用方（Wails 壳）传进来的设置可能整体缺失，返回指针让
+// 「没有加速度设置」与「显式关闭」在调用点上区分得开。
+func NormalizeAccelerationPtr(a *Acceleration) *Acceleration {
+	n := NormalizeAcceleration(a)
+	return &n
+}
+
 // JSRuntime 是 YouTube 需要的 JS 运行时。
 //
 // 必须有显式的 Kind：Electron 的可执行文件路径里没有 "node"，
@@ -180,6 +190,50 @@ func BuildFormatSelector(o Options) string {
 	return o.FormatID + "+" + audio + "/" + o.FormatID + "+bestaudio/" + o.FormatID + "/bv*+ba/b"
 }
 
+// defaultFilenameTemplate 是设置里没指定时的默认模板。
+//
+// 与前端 `DEFAULT_SETTINGS.filenameTemplate` 逐字一致——两处不一致会让
+// 「界面显示的默认值」与「实际落盘的文件名」不是一回事。
+const defaultFilenameTemplate = "%(title)s.%(ext)s"
+
+// qualitySuffix 是自动追加的清晰度后缀。
+//
+// 用 `%(height,format_id)s` 而不是 `%(height)sp`：**高度可能不存在**
+// （纯音频、本地文件、某些直链）。那时 `%(height)sp` 会渲染成 `[NAp]`，
+// 产物名变成 `标题 [NAp].mp4`——真实踩到过（本地 HTTP 夹具的 e2e 用例
+// 里就出现了）。yt-dlp 的 `%(a,b)s` 是「取第一个非空的」，退到 format_id
+// 至少有 `mp4` / `140` 这种能区分格式的东西。
+//
+// 注意 yt-dlp **没有**「值为空就整段消失」的写法（试过 `%(h&{}|…)s`、
+// `%(h>0&…)s`，都会把 `%s` 当字面量输出），所以只能保证「不出现 NA」，
+// 不能保证「不需要时不出现」。这也是为什么只在模板缺清晰度字段时才追加：
+// 用户自己写模板时不会被塞进这个后缀。
+const qualitySuffix = " [%(height,format_id)s]"
+
+// hasQualityField 判断模板里是否已经有区分清晰度的字段。
+//
+// 三个来源都会命中，任何一个成立就不该再追加：
+//
+//  1. 用户自己在设置里写了 `%(height)s` / `%(format_id)s` 之类
+//  2. 前端已经按**当前所选格式**补过 `[1080p]`（见
+//     frontend/src/lib/filename.ts）。前端知道 height，能避免
+//     「没有分辨率的格式被写成 `[NAp]`」，所以优先由它处理
+//  3. 模板里已经有 `[数字p]` 形态的字面后缀（用户手写或旧版本留下的）
+//
+// 少了第 2、3 条就会**追加两次**，产物名变成
+// `标题 [1080p] [NAp].mp4`。
+func hasQualityField(template string) bool {
+	for _, f := range []string{"%(height)", "%(resolution)", "%(format_id)", "%(format)", "%(quality)"} {
+		if strings.Contains(template, f) {
+			return true
+		}
+	}
+	return literalQualitySuffix.MatchString(template)
+}
+
+// literalQualitySuffix 匹配已经写死的清晰度后缀，如 `[1080p]`。
+var literalQualitySuffix = regexp.MustCompile(`\[\d{3,4}p\]`)
+
 // IsYouTube 判断是否 YouTube 链接。
 //
 // 与 TS 侧同样的宽松匹配：只认这两个域名片段，不解析 URL
@@ -201,11 +255,34 @@ func BuildArgs(o Options, outputDir string, ctx BuildArgsContext) []string {
 
 	userTemplate := o.FilenameTmpl
 	if userTemplate == "" {
-		userTemplate = "%(title)s"
+		userTemplate = defaultFilenameTemplate
 	}
 	completeTemplate := userTemplate
 	if !strings.Contains(userTemplate, "%(ext)") {
 		completeTemplate = userTemplate + ".%(ext)s"
+	}
+	// 只有模板里**没有**任何区分清晰度的字段时，才补一个 `[height]`。
+	//
+	// 为什么需要：默认模板是 `%(title)s.%(ext)s`，同一视频的 1080P 与 4K
+	// 会算成同一个文件名。先下 1080P（合并成 mp4）再下 4K（也是 mp4）时，
+	// 第二次要么覆盖第一次、要么（默认行为）被跳过而报成功——两种结果
+	// 用户都只会看到「下载了，但拿到的还是原来那个」。
+	//
+	// 为什么只在缺失时补：用户写 `%(title)s-%(id)s.%(ext)s` 时 id 已经能区分
+	// （同一视频的不同清晰度 id 相同，但那种模板本来就是「一个视频一个文件」
+	// 的意图），我们不能擅自把用户模板改乱。
+	//
+	// 为什么**不用** `--force-overwrites`：它与 `--no-continue` 等价，
+	// 会把「暂停后从 .part 续传」一起关掉——那正是下载大文件时最需要的功能。
+	// 靠文件名区分清晰度就够了：不同清晰度落在不同文件，不会命中「已存在
+	// 就跳过」的逻辑；同清晰度重下本来就该复用同一个文件。
+	if !hasQualityField(completeTemplate) {
+		suffix := qualitySuffix
+		if idx := strings.LastIndex(completeTemplate, ".%(ext)s"); idx >= 0 {
+			completeTemplate = completeTemplate[:idx] + suffix + completeTemplate[idx:]
+		} else {
+			completeTemplate += suffix
+		}
 	}
 
 	// 启用 aria2 时输出模板不带目录：目录交给 --paths 分开指定（见下）。

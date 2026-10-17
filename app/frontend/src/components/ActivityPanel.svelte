@@ -71,7 +71,7 @@
 
     <div class="plot scroll">
       <div class="months" aria-hidden="true">
-        {#each visibleWeeks as week, weekIndex (weekIndex)}
+        {#each visibleWeeks as _week, weekIndex (weekIndex)}
           <span class="month-slot">
             {#if monthLabels[weekIndex]}
               <span class="month">{monthLabels[weekIndex]}</span>

@@ -77,6 +77,51 @@
 
 ---
 
+## 本轮修复（2026-10-18）
+
+用户报的四个问题，每个都追到了根因；同时补上两条从前没有的 CI 检查。
+
+### 1. 窗口不能调整大小
+- 最小尺寸 1000×700 在 13 寸屏分屏（1280×800 的一半）下缩不下去
+- 改为 880×560（布局真实可用下限），显式写 `DisableResize: false`
+- 880/1024/1200 三档截图验证无横向溢出；860px 补一档侧栏收窄
+
+### 2. 滑块不同步 + 加速不生效（同一根因的两个症状）
+- **`updateSetting('maxConnections', value)` 的签名是单参数**，运行时把字符串
+  按字符下标展开成 `{0:'m',1:'a',…}`，**一个字段都没改且不报错**
+- 48 个 svelte-check 错误长期无人发现（`tsc` 不解析 `.svelte`）
+- Go 侧 `accelEnabled`/`accelConnections` 只在 `NewApp()` 初始化，设置永不生效
+- `a.proxy` 同样从不从 settings.json 读回（重启后代理「消失」）
+- 全部修复；`StartDownload` 原来三次独立探测依赖（最坏 30 秒）改为共享缓存
+
+### 3. aria2 永远显示「未找到」
+- 后端 kind 是 `aria2`，设置页按 `aria2c` 查找，永远匹配不到
+- `installDep('aria2c')` 传给后端的是非法 kind（静默忽略）
+- 新增 `e2e_aria2_test.go`：真实 aria2c 下载 4MB 文件并通过
+
+### 4. 同链接不同清晰度不能继续下载
+- 原去重只比 URL → 下过 1080P 就再也下不了 4K
+- 判据改为 URL + 清晰度 + 模式，抽成 `lib/dedupe.ts` 纯函数（9 条用例）
+- 「已下载」分支保留下载按钮（原来只有一个「打开历史」）
+- 文件名补清晰度后缀：否则不同清晰度算出同名文件，yt-dlp 静默跳过并报成功
+
+### 新增的两条 CI 检查
+| 检查 | 拦什么 |
+|---|---|
+| `pnpm --dir app/frontend check`（svelte-check） | `.svelte` 里的类型错误，`tsc` 完全看不见 |
+| `pnpm lint:i18n:app` | 中英词条不成对、演示文案残留、`t()` 引用了不存在的 key |
+
+两条都做了变异验证（改坏后确认会红）。`lint:workflows` 新增一条规则：
+`docker exec <容器> command` 必然 exit 127（`command` 是 shell 内建命令），
+docker 工作流的冒烟曾因此长期红。
+
+### 去演示化收尾
+- 删掉 40+ 条演示词条（`toast.demoHint`、`hero.sample`、`（演示）` 后缀等）
+- 补上 14 个**代码在用但词表里不存在**的 key（原来界面会直接显示 `error.parseFailed` 这种原始 key）
+- `打开目录` 三处从「弹演示提示」改成真的调 `openPath` / `showInFolder`
+
+---
+
 ## 待办（暂缓）
 
 - [ ] 抖音/快手解析器移植（现用 puppeteer-core，Go 侧要换 CDP 直连）

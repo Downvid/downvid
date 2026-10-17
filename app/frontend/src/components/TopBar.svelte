@@ -1,7 +1,8 @@
 <script lang="ts">
   import Icon from './Icon.svelte'
   import logo from '../assets/logo.png'
-  import { app, type Tab } from '../lib/store.svelte'
+  import { app } from '../lib/store.svelte'
+  import type { Tab } from '../lib/constants'
   import { t, getLocale } from '../lib/i18n.svelte'
 
   const tabs: { id: Tab; key: string; icon: string }[] = [

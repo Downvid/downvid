@@ -182,6 +182,23 @@ jobs:
       - name: 容器镜像定义校验
         run: pnpm lint:docker
 
+      # 新前端（app/frontend，Svelte 5）：`tsc` **不解析 .svelte**，
+      # 于是组件与 store 的契约漂移长期无人发现——累计 48 个真错误，
+      # 其中「设置页每个按钮都失效」就是这么漏出去的。
+      - name: 前端依赖安装（app/frontend 是独立包，不在根 workspace）
+        working-directory: app/frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: 前端类型检查（svelte-check）
+        working-directory: app/frontend
+        run: pnpm check
+
+      # 新前端的词条表是**独立的一份**（app/frontend/src/lib/i18n.svelte.ts）。
+      # 中英不成对时只会静默显示错语言，必须静态查。
+      - name: 前端词条校验（app）
+        run: pnpm lint:i18n:app
+
+
       - name: 纯逻辑单测（Vitest）
         run: pnpm test
 

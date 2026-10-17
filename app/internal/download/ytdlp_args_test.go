@@ -145,33 +145,57 @@ func TestArgsFfmpegLocationIsDirectory(t *testing.T) {
 }
 
 func TestArgsOutputTemplateUsesFilenameTemplate(t *testing.T) {
+	// 用户模板原样保留，只在缺扩展名时补 .%(ext)s，缺清晰度字段时补后缀。
+	// `%(id)s` **不算**清晰度字段：同一视频的不同清晰度 id 相同，
+	// 靠它区分不出来，所以仍要补 `[height]`。
 	o := baseOptions()
 	o.FilenameTmpl = "%(title)s-%(id)s"
 	args := BuildArgs(o, outDir, baseCtx())
 	got, _ := valueAfter(args, "-o")
-	want := filepath.Join(outDir, "%(title)s-%(id)s.%(ext)s")
+	want := filepath.Join(outDir, "%(title)s-%(id)s"+qualitySuffix+".%(ext)s")
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }
 
 func TestArgsCompleteTemplateNotDoubled(t *testing.T) {
-	// 完整模板保留扩展名占位符，不重复追加
+	// 扩展名占位符只出现一次，且清晰度后缀插在它前面
 	o := baseOptions()
 	o.FilenameTmpl = "%(title)s.%(ext)s"
 	args := BuildArgs(o, outDir, baseCtx())
 	got, _ := valueAfter(args, "-o")
-	want := filepath.Join(outDir, "%(title)s.%(ext)s")
+	want := filepath.Join(outDir, "%(title)s"+qualitySuffix+".%(ext)s")
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
+	}
+	if strings.Count(got, "%(ext)s") != 1 {
+		t.Fatalf("扩展名占位符重复：%q", got)
+	}
+}
+
+// 前端已经按当前所选格式补过后缀时，后端不能再补一次。
+//
+// 前端知道 height，能避免「没有分辨率的格式被写成 [NAp]」，
+// 所以优先由它处理；后端只负责兜底。两边都补就会变成
+// `标题 [1080p] [NAp].mp4`——真实踩过的命名。
+func TestArgsDoesNotDoubleSuffixWhenFrontendAdded(t *testing.T) {
+	o := baseOptions()
+	o.FilenameTmpl = "%(title)s [1080p].%(ext)s"
+	args := BuildArgs(o, outDir, baseCtx())
+	got, _ := valueAfter(args, "-o")
+	if got != filepath.Join(outDir, "%(title)s [1080p].%(ext)s") {
+		t.Fatalf("已带字面量清晰度后缀的模板不该再追加：%q", got)
 	}
 }
 
 func TestArgsAutoAppendsExtension(t *testing.T) {
-	// 未设置模板时自动追加一次扩展名
+	// 未设置模板时自动追加一次扩展名，并补上清晰度字段。
+	//
+	// 为什么必须补：默认模板会让同一视频的 1080P 与 4K 算出同名文件，
+	// 第二次下载被 yt-dlp 静默跳过却报成功（用户拿到的是旧文件）。
 	args := BuildArgs(baseOptions(), outDir, baseCtx())
 	got, _ := valueAfter(args, "-o")
-	want := filepath.Join(outDir, "%(title)s.%(ext)s")
+	want := filepath.Join(outDir, "%(title)s"+qualitySuffix+".%(ext)s")
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
@@ -280,7 +304,7 @@ func TestArgsAria2OnlyForHTTP(t *testing.T) {
 		t.Fatalf("--concurrent-fragments got %q", got)
 	}
 	// aria2 模式下输出模板不带目录（目录由 --paths 分开指定）
-	if got, _ := valueAfter(args, "-o"); got != "%(title)s.%(ext)s" {
+	if got, _ := valueAfter(args, "-o"); got != "%(title)s"+qualitySuffix+".%(ext)s" {
 		t.Fatalf("-o got %q，aria2 模式下应为纯模板", got)
 	}
 	if !contains(args, "temp:"+filepath.Join(outDir, ".downvid-aria2")) {

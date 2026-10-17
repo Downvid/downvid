@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Downvid/downvid/app/internal/deps"
@@ -86,12 +87,67 @@ func (a *App) DetectDependencies() []Dependency {
 
 // ResolveYtdlp 返回可用的 yt-dlp 路径（找不到时返回空串）。
 func (a *App) ResolveYtdlp() string {
-	for _, d := range a.DetectDependencies() {
-		if d.Kind == "yt-dlp" && d.Found && d.Path != "" {
-			return d.Path
-		}
+	if d, ok := a.pathOf("yt-dlp"); ok {
+		return d
 	}
 	return ""
+}
+
+// pathOf 在**一次探测**里取某个依赖的路径。
+//
+// ## 为什么要有这个（性能，但也是正确性）
+//
+// `StartDownload` 需要 yt-dlp、aria2、ffmpeg 三个路径。早先它分别调用
+// `ResolveYtdlp()` / `resolveAria2()` / `ffmpegLocation()`，每个都独立跑一次
+// 边车探测——**三次进程启动**，而每次探测都要真的执行 yt-dlp 读版本号
+// （PyInstaller 构建首次 8~12 秒），三次就是半分钟。
+//
+// 用户点「下载」后要等半分钟才有第一字节，看起来就是「点了没反应」。
+// 现在三处共享同一次探测结果。
+func (a *App) pathOf(kind string) (string, bool) {
+	for _, d := range a.detectCached() {
+		if d.Kind == kind && d.Found && d.Path != "" {
+			return d.Path, true
+		}
+	}
+	return "", false
+}
+
+// depsCache / depsCachedAt 缓存一次探测结果。
+//
+// TTL 与 Go 边车里的 cacheTTL 一致（60 秒）。缓存只用于**下载发起前的路径解析**
+// ——界面上的「检测依赖」按钮走 `DetectDependencies` 的实时探测，
+// 不会被缓存挡住（用户点「重新检测」必须真的重新检测）。
+var (
+	depsCache    []Dependency
+	depsCachedAt time.Time
+	depsCacheMu  sync.Mutex
+)
+
+const depsCacheTTL = 60 * time.Second
+
+// detectCached 取最近一次探测结果，超过 TTL 才重新探测。
+func (a *App) detectCached() []Dependency {
+	depsCacheMu.Lock()
+	defer depsCacheMu.Unlock()
+
+	if depsCache != nil && time.Since(depsCachedAt) < depsCacheTTL {
+		return depsCache
+	}
+	result := a.DetectDependencies()
+	depsCache = result
+	depsCachedAt = time.Now()
+	return result
+}
+
+// invalidateDepsCache 让下一次解析重新探测。
+//
+// 依赖刚下载完、或用户在设置里改了手动路径时必须调，否则会拿到旧路径。
+func invalidateDepsCache() {
+	depsCacheMu.Lock()
+	depsCache = nil
+	depsCachedAt = time.Time{}
+	depsCacheMu.Unlock()
 }
 
 // StartDownload 启动一次下载（异步：立即返回，进度走 download:progress 事件）。
@@ -116,7 +172,7 @@ func (a *App) StartDownload(opts DownloadRequest) StartDownloadResult {
 		DownloadMode: opts.DownloadMode,
 		HasAudio:     opts.HasAudio,
 		Subtitles:    opts.Subtitles,
-		Proxy:        a.proxy,
+		Proxy:        a.currentProxy(),
 		FilenameTmpl: opts.FilenameTemplate,
 		Acceleration: a.acceleration(),
 	}, opts.OutputDir, download.BuildArgsContext{
@@ -280,30 +336,44 @@ func platformKey() string {
 
 // ffmpegLocation 返回 ffmpeg 所在目录（yt-dlp 会在该目录里同时找 ffmpeg 与 ffprobe）。
 func (a *App) ffmpegLocation() string {
-	for _, d := range a.DetectDependencies() {
-		if d.Kind == "ffmpeg" && d.Found && d.Path != "" {
-			return filepath.Dir(d.Path)
-		}
+	p, ok := a.pathOf("ffmpeg")
+	if !ok {
+		return ""
 	}
-	return ""
+	return filepath.Dir(p)
 }
 
 func (a *App) resolveAria2() string {
-	for _, d := range a.DetectDependencies() {
-		if d.Kind == "aria2" && d.Found && d.Path != "" {
-			return d.Path
-		}
-	}
-	return ""
+	p, _ := a.pathOf("aria2")
+	return p
 }
 
+// acceleration 返回当前生效的加速设置。
+//
+// ## 这里的 bug 曾经让「加速」完全无效
+//
+// 早先 `accelEnabled` / `accelConnections` 只在 `NewApp()` 里初始化成
+// `true / 8`，之后再没有任何地方写它们——`UpdateSettings` 只落盘，
+// `ResetSettings` 只写默认文件。于是：
+//
+//   - 用户在滑块上拖到「激进」（16）→ 界面显示 16，实际仍是 8
+//   - 用户关掉加速开关 → 界面关着，实际仍按 8 连接跑
+//   - 重启后读回设置，但运行时状态还是 NewApp 的那份
+//
+// 表现是「加速开关和滑块都像摆设」。现在改为**每次都从设置文件读**，
+// 唯一真相是 settings.json，运行时不再持有第二份可漂移的副本。
 func (a *App) acceleration() *download.Acceleration {
-	if !a.accelEnabled {
-		off := false
-		return &download.Acceleration{Enabled: &off}
+	st, err := a.settingsStore().Load()
+	if err != nil {
+		// 设置读不出来时退回默认（开启 + 8 连接），而不是「静默关闭加速」：
+		// 关掉加速会让下载慢一倍，用户却看不到任何提示。
+		log.Printf("[downvid] 读取加速设置失败，回退默认值：%v", err)
+		return download.NormalizeAccelerationPtr(nil)
 	}
-	on := true
-	return &download.Acceleration{Enabled: &on, MaxConnections: a.accelConnections}
+	return download.NormalizeAccelerationPtr(&download.Acceleration{
+		Enabled:        st.Acceleration.Enabled,
+		MaxConnections: st.Acceleration.MaxConnections,
+	})
 }
 
 // jsRuntime 返回可用的 JS 运行时（YouTube 需要）。
@@ -365,15 +435,18 @@ func (a *App) Parse(url string, proxy string) (*parse.VideoInfo, error) {
 		parser = parse.NewParser()
 		a.parser = parser
 	}
-	if proxy != "" {
-		a.proxy = proxy
-	}
+	// 取一份局部的代理值：下面要多处用到，读字段两次中间可能被
+	// UpdateSettings 改掉（那是另一个 goroutine），读到两个不同的值。
+	effectiveProxy := a.proxy
 	a.mu.Unlock()
+	if proxy != "" {
+		effectiveProxy = proxy
+	}
 
 	info, err := parser.Parse(parse.ParseOptions{
 		YtdlpPath:  ytdlp,
 		URL:        url,
-		Proxy:      a.proxy,
+		Proxy:      effectiveProxy,
 		CookieArgs: a.cookieArgs(),
 		// 原始 info JSON 落在数据目录下而不是 /tmp：
 		// 桌面端可能长期运行，/tmp 会被系统清理，而下载时要读它
@@ -468,10 +541,15 @@ func (a *App) InstallDeps(opts DepsInstallRequest) StartDownloadResult {
 	m := a.depsManager()
 
 	go func() {
+		// 装之前先让探测缓存失效：装完的路径与版本都不一样了，
+		// 不清的话下载发起时还会拿旧路径去 spawn
+		invalidateDepsCache()
+		defer invalidateDepsCache()
+
 		err := m.Install(deps.FetchOptions{
 			Only:    opts.Only,
 			Force:   opts.Force,
-			Proxy:   a.proxy,
+			Proxy:   a.currentProxy(),
 			Mirror:  opts.Mirror,
 			Timeout: 10 * time.Minute,
 		}, func(p deps.Progress) {
@@ -613,8 +691,13 @@ func (a *App) UpdateSettings(patchJSON string) OpenPathResult {
 		return OpenPathResult{Error: err.Error()}
 	}
 
-	// 设置变了：清依赖探测缓存（手动路径 / 代理会影响探测结果）
+	// 设置变了：重新从文件读运行时字段（代理），并清依赖探测缓存
+	// （手动路径 / 代理会影响探测结果）
+	a.syncRuntimeSettings()
 	a.depsManager().InvalidateCache()
+	// 手动路径 / 代理都可能改变探测结果：清掉这里的 60 秒缓存，
+	// 否则用户改完设置后第一次下载仍会用旧路径
+	invalidateDepsCache()
 	return OpenPathResult{OK: true}
 }
 
@@ -623,7 +706,11 @@ func (a *App) ResetSettings() OpenPathResult {
 	if err := a.settingsStore().Save(settings.Defaults()); err != nil {
 		return OpenPathResult{Error: err.Error()}
 	}
+	a.syncRuntimeSettings()
 	a.depsManager().InvalidateCache()
+	// 手动路径 / 代理都可能改变探测结果：清掉这里的 60 秒缓存，
+	// 否则用户改完设置后第一次下载仍会用旧路径
+	invalidateDepsCache()
 	return OpenPathResult{OK: true}
 }
 
@@ -679,6 +766,38 @@ func applySettingsPatch(st *settings.Settings, patch map[string]any) {
 		}
 		st.DepPaths = next
 	}
+}
+
+// currentProxy 返回当前生效的代理（线程安全）。
+func (a *App) currentProxy() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.proxy
+}
+
+// syncRuntimeSettings 把设置里「运行时要用到的字段」同步进内存。
+//
+// ## 为什么必须有这个函数
+//
+// 设置落盘 ≠ 生效。早先 `UpdateSettings` 只把 patch 写进 settings.json，
+// 而 `Parse` / `StartDownload` / `InstallDeps` 读的是内存里的 `a.proxy`，
+// `NewApp()` 之后再没人写过它。表现：
+//
+//   - 在设置页填了代理 → 解析/下载完全不走代理，用户以为代理不生效
+//   - 重启后 `a.proxy` 仍是空串 → 代理「自己消失了」
+//
+// 加速设置在 `acceleration()` 里每次从文件读，不需要这份缓存；
+// 代理需要，因为解析每次都会带上它。
+func (a *App) syncRuntimeSettings() {
+	st, err := a.settingsStore().Load()
+	if err != nil {
+		// 读不出来时保持现状：把代理清空会让「本来能下的」变成「下不了」
+		log.Printf("[downvid] 读取设置失败，保留当前代理：%v", err)
+		return
+	}
+	a.mu.Lock()
+	a.proxy = strings.TrimSpace(st.Proxy)
+	a.mu.Unlock()
 }
 
 // settingsStore 惰性创建设置存储。

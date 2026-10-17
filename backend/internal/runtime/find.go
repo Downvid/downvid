@@ -133,8 +133,8 @@ const DetectTimeout = 80 * time.Second
 //
 // ## 为什么安全
 //
-//   - 各依赖的候选表、扫描预算都是**按 kind 独立**的（`findOneContext` 内部
-//     会重置预算），互不共享可变状态；
+//   - 各依赖的候选表、扫描/执行预算都是**按 kind 独立**的：预算现在是一次
+//     探测私有的 `budget` 对象（见下方 budget 注释），不再是包级变量；
 //   - 唯一的共享是 `ctx`（总时限）与只读的 `MinVersions`；
 //   - 结果按 `Kinds` 的顺序写回固定下标，因此输出顺序稳定（界面按它展示）。
 func FindAllContext(ctx context.Context, opts Options) []Result {
@@ -162,9 +162,8 @@ func findOneContext(parent context.Context, kind Kind, opts Options) Result {
 	ctx, cancel := context.WithTimeout(parent, probeTimeLimit)
 	defer cancel()
 	res := Result{Kind: string(kind), Optional: Optional[kind]}
-	// 重置扫描预算与时限：每个依赖独立计算，避免前一个把额度用光
-	resetScanBudget()
-	resetProbeBudget()
+	// 本次探测私有的预算：并行探测时绝不与其他依赖共享（见 budget 注释）
+	b := newBudget()
 
 	// 记录失败原因时**优先保留有信息量的那个**：
 	// 「版本过旧」远比「某个候选路径不存在」重要，而后者总是最后一个，
@@ -180,7 +179,7 @@ func findOneContext(parent context.Context, kind Kind, opts Options) Result {
 		// 卡死的候选会各自吃掉一个候选预算，若不加这道闸，十几个候选
 		// 最坏能把一个依赖拖上几分钟。超过总预算就收手，宁可漏报也不要
 		// 让界面一直转圈。
-		if probeBudgetExhausted() {
+		if b.probeBudgetExhausted() {
 			break
 		}
 		info, err := probeToolCandidate(ctx, kind, c)
@@ -216,11 +215,11 @@ func findOneContext(parent context.Context, kind Kind, opts Options) Result {
 	// 为什么必须有界：全盘遍历在 Windows 上可能耗时很久（且会扫到网络盘）。
 	// 因此只扫几个最可能的根目录、限制深度与访问条目数、命中即停。
 	// 扫描预算从扫描开始计算，不能被前面的版本执行消耗掉。
-	resetScanBudget()
-	if deadline, ok := ctx.Deadline(); ok && deadline.Before(scanDeadline) {
-		scanDeadline = deadline
+	b.resetScan()
+	if deadline, ok := ctx.Deadline(); ok && deadline.Before(b.scanDeadline) {
+		b.scanDeadline = deadline
 	}
-	if fallback := scanForBinary(ctx, kind); fallback != nil {
+	if fallback := scanForBinary(ctx, kind, b); fallback != nil {
 		res.Found = true
 		res.Path = fallback.Path
 		res.Version = fallback.Version
@@ -308,28 +307,54 @@ func isProbeTimeout(err error) bool {
 // 这个数字是**上界**而不是典型值：正常情况下托管副本命中就结束了。
 const probeTimeLimit = 45 * time.Second
 
-// probeDeadline 单次探测候选的 wall-clock 上限，由 findOne 在每次探测前设置。
-var probeDeadline time.Time
-
-// resetProbeBudget 重置候选执行总预算。与 resetScanBudget 一样是包级状态，
-// 抽成函数让测试能显式重置（否则用例之间会互相影响，见 scan 那边的教训）。
-func resetProbeBudget() {
-	probeDeadline = time.Now().Add(probeTimeLimit)
+// budget 是一次依赖探测**私有**的预算对象。
+//
+// ## 为什么不再是包级变量（这是真出过事故的）
+//
+// `FindAllContext` 会并行探测四个依赖。早先 `scanDirsLeft` / `scanDeadline` /
+// `probeDeadline` 都是包级变量：四个 goroutine 同时 reset，彼此的额度互相覆盖。
+// 症状非常隐蔽——Windows 回归里「`Downloads/a-bad` 是坏文件，应继续找到
+// `b-valid`」这条**始终**失败（另一个依赖先把目录预算抢到 0），而单跑该用例
+// 又必过；`go test -race` 一次就报出 DATA RACE。
+//
+// 预算天生是「一次探测之内」的状态，就该挂在这次探测上，而不是进程上。
+type budget struct {
+	scanDirsLeft  int
+	scanDeadline  time.Time
+	probeDeadline time.Time
 }
 
-// probeBudgetExhausted 判断候选执行总预算是否已用尽。零值视为无期限。
-func probeBudgetExhausted() bool {
-	if probeDeadline.IsZero() {
+// newBudget 构造一份满额预算。
+func newBudget() *budget {
+	return &budget{
+		scanDirsLeft:  scanMaxDirs,
+		scanDeadline:  time.Now().Add(scanTimeLimit),
+		probeDeadline: time.Now().Add(probeTimeLimit),
+	}
+}
+
+// resetScan 在保底扫描开始前重置扫描额度。
+//
+// 扫描预算从扫描开始计算，不能被前面那些「跑版本号」的候选消耗掉
+// ——一次探测里最坏要执行十几个候选。
+func (b *budget) resetScan() {
+	b.scanDirsLeft = scanMaxDirs
+	b.scanDeadline = time.Now().Add(scanTimeLimit)
+}
+
+// probeBudgetExhausted 判断候选执行总预算是否已用尽。
+func (b *budget) probeBudgetExhausted() bool {
+	if b == nil || b.probeDeadline.IsZero() {
 		return false
 	}
-	return time.Now().After(probeDeadline)
+	return time.Now().After(b.probeDeadline)
 }
 
 // scanForBinary 在常见根目录下有限度地搜索可执行文件。
 //
 // 只作为保底：正常路径（托管目录 / PATH / 常见安装目录）都已尝试过才会走到这里。
 // 扫到的结果标记为 SourceScanned，界面会提示"自动扫描发现"，便于用户判断来源。
-func scanForBinary(ctx context.Context, kind Kind) *probe.Info {
+func scanForBinary(ctx context.Context, kind Kind, b *budget) *probe.Info {
 	name := BinaryName(kind)
 	seen := map[string]bool{}
 	var result *probe.Info
@@ -340,8 +365,8 @@ func scanForBinary(ctx context.Context, kind Kind) *probe.Info {
 		}
 		seen[root] = true
 
-		found := scanDirMatching(root, name, 0, func(file string) bool {
-			probeCtx, cancel := context.WithDeadline(ctx, scanDeadline)
+		found := scanDirMatching(b, root, name, 0, func(file string) bool {
+			probeCtx, cancel := context.WithDeadline(ctx, b.scanDeadline)
 			defer cancel()
 			info, err := probeToolContext(probeCtx, kind, file)
 			if err != nil || !isAcceptableVersion(kind, info) {
@@ -364,20 +389,20 @@ func scanForBinary(ctx context.Context, kind Kind) *probe.Info {
 //   - 目录数预算：真正决定耗时的是**递归进入的目录数**（每次 ReadDir 是系统调用），
 //     而不是单个目录里有多少文件
 //   - 跳过明显无关的目录（node_modules、缓存、系统目录）
-func scanDir(dir string, name string, depth int) string {
-	return scanDirMatching(dir, name, depth, func(string) bool { return true })
+func scanDir(b *budget, dir string, name string, depth int) string {
+	return scanDirMatching(b, dir, name, depth, func(string) bool { return true })
 }
 
 // 无效或过旧的同名文件不应遮蔽同一目录树中的其他副本。
-func scanDirMatching(dir string, name string, depth int, accept func(string) bool) string {
+func scanDirMatching(b *budget, dir string, name string, depth int, accept func(string) bool) string {
 	// 三道闸：深度、目录数预算、以及 wall-clock 上限。
 	// 加时间上限是因为目录数预算无法约束"每个目录都很慢"的情况
 	// （Windows 上 Program Files 叠加杀软扫描，单次 ReadDir 可能数百毫秒）。
 	// 没有它，"保底扫描"可能反而让用户看到"依赖检测超时"。
-	if depth > scanMaxDepth || scanDirsLeft <= 0 || scanExpired(time.Now()) {
+	if depth > scanMaxDepth || b.scanDirsLeft <= 0 || b.scanExpired(time.Now()) {
 		return ""
 	}
-	scanDirsLeft--
+	b.scanDirsLeft--
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -403,7 +428,7 @@ func scanDirMatching(dir string, name string, depth int, accept func(string) boo
 	}
 
 	for _, sub := range subdirs {
-		if found := scanDirMatching(sub, name, depth+1, accept); found != "" {
+		if found := scanDirMatching(b, sub, name, depth+1, accept); found != "" {
 			return found
 		}
 	}
@@ -412,20 +437,12 @@ func scanDirMatching(dir string, name string, depth int, accept func(string) boo
 
 const scanMaxDepth = 4
 
-// scanDirsLeft 是单次扫描允许**进入**的目录数上限。
+// scanMaxDirs 单次扫描允许进入的目录数上限。
 //
 // 刻意按目录数而不是条目数计：早先按条目计（20000 条），在 Windows 上扫
 // `C:\Program Files` 一个大目录就耗尽了预算，导致保底扫描形同虚设
 // ——CI 的 windows job 正是这样把它暴露出来的。
-//
-// 每探测一个依赖都会重置。
-var scanDirsLeft = scanMaxDirs
-
-// scanMaxDirs 单次扫描允许进入的目录数上限
 const scanMaxDirs = 3000
-
-// scanDeadline 是单次扫描的 wall-clock 上限，由 findOne 在每次探测前设置。
-var scanDeadline time.Time
 
 // scanTimeLimit 单次扫描最多占用多久。宁可漏扫也不要把检测拖成超时。
 //
@@ -434,27 +451,17 @@ var scanDeadline time.Time
 // 时限掐断，保底扫描就永远发现不了它。CandidateTimeout + 一个候选的余量。
 const scanTimeLimit = 18 * time.Second
 
-// resetScanBudget 重置扫描的目录数预算与时限。
-//
-// 抽成函数是为了让测试能显式重置全局状态：这两个变量是包级可变状态，
-// 用例之间会互相影响（CI 上就出现过"上一个用例把时限设成过去"导致
-// 下一个用例静默失败）。
-func resetScanBudget() {
-	scanDirsLeft = scanMaxDirs
-	scanDeadline = time.Now().Add(scanTimeLimit)
-}
-
 // scanExpired 判断扫描是否已超时。
 //
 // **零值必须视为"无期限"而不是"已过期"**：time.Time 的零值下
 // `now.After(zero)` 恒为 true，会让扫描静默地什么都不做。
 // 这个坑被 CI 抓到了——直接调用 scanDir 的用例（未经过 findOne 设置时限）
 // 在 Windows 上（更慢、更容易触到）失败。
-func scanExpired(now time.Time) bool {
-	if scanDeadline.IsZero() {
+func (b *budget) scanExpired(now time.Time) bool {
+	if b == nil || b.scanDeadline.IsZero() {
 		return false
 	}
-	return now.After(scanDeadline)
+	return now.After(b.scanDeadline)
 }
 
 // shouldSkipDir 跳过明显不可能放可执行文件、或体量过大的目录

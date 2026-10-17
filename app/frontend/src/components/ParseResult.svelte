@@ -201,14 +201,26 @@
 
     <footer class="result-foot">
       {#if existing}
+        <!--
+          这一清晰度已下载：**仍然保留下载按钮**。
+          早先这里是「只给一个『打开历史』按钮」，于是用户想换清晰度时
+          必须先手改选择再回来——而换清晰度恰恰是重复使用同一视频的
+          主要场景。现在按钮留着（点了会提示已下载），旁边的链接去历史。
+        -->
         <div class="summary">
           <span class="summary-label">{t('result.alreadyHint')}</span>
           <span class="summary-path num">{existing.filePath}</span>
         </div>
-        <button class="btn btn-ghost btn-lg download-btn" onclick={() => app.setTab('history')}>
-          <Icon name="history" size={18} />
-          <span>{t('result.openHistory')}</span>
-        </button>
+        <div class="foot-actions">
+          <button class="btn btn-ghost btn-lg" onclick={() => app.setTab('history')}>
+            <Icon name="history" size={18} />
+            <span>{t('result.openHistory')}</span>
+          </button>
+          <button class="btn btn-primary btn-lg download-btn" disabled={!app.canDownload} onclick={() => app.addDownload()}>
+            <Icon name="download" size={18} />
+            <span>{t('format.download')}</span>
+          </button>
+        </div>
       {:else}
         <div class="summary">
           <span class="summary-label">{app.canDownload ? app.selectionSummary : app.selectionHint}</span>
@@ -605,6 +617,13 @@
     flex: none;
     min-width: 150px;
   }
+  /* 「已下载」分支里有两个按钮：历史与仍可用的下载 */
+  .foot-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+  }
 
   @media (max-width: 720px) {
     .format-grid,
@@ -620,6 +639,11 @@
       align-items: stretch;
     }
     .download-btn {
+      width: 100%;
+    }
+    .foot-actions {
+      flex-direction: column-reverse;
+      align-items: stretch;
       width: 100%;
     }
   }

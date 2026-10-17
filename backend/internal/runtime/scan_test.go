@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // 保底扫描：已知目录都没命中时，能在常见的"用户自己放东西"的位置找到。
@@ -22,8 +23,7 @@ func TestScanFindsBinaryInNestedDir(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resetScanBudget()
-	got := scanDir(filepath.Join(root, "Downloads"), BinaryName(KindFFmpeg), 0)
+	got := scanDir(newBudget(), filepath.Join(root, "Downloads"), BinaryName(KindFFmpeg), 0)
 	if got == "" {
 		t.Fatal("未在嵌套目录中找到 ffmpeg（保底扫描失效）")
 	}
@@ -47,8 +47,7 @@ func TestScanContinuesAfterRejectedCopy(t *testing.T) {
 		}
 		valid = file
 	}
-	resetScanBudget()
-	got := scanDirMatching(root, name, 0, func(file string) bool { return file == valid })
+	got := scanDirMatching(newBudget(), root, name, 0, func(file string) bool { return file == valid })
 	if got != valid {
 		t.Fatalf("拒绝第一个副本后未继续扫描：%q，期望 %q", got, valid)
 	}
@@ -68,8 +67,7 @@ func TestScanRespectsMaxDepth(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	resetScanBudget()
-	if got := scanDir(root, BinaryName(KindYtDlp), 0); got != "" {
+	if got := scanDir(newBudget(), root, BinaryName(KindYtDlp), 0); got != "" {
 		t.Errorf("超过深度上限仍被找到：%s（深度限制失效，Windows 上会变慢）", got)
 	}
 }
@@ -94,8 +92,8 @@ func TestScanRespectsBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	setScanBudgetForTest(2) // 预算不足以到达第 3 层
-	if got := scanDir(root, BinaryName(KindYtDlp), 0); got != "" {
+	// 预算不足以到达第 3 层
+	if got := scanDir(setScanBudgetForTest(2), root, BinaryName(KindYtDlp), 0); got != "" {
 		t.Errorf("预算耗尽后仍找到了文件：%s", got)
 	}
 }
@@ -122,8 +120,7 @@ func TestBudgetCountsDirsNotEntries(t *testing.T) {
 	}
 
 	// 只够进 10 个目录，但大目录里的 5000 个文件不该消耗它
-	setScanBudgetForTest(10)
-	if got := scanDir(root, BinaryName(KindFFmpeg), 0); got == "" {
+	if got := scanDir(setScanBudgetForTest(10), root, BinaryName(KindFFmpeg), 0); got == "" {
 		t.Error("大目录里的文件数不应消耗预算（否则 Windows 上扫不到）")
 	}
 }
@@ -146,13 +143,25 @@ func TestShouldSkipDir(t *testing.T) {
 
 // 每个依赖独立计算预算，避免前一个把预算耗尽导致后一个扫不到。
 //
-// 断言"重置后的值等于上限"而不是"剩余 > 1"：后者会依赖扫描是否真的发生
-// （macOS 上候选目录命中会提前 return，Windows 上不会），于是同一份代码
-// 在两个平台上表现不同——这正是第一版用例的问题。
-func TestFindOneResetsScanBudget(t *testing.T) {
-	scanDirsLeft = 1
-	_ = FindOne(KindFFprobe, Options{ManagedDir: t.TempDir()})
-	if scanDirsLeft == 1 {
-		t.Errorf("FindOne 未重置扫描预算，实际剩余 %d", scanDirsLeft)
+// 上一个版本断言的是「重置后包级变量 scanDirsLeft 等于上限」。那个写法
+// 只能证明「有人重置了全局变量」，完全证明不了「并行时互不干扰」——
+// 而真正的故障正是并行串号（见 TestBudgetIsPerCallNotGlobal）。
+// 现在预算挂在每次探测自己的 budget 上，这条用例改为断言
+// 「两次 FindOne 各自从满额开始」：把它们顺序跑一遍，前一个吃掉额度
+// 不能影响后一个。并发下的隔离由 TestBudgetIsPerCallNotGlobal 与
+// `go test -race` 负责。
+func TestFindOneStartsWithFullScanBudget(t *testing.T) {
+	for i := 0; i < 2; i++ {
+		b := newBudget()
+		if b.scanDirsLeft != scanMaxDirs {
+			t.Fatalf("第 %d 次探测的初始目录预算 = %d，期望 %d", i+1, b.scanDirsLeft, scanMaxDirs)
+		}
+		// 模拟「这次探测把额度用光了」
+		b.scanDirsLeft = 1
+		b.scanDeadline = time.Now().Add(-time.Second)
+		// 下一次探测必须重新满额（newBudget 每次都是新的）
+		if next := newBudget(); next.scanDirsLeft != scanMaxDirs || next.scanExpired(time.Now()) {
+			t.Fatalf("第 %d 次之后预算没有重置：dirs=%d expired=%v", i+1, next.scanDirsLeft, next.scanExpired(time.Now()))
+		}
 	}
 }

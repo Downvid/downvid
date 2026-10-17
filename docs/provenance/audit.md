@@ -16,7 +16,7 @@
 | --- | --- | --- |
 | 上游是谁、停在哪一版 | [Videdown](https://github.com/cshuangyy/videdown) `cshuangyy/videdown@0c620c1`，2026-08-22 | `scripts/data/provenance/upstream/_SOURCE.txt` |
 | DownVid 从哪一刻开始 | `1d7b041`（2026-08-23，`refactor: 重命名 Videdown → DownVid`）；它的父提交就是上游 HEAD | `git log --oneline --reverse` |
-| 上游代码还剩多少 | 上游 **2707** 条有效源码行中，**1239** 行（**45.8%**）仍逐字存在 | `pnpm audit:provenance` |
+| 上游代码还剩多少 | 上游 **2707** 条有效源码行中，**1241** 行（**45.8%**）仍逐字存在 | `pnpm audit:provenance` |
 | 改动规模 | 分叉后 243 个文件变动，新增 213 / 修改 25 / 删除 5，+48466 / −4763 行 | `git diff --stat 1d7b041^ HEAD` |
 | 哪些文件基本是上游原样 | `src/types/index.ts` 94%、`src/style.css` 45%、`electron/preload.ts` 74%（绝对值较高） | 登记表 `scripts/data/provenance/registry.json` |
 | 哪些目录完全是自研 | `backend/`（Go 边车 4368 行）、`docker/`（1314 行）、`scripts/`、`tests/`、`website/` 全为分叉后新增 | `git diff --name-status --diff-filter=A 1d7b041^ HEAD` |
@@ -92,7 +92,7 @@ node scripts/audit-provenance.mjs --report   # 打印完整表格，不写文件
 | `postcss.config.js` | 3 | 1 | 33.3% | 同路径(1) |
 | `tailwind.config.js` | 72 | 1 | 1.4% | 已迁到 Tailwind v4 的 CSS-first 写法 |
 | `src/vite-env.d.ts` | 1 | 1 | 100% | 同路径 |
-| **合计** | **2707** | **1239** | **45.8%** | |
+| **合计** | **2707** | **1241** | **45.8%** | |
 
 > 读这张表的正确姿势：**比例低不代表重写**。`tailwind.config.js` 的 1.4% 是因为 Tailwind v4 把配置
 > 搬进了 CSS（`src/style.css` 的 `@theme`），72 行配置对不上是预期的；而 `electron/main.ts` 的

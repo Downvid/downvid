@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "check": "svelte-check --threshold error",
+    "check:warn": "svelte-check"
   },
   "devDependencies": {
     "@material-symbols/font-400": "^0.48.0",
@@ -15,6 +17,7 @@
     "@tailwindcss/vite": "^4.3.3",
     "@tsconfig/svelte": "^5.0.0",
     "svelte": "^5.55.7",
+    "svelte-check": "^4.7.7",
     "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vite": "^7.0.0",

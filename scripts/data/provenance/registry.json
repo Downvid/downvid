@@ -10,7 +10,7 @@
   },
   "totals": {
     "upstreamSignificantLines": 2707,
-    "retainedVerbatimLines": 1239,
+    "retainedVerbatimLines": 1241,
     "retainedPct": 45.8,
     "registryFiles": 32
   },
@@ -24,8 +24,8 @@
       "retainedElsewhere": 47.1,
       "homes": [
         "src/env.d.ts(15)",
-        "src/types/index.ts(2)",
-        "docker/server/electron-process.d.ts(1)"
+        "app/frontend/src/lib/backend.ts(3)",
+        "app/frontend/src/lib/store.svelte.ts(2)"
       ]
     },
     "electron/ipc/download.ts": {

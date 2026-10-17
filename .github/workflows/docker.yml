@@ -192,7 +192,11 @@ jobs:
           docker exec "${CONTAINER}" ffprobe -version | head -1 \
             || { echo "::error::镜像里的 ffprobe 不能执行（合并视频会失败）"; exit 1; }
           for dep in yt-dlp ffmpeg ffprobe; do
-            docker exec "${CONTAINER}" command -v "${dep}" >/dev/null \
+            # 必须经 sh -c 跑：`command` 是 shell 内建命令，**没有对应的可执行文件**。
+            # 直接写 `docker exec CONTAINER command -v dep` 时 Docker 会去 PATH 里
+            # 找一个叫 command 的程序，必然失败（退出码 127），看起来像
+            # 「依赖不在 PATH 中」——CI 曾因此一直红，而镜像其实完全正常。
+            docker exec "${CONTAINER}" sh -c "command -v ${dep}" >/dev/null \
               || { echo "::error::${dep} 不在 PATH 中"; exit 1; }
           done
 

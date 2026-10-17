@@ -280,21 +280,23 @@ func TestHangingSystemCandidatesDoNotStarveGoodCopy(t *testing.T) {
 	t.Logf("两个卡死候选 + 正常副本耗时 %s", elapsed)
 }
 
-// TestProbeBudgetResets 候选执行预算必须每次探测前重置。
+// TestProbeBudgetResets 候选执行预算必须是每次探测私有的新对象。
 //
-// 它是包级可变状态，不重置的话「上一次探测把预算用光」会让下一次
-// 静默什么都不做——与 scan 预算踩过的坑完全相同。
+// 它早先是包级可变状态，不重置的话「上一次探测把预算用光」会让下一次
+// 静默什么都不做——而并行探测时更糟：四个依赖互相清对方的额度。
+// 现在每次探测 newBudget() 都是新的，零值仍视为无期限。
 func TestProbeBudgetResets(t *testing.T) {
-	probeDeadline = time.Now().Add(-time.Second) // 假装上一次已用尽
-	if !probeBudgetExhausted() {
+	b := newBudget()
+	b.probeDeadline = time.Now().Add(-time.Second) // 假装这一次已用尽
+	if !b.probeBudgetExhausted() {
 		t.Fatal("已过期的预算应判定为用尽")
 	}
-	resetProbeBudget()
-	if probeBudgetExhausted() {
-		t.Fatal("重置后不应判定为用尽")
+	fresh := newBudget()
+	if fresh.probeBudgetExhausted() {
+		t.Fatal("新预算不应判定为用尽")
 	}
-	probeDeadline = time.Time{} // 零值视为无期限
-	if probeBudgetExhausted() {
+	fresh.probeDeadline = time.Time{} // 零值视为无期限
+	if fresh.probeBudgetExhausted() {
 		t.Fatal("零值应视为无期限，否则探测会静默不做任何事")
 	}
 }
