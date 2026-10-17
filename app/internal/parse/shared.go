@@ -1,0 +1,112 @@
+// Package parse —— 平台解析器共用工具。
+//
+// 本文件是 electron/parsers/shared.ts 的 Go 移植（83 行，13 条用例）。
+//
+// 抽出来的原因照搬原注释：抖音与快手的解析器各自维护时出现了完全重复的实现
+// （码率估算、Cookie 解析），抽出以免两边慢慢漂移。移植后同理——Go 侧只留这一份。
+package parse
+
+import (
+	"math"
+	"os"
+	"strconv"
+	"strings"
+)
+
+// Cookie 是 Netscape 格式 cookies.txt 的一行。
+type Cookie struct {
+	Domain            string
+	IncludeSubdomains bool
+	Path              string
+	Secure            bool
+	Expiry            int64
+	Name              string
+	Value             string
+}
+
+// ParseCookiesFile 解析 Netscape 格式的 cookies.txt。
+//
+// 与 utils/cookies 里的实现是两回事：那个负责从浏览器导出快照供 yt-dlp 使用，
+// 这里只解析用户已导出的纯文本文件，供平台 API 请求自行拼请求头。
+//
+// 文件不可读时返回空切片而**不报错**：调用方据此退化为无 Cookie 请求，
+// 而不是整体失败。这与「用户没配 Cookie 也能看公开视频」的产品行为一致。
+func ParseCookiesFile(filePath string) []Cookie {
+	raw, err := os.ReadFile(filePath)
+	if err != nil {
+		return []Cookie{}
+	}
+
+	cookies := []Cookie{}
+	for _, line := range strings.Split(string(raw), "\n") {
+		trimmed := strings.TrimSpace(line)
+		// 注释与空行跳过（`#` 开头，包括文件头的 `# Netscape HTTP Cookie File`）
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		parts := strings.Split(trimmed, "\t")
+		// Netscape 格式固定 7 列，少一列就没法信任剩余字段的位置
+		if len(parts) < 7 {
+			continue
+		}
+		expiry, _ := strconv.ParseInt(parts[4], 10, 64) // 解析失败按 0
+		cookies = append(cookies, Cookie{
+			Domain:            parts[0],
+			IncludeSubdomains: parts[1] == "TRUE",
+			Path:              parts[2],
+			Secure:            parts[3] == "TRUE",
+			Expiry:            expiry,
+			Name:              parts[5],
+			Value:             parts[6],
+		})
+	}
+	return cookies
+}
+
+// BuildCookieHeader 从 cookies 构建 Cookie 请求头。
+//
+// domains 用于过滤：浏览器导出的文件里混着大量无关域名的 Cookie，
+// 全带上既长又可能被平台判为异常请求。
+//
+// 无匹配时返回空串（不是 nil/undefined）——调用方直接拼进请求头，
+// 空串等于「不发 Cookie 头」，是安全的。
+func BuildCookieHeader(cookies []Cookie, domains []string) string {
+	parts := make([]string, 0, len(cookies))
+	for _, c := range cookies {
+		for _, d := range domains {
+			if strings.Contains(c.Domain, d) {
+				parts = append(parts, c.Name+"="+c.Value)
+				break
+			}
+		}
+	}
+	return strings.Join(parts, "; ")
+}
+
+// DouyinCookieDomains 是抖音相关的 Cookie 域名。
+//
+// 三个域都要留：douyin.com 是主站，iesdouyin.com 是分享页/嵌入式播放器，
+// snssdk.com 是 API 网关。少了任一个都可能拿不到完整的登录态。
+var DouyinCookieDomains = []string{"douyin.com", "iesdouyin.com", "snssdk.com"}
+
+// EstimateFileSize 按分辨率与时长估算文件大小（字节）。
+//
+// 平台 API 往往不返回精确大小，只能估；用于界面上给用户一个量级参考，
+// 因此不需要很准。时长单位是毫秒（platform API 的原始单位），换算在内部做。
+func EstimateFileSize(height int, durationMs int64) int64 {
+	durationSec := float64(durationMs) / 1000
+
+	bitrate := 2000000.0 // 默认档：低于 360 的未知分辨率
+	switch {
+	case height >= 1080:
+		bitrate = 5000000
+	case height >= 720:
+		bitrate = 2500000
+	case height >= 480:
+		bitrate = 1500000
+	case height >= 360:
+		bitrate = 800000
+	}
+
+	return int64(math.Floor(bitrate * durationSec / 8))
+}

@@ -487,6 +487,111 @@ const MODULES = {
       throw new Error('unknown kind ' + testCase.kind)
     },
   },
+  /**
+   * 解析错误分类与诊断 + YouTube 回退策略。
+   *
+   * 这两块决定用户看到「需要登录」还是「Error: exit status 1」，以及
+   * 「提交 Issue」按钮出不出现。分类错了不会报错，只会让提示变成废话。
+   */
+  'parse-error': {
+    tsFile: 'shared/parse-error.ts',
+    goDir: 'app/internal/parse',
+    goTest: 'TestCrossCheckParseError',
+    mocks: {},
+    buildCases() {
+      const raws = [
+        'ERROR: Unsupported URL: https://example.com/video',
+        'not a valid URL',
+        '请输入有效的链接',
+        'ERROR: Requested format is not available',
+        'No video formats found',
+        'Only images are available',
+        'ERROR: The page needs to be reloaded',
+        'WARNING: signature solving failed',
+        'No supported JavaScript runtime',
+        'Sign in to confirm your age',
+        'private video',
+        'HTTP Error 429: Too Many Requests',
+        'HTTP Error 403: Forbidden',
+        'Connection timed out',
+        'Unable to download API page: HTTP Error 403: Forbidden',
+        'Video unavailable',
+        'ERROR: 404 not found',
+        '视频已被删除',
+        '[[parse-error:format-unavailable]]随便什么',
+        '[[parse-error:page-reload]]',
+        '[[parse-error:nonexistent-kind]]',
+        '错误类别：network',
+        'PO Token required',
+        'SABR streaming',
+        'completely unrelated text',
+        '',
+      ]
+      const cases = raws.map((raw) => ({ kind: 'classify', raw }))
+
+      // 诊断：带版本 / 不带版本 / 非法版本
+      const diagInputs = [
+        ['ERROR: Requested format is not available', { ytdlp: '2026.10.10.233141', runtime: 'node@22.0.0' }],
+        ['ERROR: Requested format is not available', {}],
+        ['WARNING: signature solving failed\nERROR: Requested format is not available', {}],
+        ['ERROR: Unsupported URL', { ytdlp: 'bad-version', runtime: '/private/path' }],
+        ['ytdlp：2026.10.10.233141\nruntime：deno@2.3.0\nERROR: Requested format is not available', {}],
+      ]
+      for (const [raw, versions] of diagInputs) cases.push({ kind: 'diagnostic', raw, versions })
+
+      return cases
+    },
+    tsCall(mod, testCase) {
+      if (testCase.kind === 'classify') return mod.classifyParseError(testCase.raw)
+      if (testCase.kind === 'diagnostic') return mod.parseDiagnostic(testCase.raw, testCase.versions)
+      throw new Error('unknown kind ' + testCase.kind)
+    },
+  },
+
+  /**
+   * YouTube 有限回退策略。
+   *
+   * 关键在版本分支：判错了会让「新版本客户端」那条路永远不可达（曾真实发生）。
+   */
+  'youtube-retry': {
+    tsFile: 'electron/parsers/youtube-retry.ts',
+    goDir: 'app/internal/parse',
+    goTest: 'TestCrossCheckYoutubeRetry',
+    // 不设替身：electron/parsers/youtube-retry.ts 会正常 import ../../shared/parse-error，
+    // loader 能解析相对路径。塞 null 反而会让它拿不到 classifyParseError。
+    mocks: {},
+    buildCases() {
+      const errors = [
+        'Requested format is not available',
+        'The page needs to be reloaded',
+        'Connection timed out',
+        'Sign in to confirm',
+        'Unsupported URL',
+        'HTTP Error 403: Forbidden',
+        'Video unavailable',
+        '',
+      ]
+      const states = [
+        { manifests: false, client: '' },
+        { manifests: true, client: '' },
+        { manifests: false, client: 'web_safari,web_embedded,-tv_downgraded' },
+        { manifests: true, client: 'default,web_embedded,-tv_downgraded' },
+      ]
+      const versions = ['', '2026.09.01', '2026.10.09', '2026.10.10', '2026.10.10.233141', '2027.01.01', 'garbage']
+      const cases = []
+      for (const err of errors) for (const state of states) for (const version of versions) {
+        cases.push({ kind: 'retry', err, state, version })
+      }
+      // extractorArgs 单独覆盖
+      for (const state of states) cases.push({ kind: 'args', state })
+      return cases
+    },
+    tsCall(mod, testCase) {
+      if (testCase.kind === 'retry') return mod.nextYoutubeRetry(testCase.err, testCase.state, testCase.version)
+      if (testCase.kind === 'args') return mod.youtubeExtractorArgs(testCase.state)
+      throw new Error('unknown kind ' + testCase.kind)
+    },
+  },
 }
 
 const selected = onlyModule ? { [onlyModule]: MODULES[onlyModule] } : MODULES
