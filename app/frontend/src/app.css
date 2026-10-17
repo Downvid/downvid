@@ -329,10 +329,23 @@ body::before {
   color: var(--ink-strong);
 }
 
+/*
+  焦点环。
+
+  **不要在这里设 border-radius**：这行原本是 `border-radius: 4px`，
+  目的是让方形元素的焦点环有圆角，但 `:focus-visible` 是全局选择器——
+  它会把**所有**元素在聚焦时的圆角都改成 4px，包括本来就是圆的元素。
+
+  实际后果：滑块的圆形 thumb 一聚焦就变成圆角方块（看起来像「拇指坏了」），
+  而这个 bug 只在「用键盘操作」时才出现——鼠标点不会触发 :focus-visible，
+  所以肉眼测的时候很容易漏掉。
+
+  正确做法：需要圆角的地方自己写 `border-radius`，
+  焦点环只管 outline。
+*/
 :focus-visible {
   outline: 2px solid color-mix(in oklab, var(--accent-deep) 82%, transparent);
   outline-offset: 2px;
-  border-radius: 4px;
 }
 
 /* ---------- 排版工具 ---------- */

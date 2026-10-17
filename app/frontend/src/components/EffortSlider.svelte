@@ -168,14 +168,6 @@
         <!-- 已填充区：从 0 到拇指 -->
         <div class="effort-fill" style="width: {percent}%"></div>
 
-        {#if !compact}
-          <span
-            class="effort-callout"
-            class:is-visible={localIndex >= 2}
-            style="left: clamp(58px, {percent}%, calc(100% - 58px))"
-          >{hints[localIndex]}</span>
-        {/if}
-
         <!-- 档位刻点 -->
         {#each tickItems as tick (tick.value)}
           <span
@@ -273,31 +265,69 @@
     text-transform: uppercase;
   }
 
-  /* ===== 轨道 ===== */
-  .effort-slider {
+  /* ===== 轨道容器 =====
+     
+     **必须用 :global()**：这个 class 传给了 `Slider.Root`（一个组件），
+     而 Svelte 的 scoped 样式只给**本文件里的原生元素**加作用域 hash。
+     组件内部渲染出的元素不带这个 hash，所以 `.effort-slider.s-xxx` 匹配不到
+     真实的 `.effort-slider` —— 表现是「高度 0、圆角丢失」，
+     而构建完全不报错（第一版就是这样，截图里滑块被压成一条线）。
+  */
+  :global(.effort-slider) {
     position: relative;
     display: block;
     width: 100%;
     height: 26px;
     border-radius: 999px;
-    touch-action: none;
+    touch-action: pan-y;
     user-select: none;
+    -webkit-user-select: none;
   }
-  .effort-slider:focus-visible {
+  :global(.effort-slider:focus-visible) {
     outline: 2px solid color-mix(in oklab, var(--color-primary) 70%, transparent);
     outline-offset: 3px;
   }
 
+  /*
+    轨道**必须是深色**——这是参考实现的关键，我第一版搞反了。
+
+    能量辐射用的是 `mix-blend-mode: screen`（只增亮），它需要深色底才能显出来。
+    在浅色底上 screen 会把橙色叠到接近白，整条轨道糊成一片，
+    只剩竖条纹隐约可见——截图里的样子。
+
+    参考实现的轨道是 `#03040a → #5d35a0`（近黑 → 蓝紫）。
+    这里换成同结构的琥珀色系：近黑棕 → 深琥珀 → 亮琥珀。
+  */
   .effort-track {
     position: absolute;
     inset: 0;
     overflow: hidden;
     border-radius: inherit;
-    background: color-mix(in oklab, var(--color-surface-container-highest) 88%, var(--color-outline-variant));
+    /* 整体压暗：能量层用 screen 叠加，底色越暗对比越强。
+       之前的 #7d4a12 太亮，右半段（未到的地方）看着像「已经满了」。 */
+    background: linear-gradient(
+      100deg,
+      #060402 0%,
+      #120b03 22%,
+      #24160a 45%,
+      #38220e 70%,
+      #4a2c12 100%
+    );
     box-shadow:
-      inset 0 1px 0 color-mix(in oklab, white 40%, transparent),
-      inset 0 -1px 0 color-mix(in oklab, var(--color-outline-variant) 45%, transparent);
+      inset 0 1px 0 rgba(255, 220, 180, 0.14),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.5),
+      0 2px 8px rgba(40, 22, 6, 0.28);
     isolation: isolate;
+  }
+  /* 轨道上的第二层：给深色底一点暖色不均匀，纯线性渐变太「塑料」 */
+  .effort-track::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 18% 45%, rgba(255, 168, 64, 0.1), transparent 24%),
+      linear-gradient(90deg, rgba(0, 0, 0, 0.28), transparent 42%, rgba(255, 152, 0, 0.12));
   }
 
   .effort-radiation {
@@ -316,13 +346,18 @@
     transition: none;
   }
 
+  /*
+    已填充区。深色轨道上它负责「走到哪了」的直觉，
+    但**不能太亮**——否则会盖掉 canvas 的辐射层。
+    放在 canvas 之下（z-index 0 vs 1），只做底色渐变。
+  */
   .effort-fill {
     position: absolute;
     inset: 0 auto 0 0;
     background: linear-gradient(
       90deg,
-      color-mix(in oklab, var(--color-primary) 22%, transparent),
-      color-mix(in oklab, var(--color-primary-container) 55%, transparent)
+      rgba(140, 81, 0, 0.35) 0%,
+      rgba(255, 152, 0, 0.28) 100%
     );
     transition: width 190ms var(--ease-out);
     z-index: 0;
@@ -335,31 +370,41 @@
     height: 3px;
     border-radius: 50%;
     transform: translate(-50%, -50%);
-    background: color-mix(in oklab, var(--color-outline) 55%, transparent);
+    background: rgba(255, 214, 170, 0.32);
     transition: background 160ms var(--ease-out), transform 160ms var(--ease-out);
     z-index: 2;
     pointer-events: none;
   }
   .effort-stop.is-passed {
-    background: color-mix(in oklab, var(--color-primary) 70%, transparent);
+    background: rgba(255, 190, 120, 0.75);
   }
+  /*
+    当前档位的刻点**不该放大**：它就在 thumb 底下，放大后四个角会从
+    圆形 thumb 的边上露出来，看起来像「拇指是个圆角方块」——
+    截图里就是这样被骗了很久（thumb 的 radius 一直是 50%）。
+
+    参考实现里也没有这个放大的刻点：thumb 本身就是「当前位置」的指示。
+  */
   .effort-stop.is-current {
-    transform: translate(-50%, -50%) scale(1.6);
-    background: var(--color-primary);
+    opacity: 0;
   }
 
   /* ===== 拇指 ===== */
-  .effort-thumb {
+  /* 拇指是纯白实心圆：深色轨道上唯一的「实」元素，视觉焦点。
+     同样必须 :global —— 它是 `Slider.Thumb` 组件渲染的，
+     Svelte 不会给它加本文件的作用域 hash（第一版这里高度 0，拇指不可见）。 */
+  :global(.effort-thumb) {
     position: absolute;
     top: 50%;
     width: 18px;
     height: 18px;
     border-radius: 50%;
-    background: var(--color-surface-container-lowest);
-    border: 2px solid var(--color-primary);
+    background: #fff;
+    border: 1px solid rgba(255, 255, 255, 0.94);
     box-shadow:
-      0 0 0 4px color-mix(in oklab, var(--color-primary-container) 22%, transparent),
-      0 2px 8px color-mix(in oklab, var(--color-on-surface) 20%, transparent);
+      0 0 0 2px rgba(255, 176, 64, 0.25),
+      0 0 14px rgba(255, 152, 0, 0.55),
+      0 2px 7px rgba(0, 0, 0, 0.32);
     transform: translate(-50%, -50%);
     transition:
       transform 160ms var(--ease-out),
@@ -367,18 +412,20 @@
     z-index: 3;
     cursor: grab;
   }
-  .effort-thumb:hover,
-  .effort-thumb.is-dragging {
+  :global(.effort-thumb:hover),
+  :global(.effort-thumb.is-dragging) {
     box-shadow:
-      0 0 0 6px color-mix(in oklab, var(--color-primary-container) 26%, transparent),
-      0 0 18px color-mix(in oklab, var(--color-primary-container) 38%, transparent);
+      0 0 0 3px rgba(255, 176, 64, 0.32),
+      0 0 22px rgba(255, 152, 0, 0.85),
+      0 0 34px rgba(255, 120, 0, 0.45),
+      0 3px 8px rgba(0, 0, 0, 0.34);
   }
-  .effort-thumb.is-dragging {
+  :global(.effort-thumb.is-dragging) {
     transform: translate(-50%, -50%) scale(1.07);
     transition: none;
     cursor: grabbing;
   }
-  .effort-thumb:focus-visible {
+  :global(.effort-thumb:focus-visible) {
     outline: 2px solid color-mix(in oklab, var(--color-primary) 70%, transparent);
     outline-offset: 3px;
   }
@@ -392,24 +439,6 @@
     animation: effort-breathe 1.9s ease-in-out infinite;
   }
 
-  .effort-callout {
-    position: absolute;
-    bottom: calc(100% + 6px);
-    transform: translateX(-50%);
-    padding: 3px 8px;
-    border-radius: 6px;
-    font-size: 10px;
-    white-space: nowrap;
-    background: color-mix(in oklab, var(--color-inverse-surface) 92%, transparent);
-    color: var(--color-inverse-on-surface);
-    opacity: 0;
-    transition: opacity 160ms var(--ease-out);
-    pointer-events: none;
-    z-index: 4;
-  }
-  .effort-callout.is-visible {
-    opacity: 1;
-  }
 
   /* ===== 档位标签 ===== */
   .effort-labels {
@@ -459,7 +488,6 @@
     .effort-fill,
     .effort-thumb,
     .effort-stop,
-    .effort-callout,
     .effort-radiation {
       transition: none;
     }

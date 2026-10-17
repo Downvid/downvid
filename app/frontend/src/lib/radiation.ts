@@ -54,24 +54,28 @@ interface Channels {
 function channels(dark: boolean, top: boolean): Channels {
   const boost = top ? 1.12 : 1
   if (dark) {
-    // 深色：琥珀 → 橙红 → 浪尖推到暖白
+    // 深色轨道上的能量：琥珀 → 橙 → 浪尖推到暖白。
+    //
+    // 数值参照参考实现的**比例关系**（base 很低、hot 加成大、crest 推高绿蓝
+    // 制造「白热」感），只把色相从蓝紫换成琥珀。
+    // 之前那版 hot 系数太小，在深色底上几乎看不出来。
     return {
-      base: [58, 30, 6],
-      hot: [150, 88, 18],
-      wave: [58, 34, 6],
-      crest: [46, 40, 30],
-      maxAlpha: Math.min(0.96, 0.9 * boost),
+      base: [54, 28, 6],
+      hot: [148, 96, 26],
+      wave: [62, 40, 8],
+      crest: [52, 72, 60],
+      maxAlpha: Math.min(0.98, 0.94 * boost),
       alphaScale: 1,
     }
   }
-  // 浅色：压暗，否则在奶油白上看不清
+  // 浅色轨道（当前默认不用，但保留：若将来改浅色主题）
   return {
-    base: [140, 78, 10],
-    hot: [96, 52, 4],
-    wave: [22, 12, 2],
-    crest: [30, 18, 6],
-    maxAlpha: Math.min(0.74, 0.62 * boost),
-    alphaScale: 0.78,
+    base: [150, 88, 16],
+    hot: [90, 56, 6],
+    wave: [24, 14, 2],
+    crest: [24, 22, 12],
+    maxAlpha: Math.min(0.8, 0.68 * boost),
+    alphaScale: 0.82,
   }
 }
 
@@ -89,7 +93,7 @@ export function drawRadiation(
   state: RadiationState,
 ): void {
   const origin = state.progress * width
-  const cell = 4
+  const cell = 3
   // 拖动时波动更快：给「正在用力」的即时反馈
   const speed = state.dragging ? 2.8 : 1
   const c = channels(state.dark, state.top)
@@ -108,7 +112,16 @@ export function drawRadiation(
   context.rect(0, 0, origin, height)
   context.clip()
 
-  // ===== 第 1 层 + 第 2 层：柱状能量 + 竖向光晕 =====
+  // ===== 第 1 层：细竖线（参考实现的核心视觉效果）=====
+  //
+  // 关键：**每列只画 1px 宽的线**，不是「2px 实心柱」。
+  // 我前几版画的是 fillRect(x, 0, cell-1, height) —— 宽 2-3px 的实心块，
+  // 相邻块之间只隔 1px 缝隙，合起来就是一片砖墙。参考实现靠**极细的线**
+  // 制造出「能量条纹」的透光感，这才是它看起来高级的原因。
+  //
+  // 亮度沿**高度**做上下渐隐（中间亮、两端暗），而不是整列同色。
+  const lineWidth = 1
+
   for (let x = 0; x < origin; x += cell) {
     const delta = x + cell * 0.5 - origin
     const distance = Math.abs(delta)
@@ -132,36 +145,47 @@ export function drawRadiation(
     const pillar = Math.pow(Math.max(0, Math.sin(x / 20 + time * 0.0016)), 3) * 0.27
     const columnEnergy = trail * (wave * 1.04 + pillar + crest * 0.32)
 
-    if (columnEnergy > 0.012) {
-      const nearness = Math.max(0, 1 - distance / Math.max(1, width * 0.78))
+    if (columnEnergy <= 0.02) continue
+
+    const nearness = Math.max(0, 1 - distance / Math.max(1, width * 0.78))
+
+    // 沿高度三段渐隐：画 3 段而不是逐格，视觉一样但调用数少一个量级
+    // （逐格 3px × 26px 高 = 9 次/列；三段 = 3 次/列）
+    const bands = [
+      { y: 0, h: height * 0.34, k: 0.42 },              // 上端暗
+      { y: height * 0.34, h: height * 0.32, k: 1 },     // 中间最亮
+      { y: height * 0.66, h: height * 0.34, k: 0.42 },  // 下端暗
+    ]
+
+    for (const band of bands) {
+      const grain = 0.74 + 0.26 * Math.sin(x * 0.73 + band.y * 1.31 + time * 0.006)
+      const energy = columnEnergy * band.k * grain
+      if (energy <= 0.02) continue
+
       const r = Math.min(255, Math.round(c.base[0] + c.hot[0] * nearness + c.wave[0] * wave))
       const g = Math.min(255, Math.round(c.base[1] + c.hot[1] * nearness + c.crest[1] * crest))
       const b = Math.min(255, Math.round(c.base[2] + c.hot[2] * nearness))
-      const alpha = Math.min(c.maxAlpha, columnEnergy * 0.72) * c.alphaScale
+      const alpha = Math.min(c.maxAlpha, energy * 0.9) * c.alphaScale
       context.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`
-      context.fillRect(x, 0, cell - 1, height)
+      context.fillRect(x, band.y, lineWidth, band.h)
     }
+  }
 
-    // 竖向光晕：以拇指所在高度为中心的高斯分布
-    for (let y = 0; y < height; y += cell) {
-      const deltaY = y + cell * 0.5 - height * 0.5
-      const radial = Math.hypot(delta / 38, deltaY / 11)
-      const halo = Math.exp(-radial * 0.96) * 1.08
-      const verticalShape = 0.58 + 0.42 * Math.cos((deltaY / height) * Math.PI)
-      // **grain 噪点**：没有它整片光是「平」的，像一块渐变而不是能量。
-      // 这是第一版漏掉后最明显的差异来源。
-      const grain = 0.72 + 0.28 * Math.sin(x * 0.73 + y * 1.31 + time * 0.006)
-      // 合成公式照抄参考实现：柱子 + 光晕 + 浪尖三项加权
-      const alpha = Math.min(c.maxAlpha, (columnEnergy * 0.88 + halo + crest * 0.19) * verticalShape * grain)
-      if (alpha < 0.035) continue
-
-      const hot = Math.max(0, 1 - radial / 2.4)
-      const r = Math.min(255, Math.round(c.base[0] + c.hot[0] * hot + c.wave[0] * wave))
-      const g = Math.min(255, Math.round(c.base[1] + c.hot[1] * hot + c.crest[1] * crest))
-      const b = Math.min(255, Math.round(c.base[2] + c.hot[2] * hot))
-      context.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha * c.alphaScale})`
-      context.fillRect(x, y, cell - 1, cell - 1)
-    }
+  // ===== 第 2 层：拇指附近的高光竖线（「白热」的那几条）=====
+  //
+  // 参考图里紧贴拇指有几条特别亮的线，那是整条的视觉锚点。
+  // 没有它，能量是「均匀的一片」，看不出「距离拇指多远」。
+  for (let i = 0; i < 5; i += 1) {
+    const offset = 4 + i * 7
+    const x = origin - offset
+    if (x < 0) break
+    const falloff = 1 - i / 5
+    const alpha = (0.32 + 0.5 * falloff) * c.alphaScale
+    const r = Math.min(255, Math.round(c.base[0] + c.hot[0] * 0.95 + c.crest[0] * 0.6))
+    const g = Math.min(255, Math.round(c.base[1] + c.hot[1] * 0.95 + c.crest[1] * 0.6))
+    const b = Math.min(255, Math.round(c.base[2] + c.hot[2] * 0.95 + c.crest[2] * 0.6))
+    context.fillStyle = `rgba(${r}, ${g}, ${b}, ${alpha})`
+    context.fillRect(x, 2, lineWidth, height - 4)
   }
 
   // ===== 第 3 层：粒子拖尾（14 条短条纹向左飘散）=====
@@ -181,8 +205,8 @@ export function drawRadiation(
     const streak = context.createLinearGradient(particleX, 0, particleX + length, 0)
     if (isDark) {
       streak.addColorStop(0, 'rgba(255,168,64,0)')
-      streak.addColorStop(0.68, `rgba(255,186,92,${alpha})`)
-      streak.addColorStop(1, `rgba(255,241,214,${Math.min(1, alpha + 0.26)})`)
+      streak.addColorStop(0.68, `rgba(255,196,110,${alpha})`)
+      streak.addColorStop(1, `rgba(255,248,232,${Math.min(1, alpha + 0.3)})`)
     } else {
       streak.addColorStop(0, 'rgba(184,104,16,0)')
       streak.addColorStop(0.68, `rgba(190,112,20,${alpha * 0.72})`)
@@ -198,10 +222,11 @@ export function drawRadiation(
   // 而且在 DPR 变化时不会糊。
   const glow = context.createRadialGradient(origin, height / 2, 0, origin, height / 2, 24)
   if (isDark) {
-    glow.addColorStop(0, 'rgba(255,250,240,.82)')
-    glow.addColorStop(0.14, 'rgba(255,206,140,.54)')
-    glow.addColorStop(0.44, 'rgba(196,116,20,.28)')
-    glow.addColorStop(1, 'rgba(120,58,0,0)')
+    // 深色底上光晕要更「白热」：参考实现中心是 rgba(255,255,255,.82)
+    glow.addColorStop(0, 'rgba(255,255,252,.88)')
+    glow.addColorStop(0.14, 'rgba(255,214,150,.58)')
+    glow.addColorStop(0.44, 'rgba(224,138,28,.3)')
+    glow.addColorStop(1, 'rgba(140,81,0,0)')
   } else {
     glow.addColorStop(0, 'rgba(255,255,255,.86)')
     glow.addColorStop(0.14, 'rgba(255,214,160,.48)')
