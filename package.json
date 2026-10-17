@@ -31,6 +31,7 @@
   "author": "DownVid <downvid@example.com>",
   "scripts": {
     "dev": "vite",
+    "demo:ui": "pnpm --dir app/frontend demo",
     "build": "vue-tsc && vite build && electron-builder --publish never --config electron-builder.json5",
     "build:mac": "vue-tsc && vite build && electron-builder --mac --publish never --config electron-builder.json5",
     "build:win": "vue-tsc && vite build && electron-builder --win --publish never --config electron-builder.json5",

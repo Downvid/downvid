@@ -58,6 +58,9 @@ type App struct {
 	// 生产路径上永远是 nil——这样测试不用启动 Wails 运行时也能验证事件。
 	emitHook func(event string, data any)
 
+	// 解析器（带缓存，复用避免每次解析都新建）
+	parser *parse.Parser
+
 	// 下载相关（由 bindings_download.go 使用）
 	runner           *download.Runner
 	proxy            string

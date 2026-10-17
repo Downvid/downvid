@@ -110,3 +110,14 @@ func EstimateFileSize(height int, durationMs int64) int64 {
 
 	return int64(math.Floor(bitrate * durationSec / 8))
 }
+
+// IsYouTube 判断是否 YouTube 链接。
+//
+// 与 TS 侧同样的宽松匹配：只认这两个域名片段，不解析 URL
+// （yt-dlp 自己能处理各种变体，这里只用来决定是否加 JS 运行时与重试策略）。
+//
+// parse 与 download 各有一份：两个包不该为了这一个函数而互相依赖——
+// download 要 import parse（为了 Format），反向 import 会成环。
+func IsYouTube(u string) bool {
+	return strings.Contains(u, "youtube.com") || strings.Contains(u, "youtu.be")
+}

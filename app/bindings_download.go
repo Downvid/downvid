@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/Downvid/downvid/app/internal/download"
+	"github.com/Downvid/downvid/app/internal/parse"
 )
 
 // Dependency 是一次探测结果。
@@ -337,4 +338,84 @@ func runSidecar(sidecar string, args ...string) (string, error) {
 		return stdout.String(), fmt.Errorf("%v：%s", err, strings.TrimSpace(stderr.String()))
 	}
 	return stdout.String(), nil
+}
+
+// ===== 解析（前端最需要的能力）=====
+
+// Parse 解析一个 URL，返回视频信息（格式列表、音轨、字幕）。
+//
+// 这是 UI 的入口：粘贴链接 → 调这个 → 显示格式选择器。
+//
+// 失败时返回带 `[[parse-error:kind]]` 标记的错误消息，前端据此显示可行动提示
+// （分类逻辑在 `internal/parse`，前端不重复实现——两处各判一次必然漂移）。
+func (a *App) Parse(url string, proxy string) (*parse.VideoInfo, error) {
+	ytdlp := a.ResolveYtdlp()
+	if ytdlp == "" {
+		// 前端据此弹「一键下载」，而不是显示一句「解析失败」
+		return nil, fmt.Errorf("[[deps-missing:yt-dlp]]未找到可用的 yt-dlp，请在「设置 → 运行依赖」中下载后重试")
+	}
+
+	a.mu.Lock()
+	parser := a.parser
+	if parser == nil {
+		parser = parse.NewParser()
+		a.parser = parser
+	}
+	if proxy != "" {
+		a.proxy = proxy
+	}
+	a.mu.Unlock()
+
+	info, err := parser.Parse(parse.ParseOptions{
+		YtdlpPath:  ytdlp,
+		URL:        url,
+		Proxy:      a.proxy,
+		CookieArgs: a.cookieArgs(),
+		// 原始 info JSON 落在数据目录下而不是 /tmp：
+		// 桌面端可能长期运行，/tmp 会被系统清理，而下载时要读它
+		CacheDir: filepath.Join(a.dataDir, "parse-cache"),
+		Timeout:  90 * time.Second,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return info, nil
+}
+
+// ParseDump 返回一份**固定的**解析结果，供 UI 在没有网络或依赖时联调。
+//
+// 单独一个方法而不是给 Parse 加 mock 开关：生产路径上不该有「假数据」分支，
+// 那种开关迟早会在真实调用里被误开。
+func (a *App) ParseDump() *parse.VideoInfo {
+	acodecNone := "none"
+	fi := parse.FmtInfo{
+		Duration: 754,
+		Formats: []parse.RawFormat{
+			{FormatID: "30077", Vcodec: "hev1.1.6.L150", Acodec: &acodecNone, Height: 1080, FPS: 29.969, Tbr: 2070},
+			{FormatID: "100026", Vcodec: "av01.0.00M.10", Acodec: &acodecNone, Height: 1080, FPS: 29.969, Tbr: 2000},
+			{FormatID: "30080", Vcodec: "avc1.640032", Acodec: &acodecNone, Height: 1080, FPS: 29.97, Tbr: 3252},
+			{FormatID: "30064", Vcodec: "avc1.640028", Acodec: &acodecNone, Height: 720, FPS: 29.97, Tbr: 1301},
+		},
+	}
+	return &parse.VideoInfo{
+		ID:         "demo",
+		Title:      "示例视频标题 · 中文与 English 混排，用来检查换行与截断",
+		Uploader:   "示例 UP 主",
+		Duration:   754,
+		WebpageURL: "https://example.com/v",
+		Formats:    parse.BuildVideoFormats(fi, false),
+		IsYoutube:  true,
+		Subtitles: []parse.Subtitle{
+			{Language: "zh-Hans", Name: "中文（简体）"},
+			{Language: "en", Name: "English"},
+		},
+		AudioFormats: []parse.AudioFormat{
+			{FormatID: "140", Quality: "128kbps", Ext: "m4a", Filesize: 12_000_000, ABR: 128},
+			{FormatID: "251", Quality: "160kbps", Ext: "webm", Filesize: 15_000_000, ABR: 160},
+		},
+		AudioTracks: []parse.AudioTrack{
+			{ID: "en", Name: "English", Language: "en", FormatID: "251"},
+			{ID: "ja", Name: "日本語", Language: "ja", FormatID: "251"},
+		},
+	}
 }
