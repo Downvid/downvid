@@ -59,6 +59,7 @@
     "sync:repo": "node scripts/sync-repo-coords.mjs --check",
     "sync:doc-numbers": "node scripts/sync-doc-numbers.mjs",
     "sync:toolchain": "node scripts/sync-toolchain-versions.mjs",
+    "crosscheck:port": "node scripts/crosscheck-port.mjs",
     "typecheck:docker": "tsc -p docker/server/tsconfig.json --noEmit",
     "build:docker:web": "vite build --config docker/web/vite.config.ts",
     "deps:build": "bash scripts/build-backend.sh",

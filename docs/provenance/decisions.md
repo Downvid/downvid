@@ -27,9 +27,27 @@
 - Node 生态：`puppeteer-core`（抖音/快手 headless 兜底）、`ws`、`electron-updater`
 - 现有 140 个 vitest 用例（不能在 Go 里直接跑）
 
-**什么情况下应该推翻这条**：如果 `puppeteer-core` 的 headless 兜底在真实站点上的成功率高于预期
-（目前是「每次失败都被空 catch 吞掉，静默落到 yt-dlp」），Go 侧没有等价的浏览器驱动，
-这部分要么换成调 Playwright 的旁路进程，要么放弃兜底。**这个风险在 G3 阶段必须先用真机验证**。
+**headless 兜底怎么办**（原本是这条 ADR 最大的未知）：
+
+现方案用 `puppeteer-core` 驱动系统 Chrome，给抖音/快手做兜底解析
+（`ipc/download.ts` 里平台 API 失败后进 `parseXxxWithPuppeteer`，再失败才落到 yt-dlp）。
+Go 里确实没有 puppeteer——但**兜底真正依赖的是 CDP（Chrome DevTools Protocol），不是 puppeteer**。
+
+实测（2026-10-17）：`chrome --headless=new --remote-debugging-port=9333` 启动后，
+直接 `GET http://127.0.0.1:9333/json/version` 拿到 `Chrome/155.0.8059.85`，
+`/json` 列出 tab。也就是说 Go 侧只要实现这几个 HTTP 端点 + 一条 WebSocket：
+
+| 现在用 puppeteer 做的 | Go 侧对应 |
+| --- | --- |
+| `puppeteer.launch({ executablePath })` | `exec.Command(chrome, "--headless=new", "--remote-debugging-port=…")` |
+| `page.goto(url)` / `page.reload()` | CDP `Page.navigate` |
+| `page.setCookie()` | CDP `Network.setCookies` |
+| `page.evaluate()` | CDP `Runtime.evaluate` |
+| `page.on('response')` 拦 m3u8/视频地址 | CDP `Network.enable` + 事件订阅 |
+| `page.setRequestInterception` | CDP `Fetch.enable` |
+
+所以**不需要放弃兜底，也不需要在 Go 里嵌一个浏览器驱动**——换成 CDP 直连即可。
+浏览器进程查找逻辑（`utils/browser.ts` 的平台路径表）本来就是纯文件探测，直接照搬。
 
 ---
 
