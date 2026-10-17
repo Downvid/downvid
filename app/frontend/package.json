@@ -10,14 +10,17 @@
     "test": "vitest run"
   },
   "devDependencies": {
+    "@material-symbols/font-400": "^0.48.0",
     "@sveltejs/vite-plugin-svelte": "^6.0.0",
+    "@tailwindcss/vite": "^4.3.3",
     "@tsconfig/svelte": "^5.0.0",
     "svelte": "^5.55.7",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.9.3",
     "vite": "^7.0.0",
-    "tailwindcss": "^4.3.3",
-    "@tailwindcss/vite": "^4.3.3",
-    "@material-symbols/font-400": "^0.48.0",
     "vitest": "^5.0.4"
+  },
+  "dependencies": {
+    "bits-ui": "^2.19.5"
   }
 }

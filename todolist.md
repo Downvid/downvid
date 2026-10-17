@@ -64,7 +64,7 @@
 
 - [x] **`demo/` → `src/`**（正式前端），旧验证页已删除
 - [ ] store 接后端（3 处：`finishParse` / 进度订阅 / `togglePause`）
-- [x] 加速滑块接入能量辐射层（参照 dsh-reasoning-effort）
+- [x] 加速滑块接入能量辐射层（辐射效果自研 + **bits-ui 负责交互**）
 
 ---
 
@@ -105,3 +105,16 @@
 3. 新增逻辑必须有测试；**变异验证**（改坏后确认用例会失败）
 4. 跨语言逻辑用 `pnpm crosscheck:port` 与 TS 对拍
 5. 不删 LICENSE 里的上游版权声明（`pnpm lint:attribution` 会拦）
+
+---
+
+## 前端依赖策略
+
+只加**解决了真实问题**的依赖。目前仅一个：
+
+| 依赖 | 版本 | 为什么加 | 体积代价 |
+|---|---|---|---|
+| `bits-ui` | 2.19.5 | 滑块的手搓版本在「拖拽捕获 / 键盘 / 无障碍」上反复出问题（指针捕获在 WebView 里不稳、方向键没处理、`aria-valuetext` 与实际值不符）。这是 shadcn-svelte 的官方底座，Svelte 5 原生 runes 实现 | JS +34 KB（gzip +11 KB） |
+
+其余一律不引：没有 UI 组件库、没有状态管理库、没有动画库、没有 `vue-i18n` 式的
+i18n 库（只有两种语言，`Record` + `$state` 就够）。
