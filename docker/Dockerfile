@@ -36,7 +36,7 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 # Go 1.24：与仓库 CI 工作流保持严格一致
-ARG GO_VERSION=1.24.10
+ARG GO_VERSION=1.25.14
 ARG TARGETARCH
 RUN case "${TARGETARCH}" in \
     amd64) GO_ARCH=amd64 ;; \

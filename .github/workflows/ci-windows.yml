@@ -40,7 +40,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.24'
+          go-version: '1.25'
           cache: false
 
       # .gitattributes 必须把换行符统一成 LF，否则 gofmt 会把每个 Go 文件
@@ -92,7 +92,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.24'
+          go-version: '1.25'
           cache: false
 
       - uses: actions/setup-node@v7
@@ -163,6 +163,10 @@ jobs:
       - name: 文档数字同步
         run: pnpm sync:doc-numbers
 
+      # Go/Node/pnpm 版本散落 20+ 处，漏改只会让 CI 静默用旧版本编译
+      - name: 工具链版本一致
+        run: pnpm sync:toolchain
+
       # 词条漏英文 / 占位符对不上都不会报错，只会静默显示错文案
       - name: i18n 词条校验
         run: pnpm lint:i18n
@@ -195,7 +199,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.24'
+          go-version: '1.25'
           cache: false
 
       - uses: actions/setup-node@v7
@@ -228,7 +232,7 @@ jobs:
 
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.24'
+          go-version: '1.25'
           cache: false
 
       - uses: actions/setup-node@v7

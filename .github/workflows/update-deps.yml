@@ -33,7 +33,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v7
         with:
-          go-version: '1.24'
+          go-version: '1.25'
           # 侧车只用标准库，没有 go.sum，无需缓存依赖
           cache: false
       - name: Setup Node.js
