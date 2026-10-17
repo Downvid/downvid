@@ -1,0 +1,6 @@
+# 与仓库根同一个写法：pnpm 11 用 allowBuilds 审批构建脚本。
+# esbuild 需要 postinstall（下载平台二进制），不批准会报 ERR_PNPM_IGNORED_BUILDS。
+packages:
+  - '.'
+allowBuilds:
+  esbuild: true

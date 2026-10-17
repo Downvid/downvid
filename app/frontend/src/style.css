@@ -1,0 +1,27 @@
+/* 最小样式：先把链路验证清楚，视觉层在后续阶段按 src/style.css 的 @theme 迁移 */
+:root {
+  color-scheme: light dark;
+  --primary: #7c3aed;
+  --surface: #ffffff;
+  --on-surface: #1c1b1f;
+  --on-surface-variant: #49454f;
+  --outline: #79747e;
+  --error: #ba1a1a;
+  font-family: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #1c1b1f;
+    --on-surface: #e6e1e5;
+    --on-surface-variant: #cac4d0;
+    --outline: #938f99;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--surface);
+  color: var(--on-surface);
+  min-height: 100vh;
+}
+#app { min-height: 100vh; }
