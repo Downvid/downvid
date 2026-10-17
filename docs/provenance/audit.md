@@ -142,7 +142,7 @@ node scripts/audit-provenance.mjs --report   # 打印完整表格，不写文件
 | `src/components/DownloadView.vue` | 31/143 | 21.7% | 已从 615 行瘦到 143 行，剩余部分仍同源 |
 | `electron/ipc/download.ts` | 15/70 | 21.4% | 通道名与参数形状同源 |
 | `electron/ipc/history.ts` | 9/42 | 21.4% | 通道名与参数形状同源 |
-| `src/components/AboutView.vue` | 35/193 | 18.1% | 关于页 |
+| `src/components/AboutView.vue` | 35/196 | 17.9% | 关于页 |
 | `vite.config.ts` | 16/97 | 16.5% | 构建骨架 |
 | `electron/main.ts` | 26/164 | 15.9% | 2756 → 164 行，已是壳 |
 | `electron/ipc/system.ts` | 24/157 | 15.3% | 系统能力 |
@@ -172,8 +172,8 @@ node scripts/audit-provenance.mjs --report   # 打印完整表格，不写文件
 
 - `backend/` 全部（Go 边车 4368 行，含 `probe` / `runtime` / `fetch` / `manifest` / `cli`）
 - `docker/` 全部（Dockerfile、`server/index.ts` 524 行、`web/bridge.ts` 164 行、`security.ts`、`entrypoint.sh`）
-- `scripts/`（11734 行：依赖清单生成、IPC/官网/i18n/文档/工作流/来源校验、集成回归）
-- `tests/`（3384 行，27 个测试文件 / 327 个用例）
+- `scripts/`（11744 行：依赖清单生成、IPC/官网/i18n/文档/工作流/来源校验、集成回归）
+- `tests/`（3498 行，28 个测试文件 / 334 个用例）
 - `website/`（1882 行单文件落地页）
 - `shared/` 五个模块（`app.ts` 仓库坐标、`acceleration.ts`、`parse-error.ts`、`update-check.ts`、`update-sources.ts`）
 - `electron/` 下的 `download/direct.ts`、`download/direct-state.ts`、`download/process-tree.ts`、
@@ -294,9 +294,9 @@ electron/ + src/  ──import──►  docker/*   ：0 处（桌面端完全�
 
 | 指标 | 数值 | 测量方式 |
 | --- | ---: | --- |
-| 源码（不含测试/脚本/官网） | `electron/` 4950 + `shared/` 772 + `src/` 6225 + `backend/` 4368 + `docker/` 1314 = **17629 行** | `wc -l` |
-| 测试 + 校验脚本 | `tests/` 3384 行 / 27 文件 / 327 用例（单测 1.2 秒跑完） | `pnpm test` |
-| 构建与校验脚本 | `scripts/` 11734 行（含本次新增的来源审计脚本） | `wc -l` |
+| 源码（不含测试/脚本/官网） | `electron/` 4983 + `shared/` 772 + `src/` 6228 + `backend/` 4368 + `docker/` 1314 = **17665 行** | `wc -l` |
+| 测试 + 校验脚本 | `tests/` 3498 行 / 28 文件 / 334 用例（单测 1.2 秒跑完） | `pnpm test` |
+| 构建与校验脚本 | `scripts/` 11744 行（含本次新增的来源审计脚本） | `wc -l` |
 | 直接依赖 | 运行时 8 + 构建 16 | `package.json` |
 | `node_modules` | 928 MB | `du -sh` |
 | 前端产物 | `dist/` 1.0 MB（其中 `material-symbols-outlined.woff2` 492 KB） | `du -sh` |

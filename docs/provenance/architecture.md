@@ -44,13 +44,65 @@
 
 | 方案 | 收益 | 代价 | 结论 |
 | --- | --- | --- | --- |
-| **分层 monorepo**（选定） | 目录清晰、边界可用 lint 强制；改动可分批落地，每步都能跑现有 327 个用例 | 仍在一个仓库，靠静态校验维持边界 | ✅ |
+| **分层 monorepo**（选定） | 目录清晰、边界可用 lint 强制；改动可分批落地，每步都能跑现有 334 个用例 | 仍在一个仓库，靠静态校验维持边界 | ✅ |
 | core 独立 npm 包 | 真正可发布 | 桌面打包要重新处理 workspace 依赖；每次改核心都要发版 | ✗ 过早 |
 | 三端各自独立工程 | 彻底解耦 | 一次改动要改三处，与 issue §「避免重复实现业务逻辑」冲突 | ✗ |
 | 只标注释不动目录 | 零风险 | 没有机械约束，边界三个月内必腐化 | ✗ 不够 |
 
 关键判断：**这个项目的瓶颈不是仓库边界，是「静默失败」**。所以架构的价值在于
 「违反边界时 CI 会红」——这也是本项目已有的做法（`lint:ipc` / `lint:i18n` / `audit:provenance`）。
+
+---
+
+## 2.5 「去掉 Electron 依赖」到底指什么（别把两件事混在一起）
+
+issue #74 的目标是「减少对上游实现与桌面运行时的耦合」，但**不是**「换掉 Electron」。
+这两件事经常被混为一谈，实际代价差两个数量级。本节把它们拆开，并且只保留可实测的结论。
+
+### 2.5.1 可以去掉的：业务代码对 `electron` 模块的 import
+
+现状（实测，见 §3.1 与审计 §6.2）：`electron/` + `shared/` 的 36 个非声明式 `.ts` 里，
+18 个**已经**不依赖 `electron`。剩下 18 个里绝大多数只需要极小的 API 面：
+
+| 需要的 API | 调用点 | 能不能自己实现 |
+| --- | ---: | --- |
+| `app.getPath('userData')` | 9 处 | ✅ 一段路径推导（`~/Library/Application Support` / `%APPDATA%` / `~/.config`） |
+| `BrowserWindow.getAllWindows() → webContents.send()` | 6 处模块 | ✅ 换成注入的 `EventSink` |
+| `dialog` / `shell` | 3 处 | ✅ 前端模态 + `open`/`xdg-open`/`start`（`UserPrompt` 端口） |
+| `app.getVersion()` / `isPackaged` | 4 处 | ✅ `package.json` + 构建期常量 |
+| `app.on(...)` / `whenReady` / 单实例锁 | 6 处 | ⚠️ 生命周期与单实例锁要自己做（可做，但属于「换运行时」范畴） |
+
+**这一层是明确可以做完的**，也正是迁移计划 C4–C6 的内容。做完之后，
+`docker/server` 不再需要 `electron-shim.ts`，容器镜像与桌面共用同一份 core。
+
+### 2.5.2 不能只靠「去掉 import」解决的：桌面运行时本身
+
+即使业务代码一行都不 import `electron`，**桌面应用仍然跑在 Electron 里**。
+以下能力没有纯 Node 替代品（或替代品质量明显更差），而且都是用户每天在用的：
+
+| 能力 | 纯 Node 方案 | 实测结论 |
+| --- | --- | --- |
+| 窗口 / 渲染进程宿主 | 无 | **必须**有运行时；换掉 = 换框架 |
+| 原生菜单栏（macOS 全局菜单） | 无 | 只能自绘，macOS 上体验明显不同 |
+| 系统托盘 | 无 | 需要额外原生模块 |
+| 原生文件对话框（记忆上次目录） | 无 | 只能用 `<input type=file>`，拿不到真实路径 |
+| **系统代理**（`session.setProxy` + 尊重 `session` 的 fetch） | 环境变量 + `undici` `ProxyAgent` | ⚠️ 见下方「真实缺口」 |
+| 剪贴板 | 系统命令（`pbcopy`/`xclip`） | 可行但平台分支多 |
+| 安装包与自动更新（NSIS/dmg/AppImage 三条链路 + 签名） | 全部重做 | `electron-builder` + `electron-updater` 现成，重做成本极高 |
+
+**结论**：`electron/` 目录的边界是**适配层**，不是债务。目标是让它薄（现在
+`main.ts` 已从上游 2756 行降到 164 行），不是让它消失。
+
+### 2.5.3 一次实测到的真实缺口（与去 Electron 无关，但现在就存在）
+
+`ipc/system.ts` 的注释写得很清楚：**必须用 `session.fetch`**，因为全局 `fetch`
+既不读传入参数、也不读环境变量代理。而**直链下载**（`download/direct.ts`）
+用的正是全局 `fetch`，且 `downloadDirectFile` 的入参里没有 proxy 字段——
+`ipc/download.ts` 的直链分支也没把设置里的 `proxy` 传下去。
+
+也就是说：**开了代理时，抖音/快手的直链下载仍然直连**。这不在本次改动范围内
+（改它要动 `DownloadOptions` 与两端的调用点），但它是「代理设置看起来生效、实际
+只对 yt-dlp 路径生效」这类静默失败，已记进迁移计划的待办。
 
 ---
 
@@ -221,6 +273,44 @@ core 侧只负责「发什么事」，谁发（窗口 / WebSocket）由 `EventSi
 
 **安全边界不因加架构层而变**：容器版仍然是「个人自托管工具」，不做多租户。这一条已在
 `docs/docker.md`「安全与访问控制」里写明，架构文档不重复承诺更强的能力。
+
+### 8.1 平台适配的实测结果（不是估算）
+
+「去掉 Electron 依赖还能不能全平台适配」这个问题可以拆成两半，各自有明确答案。
+
+**第一半：业务逻辑跨平台 —— 已经可以，且是实测的。**
+
+Go 边车在本机用 `bash scripts/build-backend.sh <platform>` 交叉编译，五个平台全部成功：
+
+| 平台 / 架构 | 产物格式（`file` 实测） |
+| --- | --- |
+| `win32-x64` | `PE32+ executable (console) x86-64, for MS Windows` |
+| `darwin-arm64` / `darwin-x64` | `Mach-O 64-bit executable arm64` / `x86_64` |
+| `linux-x64` / `linux-arm64` | `ELF 64-bit LSB executable, x86-64` / `ARM aarch64, statically linked` |
+
+`core` 候选模块在**纯 Node（无 `electron`）** 里逐一加载，全部成功：
+`parsers/{formats,youtube-retry,shared}`、`download/{direct-state,aria2-progress,process-tree}`、
+`history`、`utils/platform`、`shared/` 全部 5 个 —— 13 个模块零 Electron 也能跑。
+
+平台相关的业务逻辑只有**两处**，且都在可复用层里已被处理：
+
+- `download/process-tree.ts`：POSIX 用进程组信号，Windows 用 `taskkill /T /F`（顺序不能反）
+- 依赖清单的平台资产表（`backend/internal/manifest`），由脚本生成
+
+**第二半：桌面壳跨平台 —— 换掉 Electron 是「换框架」，不是「消依赖」。**
+
+见 §2.5.2。窗口、原生菜单、托盘、原生文件对话框、系统代理、安装包与自动更新，
+这些能力没有质量相当的纯 Node 替代品。它们**不在 `core` 里**，也不该进 `core`。
+
+所以正确的目标不是「零 Electron」，而是：
+
+1. `core/**` 零 Electron（迁移计划 C4–C6，可机械校验）；
+2. `electron/**` 只留**必须**的适配（窗口、菜单、对话框、托盘、更新器、代理）；
+3. `docker/**` 只依赖 `core/**`，**不需要** shim。
+
+> 一句话：**能不能全平台适配？业务逻辑已经能（实测 5 平台）；桌面壳不能去掉 Electron，
+> 但可以让它薄到只做适配器。** 把这两件事混成「要去 Electron」，会在做到一半时
+> 撞上「没有窗口」这个硬墙。
 
 ---
 

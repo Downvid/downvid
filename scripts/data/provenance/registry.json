@@ -115,9 +115,9 @@
     "src/components/AboutView.vue": {
       "origin": "upstream-derived",
       "upstreamPath": "src/components/AboutView.vue",
-      "significantLines": 193,
+      "significantLines": 196,
       "upstreamLines": 35,
-      "upstreamPct": 18.1
+      "upstreamPct": 17.9
     },
     "src/components/DownloadQueue.vue": {
       "origin": "upstream-derived",
