@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import fs from 'node:fs'
 import { getMainWindow, setMainWindow } from './store'
+import { cleanupTempInfoFiles } from './parsers/ytdlp'
 import { createMenu } from './menu'
 import { registerAppIpc } from './ipc/app'
 import { registerDepsIpc } from './ipc/deps'
@@ -229,6 +230,14 @@ app.on('before-quit', () => {
 
 app.on('will-quit', () => {
   log('[LIFECYCLE] will-quit')
+  // 清掉解析时写进 os.tmpdir() 的 info JSON（下载时 --load-info-json 会用它）。
+  // 不清理的话它们会在 /tmp 里一直堆到系统重启 —— 每次解析一个链接就多一份，
+  // 单个几百 KB 到几 MB。只删本次进程写过的文件，不碰别人的。
+  try {
+    cleanupTempInfoFiles()
+  } catch (e: any) {
+    log(`[LIFECYCLE] 清理临时解析文件失败：${e?.message || e}`)
+  }
 })
 
 app.on('quit', (_e, exitCode) => {

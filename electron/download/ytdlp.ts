@@ -1,4 +1,4 @@
-import { spawn, execFile } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { resolveDependency, getFfmpegLocation, checkJsRuntime } from '../utils/binary'
@@ -8,6 +8,7 @@ import { activeDownloads } from '../store'
 import { sendDownloadProgress, throttledProgress, clearProgressThrottle, formatBytes, formatEta } from './progress'
 import { accelerationConnections, normalizeAcceleration, type AccelerationSettings } from '../../shared/acceleration'
 import { detectAria2 } from './aria2'
+import { killProcessTree, treeSpawnOptions } from './process-tree'
 import { parseAria2Progress } from './aria2-progress'
 
 /**
@@ -299,7 +300,12 @@ async function executeYtdlpDownload(options: DownloadOptions, outputDir: string,
 
   const runOnce = (source: string[], cookieArgs: string[]) => new Promise<{ code: number | null; stderr: string }>((resolve, reject) => {
     if (preparationPaused() || isPaused) { isPaused = true; resolve({ code: null, stderr: '' }); return }
-    const child = spawn(ytdlpPath, [...args, ...cookieArgs, ...source], { cwd: path.dirname(ytdlpPath) })
+    // detached: 让 yt-dlp 成为新进程组的组长，暂停时才能一次信号收掉
+    // 它拉起的 aria2c / ffmpeg（否则孙子进程会活下来继续吃带宽，见 process-tree.ts）
+    const child = spawn(ytdlpPath, [...args, ...cookieArgs, ...source], {
+      cwd: path.dirname(ytdlpPath),
+      ...treeSpawnOptions(),
+    })
     let stderr = ''
 
     activeDownloads.set(options.taskId, { child, options, status: 'downloading', setPaused: (v: boolean) => { isPaused = v } })
@@ -396,17 +402,17 @@ export async function pauseDownload(taskId: string): Promise<boolean> {
     if (download.setPaused) download.setPaused(true)
     const child = download.child
     if (child.exitCode !== null || child.signalCode !== null) return true
-    // Windows 必须先杀整个树：先杀父进程会让 taskkill 丢失 PyInstaller 子进程。
+    // 必须杀**整棵树**，不是只杀 yt-dlp：
+    // 启用 aria2 时真正的下载进程是 yt-dlp 拉起的 aria2c（孙进程）。
+    // 只杀父进程会让 aria2c 变成孤儿继续写 .part，于是
+    //   1. 暂停后文件大小还在涨；
+    //   2. 恢复时 .aria2 控制文件已被写坏 → 判定无法续传 → **从零重下**。
+    // 也就是说「加速」会在暂停场景下变成「每次暂停都重下整个文件」。
     const stopped = new Promise<boolean>(resolve => {
       child.once('close', () => resolve(true))
       child.once('error', () => resolve(false))
     })
-    if (process.platform === 'win32' && child.pid) {
-      execFile(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'taskkill.exe'),
-        ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true }, (error) => {
-          if (error && child.exitCode === null) child.kill()
-        })
-    } else child.kill()
+    void killProcessTree(child)
     return stopped
   }
   return false

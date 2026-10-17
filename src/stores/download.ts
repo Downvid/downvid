@@ -178,10 +178,25 @@ export const useDownloadStore = defineStore('download', () => {
   }
 
   function removeTask(taskId: string) {
+    // 必须同时退订进度监听：否则每删一个任务就漏一个闭包（它捕获着整个 task
+    // 对象），而且永远不会被 GC —— 表现为「用久了越来越卡」，很难联想到是删除。
+    // 只有「下载进行中」那条路径会自己清理，暂停/完成/失败过再删除的都漏。
+    if (taskProgressCleanups.has(taskId)) {
+      taskProgressCleanups.get(taskId)!()
+      taskProgressCleanups.delete(taskId)
+    }
     downloadTasks.value = downloadTasks.value.filter(t => t.id !== taskId)
   }
 
   function clearCompletedTasks() {
+    // 与 removeTask 同理：清列表时也要退订，否则批量清理会一次漏掉 N 个监听
+    for (const task of downloadTasks.value) {
+      if (task.status !== 'completed') continue
+      if (taskProgressCleanups.has(task.id)) {
+        taskProgressCleanups.get(task.id)!()
+        taskProgressCleanups.delete(task.id)
+      }
+    }
     downloadTasks.value = downloadTasks.value.filter(t => t.status !== 'completed')
   }
 

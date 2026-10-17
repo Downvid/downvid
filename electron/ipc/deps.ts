@@ -9,6 +9,8 @@ import {
 /** 把手动路径从 settings 形状转换为主进程所需形状 */
 export interface DepsSettings extends DetectOptions {
   proxy?: string
+  /** 下载源偏好（见 DownloadOptions.mirror） */
+  mirror?: string
 }
 
 function broadcastProgress(progress: DownloadProgress) {
@@ -24,7 +26,11 @@ function sanitizeSettings(raw: any): DepsSettings {
     const value = source[kind]
     if (typeof value === 'string' && value.trim()) manualPaths[kind] = value.trim()
   }
-  return { manualPaths, proxy: typeof raw?.proxy === 'string' ? raw.proxy : undefined }
+  return {
+    manualPaths,
+    proxy: typeof raw?.proxy === 'string' ? raw.proxy : undefined,
+    mirror: typeof raw?.mirror === 'string' ? raw.mirror : undefined,
+  }
 }
 
 export function registerDepsIpc() {

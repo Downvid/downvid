@@ -114,6 +114,11 @@ export const useDepsStore = defineStore('deps', () => {
         case 'retry':
           notice.value = data.message ? `${data.tool}: ${data.message}` : t('deps.retrying')
           break
+        case 'mirror':
+          // 直连不通、正在换镜像源。必须显示出来：否则用户看到进度条
+          // 卡十几秒，会以为是网络慢，而不是「正在自动换源」
+          notice.value = data.message || t('deps.switchingMirror')
+          break
         case 'installed':
           transferring.value = false
           notice.value = t('deps.installedNotice', { tool: data.tool })
@@ -129,27 +134,47 @@ export const useDepsStore = defineStore('deps', () => {
     })
   }
 
-  /** 读取当前状态；force 时强制重新探测（忽略主进程 60 秒缓存） */
+  /**
+   * 读取当前状态；force 时强制重新探测（忽略主进程 60 秒缓存）。
+   *
+   * ## 并发去重
+   *
+   * 启动时 `App.vue` 会 refresh 一次（缺依赖要弹引导），用户打开设置面板
+   * `DepPanel` 的 onMounted 又会 refresh 一次 —— 两次几乎同时发生。
+   * 原先用 `if (checking.value) return` 拦住第二个：它**直接返回 undefined**，
+   * 于是 `await store.refresh()` 的调用方以为已经拿到结果，实际 `status` 还是空的。
+   * 现在的做法是让第二个调用**复用同一个 in-flight Promise**：既不重复 spawn，
+   * 也不给调用方一个「已完成但没数据」的假象。
+   */
+  let inflightRefresh: Promise<void> | null = null
+
   async function refresh(force = false) {
     subscribe()
-    if (checking.value) return
-    checking.value = true
-    error.value = ''
-    try {
-      const { depPaths, proxy } = readSettings()
-      const res = force
-        ? await window.electronAPI.deps.check({ manualPaths: { ...depPaths }, proxy })
-        : await window.electronAPI.deps.status({ manualPaths: { ...depPaths }, proxy })
-      if (res.success && res.status) {
-        status.value = res.status
-      } else if (res.error) {
-        error.value = res.error
+    // 已有探测在进行：复用它的结果（force 会让下一次调用重新发一次，
+    // 但仍在进行的这一次不该被丢弃 —— 否则手动点「重新检测」会毫无反应）
+    if (inflightRefresh) return inflightRefresh
+
+    inflightRefresh = (async () => {
+      checking.value = true
+      error.value = ''
+      try {
+        const { depPaths, proxy, depMirror } = readSettings()
+        const res = force
+          ? await window.electronAPI.deps.check({ manualPaths: { ...depPaths }, proxy, mirror: depMirror })
+          : await window.electronAPI.deps.status({ manualPaths: { ...depPaths }, proxy, mirror: depMirror })
+        if (res.success && res.status) {
+          status.value = res.status
+        } else if (res.error) {
+          error.value = res.error
+        }
+      } catch (e: any) {
+        error.value = e?.message || t('deps.checkFailed')
+      } finally {
+        checking.value = false
+        inflightRefresh = null
       }
-    } catch (e: any) {
-      error.value = e?.message || t('deps.checkFailed')
-    } finally {
-      checking.value = false
-    }
+    })()
+    return inflightRefresh
   }
 
   /** 下载缺失依赖；only 为空时下载全部缺失项 */
@@ -162,13 +187,16 @@ export const useDepsStore = defineStore('deps', () => {
     downloaded.value = 0
     total.value = 0
     try {
-      const { depPaths, proxy } = readSettings()
+      const { depPaths, proxy, depMirror } = readSettings()
       // 必须传普通对象/数组：调用方（如 DepsPrompt）可能直接把手动的
       // reactive 数组传进来，而 Vue 的 Proxy **无法被 structured clone**，
       // 会抛 `An object could not be cloned`。这里统一拍平。
       const res = await window.electronAPI.deps.download({
         manualPaths: { ...depPaths },
         proxy,
+        // 下载源：auto 时由 Go 边车沿 GitHub → 公共镜像降级，
+        // 钉死某个源用于排查「是不是镜像的问题」
+        mirror: depMirror,
         only: only ? [...only] : undefined,
         force,
       })

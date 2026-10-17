@@ -56,32 +56,75 @@ const GOOS_BY_PLATFORM: Record<string, string> = {
 }
 
 function goBackend(): Plugin {
+  /** 编译全部目标架构的边车；返回是否全部成功 */
+  function buildAll(): void {
+    const goos = GOOS_BY_PLATFORM[process.platform] || process.platform
+    const name = goBinaryName()
+    for (const { dir, goarch } of targetArches()) {
+      const outDir = path.join(BACKEND_BUILD_DIR, `${process.platform}-${dir}`)
+      const outFile = path.join(outDir, name)
+      fs.mkdirSync(outDir, { recursive: true })
+
+      try {
+        execFileSync('go', ['build', '-o', outFile, './cmd/downvid-deps'], {
+          cwd: BACKEND_DIR,
+          stdio: 'inherit',
+          env: { ...process.env, GOOS: goos, GOARCH: goarch, CGO_ENABLED: '0' },
+        })
+      } catch (e: any) {
+        // 没装 Go 时给出明确指引，而不是让整个构建以晦涩的错误失败
+        throw new Error(
+          `[go-backend] 构建 ${process.platform}-${dir} 依赖边车失败，` +
+          '请确认已安装 Go 1.24+ 并在 PATH 中可用。\n' +
+          `原始错误：${e?.message || e}`,
+        )
+      }
+    }
+    console.log(`\n[go-backend] 已构建 ${targetArches().map(a => `${process.platform}-${a.dir}`).join(', ')}`)
+  }
+
   return {
     name: 'downvid-go-backend',
     async buildStart() {
-      const goos = GOOS_BY_PLATFORM[process.platform] || process.platform
-      const name = goBinaryName()
-      for (const { dir, goarch } of targetArches()) {
-        const outDir = path.join(BACKEND_BUILD_DIR, `${process.platform}-${dir}`)
-        const outFile = path.join(outDir, name)
-        fs.mkdirSync(outDir, { recursive: true })
-
-        try {
-          execFileSync('go', ['build', '-o', outFile, './cmd/downvid-deps'], {
-            cwd: BACKEND_DIR,
-            stdio: 'inherit',
-            env: { ...process.env, GOOS: goos, GOARCH: goarch, CGO_ENABLED: '0' },
-          })
-        } catch (e: any) {
-          // 没装 Go 时给出明确指引，而不是让整个构建以晦涩的错误失败
-          throw new Error(
-            `[go-backend] 构建 ${process.platform}-${dir} 依赖边车失败，` +
-            '请确认已安装 Go 1.24+ 并在 PATH 中可用。\n' +
-            `原始错误：${e?.message || e}`,
-          )
-        }
+      buildAll()
+    },
+    /**
+     * 开发时监听 Go 源码并重建边车。
+     *
+     * ## 为什么必须有这一段（真实踩过）
+     *
+     * `buildStart` 只在**启动时**编译一次，而 Go 源码不在 Vite 的模块图里——
+     * 改 `backend/**` 不会触发任何重建。于是长期开着的 `pnpm dev` 会一直用旧边车：
+     * 实测把 aria2 加进 `Kinds` 之后，界面上仍然只显示三个依赖，
+     * 而源码、测试、`go build` 全都是对的。
+     *
+     * 这类「改完没生效」极难自查：重启 dev 就好了，于是很容易以为是缓存玄学。
+     * 这里把 Go 目录纳入 watch，变更即重建（Go 有编译缓存，增量很快）。
+     */
+    configureServer(server) {
+      const watched = ['internal', 'cmd', 'go.mod', 'go.sum'].map((entry) => path.join(BACKEND_DIR, entry))
+      server.watcher.add(watched)
+      let timer: NodeJS.Timeout | null = null
+      const rebuild = (file: string) => {
+        // 只关心会影响二进制的文件；`build/` 输出目录要排除（否则自己触发自己）
+        if (!/\.go$|go\.(mod|sum)$/.test(file)) return
+        if (file.includes(`${path.sep}build${path.sep}`)) return
+        // 测试文件不进二进制，改它们不该触发重编（否则写用例时会一直重建边车）
+        if (file.endsWith('_test.go')) return
+        // 防抖：一次保存可能触发多个事件
+        if (timer) clearTimeout(timer)
+        timer = setTimeout(() => {
+          timer = null
+          try {
+            buildAll()
+          } catch (e: any) {
+            // 开发时不因为一次编译失败就杀掉 dev server
+            console.error(`\n[go-backend] 重建失败（保持上一个可用版本）：${e?.message || e}\n`)
+          }
+        }, 150)
       }
-      console.log(`\n[go-backend] 已构建 ${targetArches().map(a => `${process.platform}-${a.dir}`).join(', ')}`)
+      server.watcher.on('change', rebuild)
+      server.watcher.on('add', rebuild)
     },
   }
 }

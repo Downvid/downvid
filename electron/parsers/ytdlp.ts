@@ -15,6 +15,36 @@ const PARSE_CACHE_VERSION = 5
 const parseCache = new Map<string, { data: any; time: number; ver: number }>()
 const PARSE_CACHE_TTL = 30 * 60 * 1000
 
+/**
+ * 解析缓存的**条数上限**。
+ *
+ * 只按 TTL 清理是不够的：每个条目都持有一份完整的 info JSON（YouTube 的长视频
+ * 可以到几 MB），而「粘贴一批链接逐个看」是很常见的用法。没有上限时，
+ * 30 分钟内解析 200 个链接就会把几百 MB 的 JSON 一直留在主进程内存里——
+ * Electron 主进程一旦吃满，整个界面开始卡顿，而用户完全看不出是缓存导致的。
+ *
+ * 60 条 ≈ 覆盖一次批量浏览，再多就淘汰最旧的。
+ */
+const PARSE_CACHE_MAX = 60
+
+/**
+ * 缓存里条目对应的临时 info JSON 路径，用于进程退出时统一清理。
+ *
+ * 这些文件写进 `os.tmpdir()`（下载时 `--load-info-json` 要用），
+ * 原先只在「缓存过期」时删 —— 但应用退出、或用户解析完不再下载时都不会触发，
+ * 于是 `/tmp` 里会慢慢堆积几十上百个 `downvid-*.json`（每个几百 KB）。
+ * 系统重启前不会回收，长期运行的机器上是真实占用。
+ */
+const tempInfoFiles = new Set<string>()
+
+/** 退出/异常时清掉自己写的临时文件（只删本次进程写过的，不碰别人的） */
+export function cleanupTempInfoFiles(): void {
+  for (const file of tempInfoFiles) {
+    try { fs.rmSync(file, { force: true }) } catch {}
+  }
+  tempInfoFiles.clear()
+}
+
 // 解析成功时额外使用的 extractor 参数（如 X/Twitter 回退到 syndication 接口），下载时沿用
 const extractorArgsByUrl = new Map<string, string[]>()
 export function getExtractorArgs(url: string): string[] {
@@ -68,7 +98,10 @@ function cleanupCache() {
   for (const [key, val] of parseCache) {
     if (val.ver !== PARSE_CACHE_VERSION || Date.now() - val.time > PARSE_CACHE_TTL) {
       parseCache.delete(key)
-      if (val.data?.cacheFile) fs.rm(val.data.cacheFile, { force: true }, () => {})
+      if (val.data?.cacheFile) {
+        tempInfoFiles.delete(val.data.cacheFile)
+        fs.rm(val.data.cacheFile, { force: true }, () => {})
+      }
     }
   }
 }
@@ -82,8 +115,11 @@ async function dumpInfo(url: string, cookiesFile: string | undefined, proxy: str
     throw new Error('[[parse-error:runtime-unavailable]]' + PARSE_MESSAGES['runtime-unavailable'])
   }
   if (runtime?.path && runtime.kind) base.push('--js-runtimes', `${runtime.kind}:${runtime.path}`)
-  const versionRun = isYoutube ? await runYtdlp(['--ignore-config', '--version']) : null
-  const version = versionRun?.code === 0 ? versionRun.stdout.trim() : ''
+  // 版本号**不在这里单独跑一次 `--version`**：
+  // yt-dlp 的 PyInstaller 构建每次启动要 8~10 秒（解压 72MB 到临时目录），
+  // 为了拿一个「错误诊断里才有用」的版本号多付一次启动，等于把解析时间翻倍。
+  // 改为「出错时才去问」——见下面 parseViaCli 里的 catch 分支。
+  const version = ''
   let state: YoutubeRetryState = { manifests: false, client: '' }
   let retries = 0
   const run = await runWithCookies(getCookieAttempts(cookiesFile), async (cookieArgs) => {
@@ -101,6 +137,26 @@ async function dumpInfo(url: string, cookiesFile: string | undefined, proxy: str
   return { ...run, state, version, runtimeVersion: runtime?.version && runtime.kind ? `${runtime.kind}@${runtime.version}` : '' }
 }
 
+/**
+ * 读取 yt-dlp 版本号（带 5 分钟缓存）。
+ *
+ * 只在**出错**与诊断场景调用：每次都 spawn 一次 yt-dlp 要 8~10 秒，
+ * 正常解析路径上拿它没有收益。缓存是为了连续解析多次失败时不重复付这个代价。
+ */
+let ytdlpVersionCache: { value: string; at: number } | null = null
+const YTDLP_VERSION_TTL = 5 * 60 * 1000
+
+export async function readYtdlpVersion(): Promise<string> {
+  if (ytdlpVersionCache && Date.now() - ytdlpVersionCache.at < YTDLP_VERSION_TTL) {
+    return ytdlpVersionCache.value
+  }
+  const run = await runYtdlp(['--ignore-config', '--version'])
+  const value = run.code === 0 ? run.stdout.trim() : ''
+  // 失败也缓存：否则一个「yt-dlp 跑不起来」的环境会在每次报错时白等 10 秒
+  ytdlpVersionCache = { value, at: Date.now() }
+  return value
+}
+
 async function parseViaCli(url: string, cookiesFile: string | undefined, proxy: string | undefined, cacheKey: string): Promise<any> {
   const isYoutube = url.includes('youtube.com') || url.includes('youtu.be')
 
@@ -114,7 +170,10 @@ async function parseViaCli(url: string, cookiesFile: string | undefined, proxy: 
   }
   if (run.code !== 0) {
     const kind = classifyParseError(run.stderr)
-    throw new Error(`[[parse-error:${kind}]]` + parseDiagnostic(run.stderr, { ytdlp: run.version, runtime: run.runtimeVersion }) + cookieFailureHint(run.failedBrowsers))
+    // 失败路径才值得付一次 `--version` 的启动开销：Issue 里带版本号能省掉一轮来回问。
+    // 成功路径不需要它（上面 dumpInfo 里刻意不再取）。
+    const version = await readYtdlpVersion().catch(() => '')
+    throw new Error(`[[parse-error:${kind}]]` + parseDiagnostic(run.stderr, { ytdlp: version, runtime: run.runtimeVersion }) + cookieFailureHint(run.failedBrowsers))
   }
   if (isYoutube && run.state.client) extraArgs = youtubeExtractorArgs(run.state)
 
@@ -179,9 +238,21 @@ async function parseViaCli(url: string, cookiesFile: string | undefined, proxy: 
     try {
       result.cacheFile = path.join(os.tmpdir(), `downvid-${String(info.id || Date.now()).replace(/[^\w-]/g, '_')}.json`)
       fs.writeFileSync(result.cacheFile, output)
+      tempInfoFiles.add(result.cacheFile)
     } catch {}
     parseCache.set(cacheKey, { data: result, time: Date.now(), ver: PARSE_CACHE_VERSION })
     cleanupCache()
+    // 超过条数上限时淘汰最旧的。Map 保持插入顺序，所以第一条就是最旧的。
+    while (parseCache.size > PARSE_CACHE_MAX) {
+      const oldestKey = parseCache.keys().next().value
+      if (oldestKey === undefined) break
+      const removed = parseCache.get(oldestKey)
+      parseCache.delete(oldestKey)
+      if (removed?.data?.cacheFile) {
+        tempInfoFiles.delete(removed.data.cacheFile)
+        fs.rm(removed.data.cacheFile, { force: true }, () => {})
+      }
+    }
     return result
   } catch {
     throw new Error('[[parse-error:unknown]]解析响应格式无效')
