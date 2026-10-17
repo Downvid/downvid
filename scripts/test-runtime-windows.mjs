@@ -75,6 +75,14 @@ function tsTranspiledModule(file) {
     process,
     // 沙箱里的裸模块（node:child_process 之类）走真实的 require
     require: nodeRequire,
+    // **定时器必须显式给**：`vm.runInNewContext` 的沙箱不是 Node 的全局
+    // 环境，没有 setTimeout/setInterval/clearTimeout。process-tree.ts 里
+    // 「等宽限期再 SIGKILL」用的正是 setTimeout，缺了它暂停直接抛
+    // `ReferenceError: setTimeout is not defined`（CI 的 windows job 抓到）。
+    setTimeout,
+    clearTimeout,
+    setInterval,
+    clearInterval,
   })
   return mod.exports
 }

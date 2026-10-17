@@ -76,7 +76,7 @@ func KillProcessTree(target KillTarget, opts KillOptions) error {
 	if platform == "windows" {
 		return killTreeWindows(target, opts, grace)
 	}
-	return killTreePOSIX(target, grace)
+	return killTreeByPlatform(target, grace)
 }
 
 // killTreeWindows 用 `taskkill /T /F` 收掉整棵树。
@@ -101,77 +101,12 @@ func killTreeWindows(target KillTarget, opts KillOptions, grace time.Duration) e
 	return nil
 }
 
-// killTreePOSIX 对进程组发信号。
-//
-// 先 SIGTERM 给 aria2c 机会把 .aria2 控制文件写完整；宽限期后仍未退出才 SIGKILL。
-// 直接 SIGKILL 会让控制文件停留在上一次 auto-save 的状态，恢复时丢最后几秒的进度。
-func killTreePOSIX(target KillTarget, grace time.Duration) error {
-	pid := int(target.PID)
-
-	signal := func(sig syscall.Signal) {
-		// 负 pid = 发给整个进程组。
-		if err := syscall.Kill(-pid, sig); err == nil {
-			return
-		}
-		// 失败通常是因为子进程不是组长（没设 Setpgid，或已被系统重新归组），
-		// 此时退回杀单个进程——总比什么都不做好。
-		if target.Kill != nil {
-			_ = target.Kill(sig)
-		}
-	}
-
-	signal(syscall.SIGTERM)
-
-	// 轮询等待退出。上限是宽限期的一半，留出另一半给最后的 SIGKILL 生效。
-	deadline := time.Now().Add(grace / 2)
-	for time.Now().Before(deadline) {
-		if isProcessAlive(pid) == false {
-			return nil
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	// 还没退出就上 SIGKILL：绝不能留下孤儿进程继续吃带宽
-	if isProcessAlive(pid) {
-		signal(syscall.SIGKILL)
-	}
-	return nil
-}
-
-// isProcessAlive 探测进程是否存在（signal 0 只探测，不真的发信号）。
-//
-// EPERM 表示「进程存在但没权限」——不该发生在我们自己的子进程上，
-// 但绝不能误判成已退出（那样会跳过 SIGKILL，留下孤儿）。
-func isProcessAlive(pid int) bool {
-	err := syscall.Kill(pid, 0)
-	if err == nil {
-		return true
-	}
-	return err == syscall.EPERM
-}
-
 // CurrentPlatform 返回 Node 风格（`win32`）还是 Go 风格（`windows`）？
 //
 // **统一用 Go 风格**（`windows` / `linux` / `darwin`）。这与仓库其它地方
 // （依赖清单、资产表）一致；跨语言映射只发生在边界上，不在核心逻辑里。
 func CurrentPlatform() string {
 	return runtime.GOOS
-}
-
-// SetProcessGroup 让子进程成为新进程组的组长，从而能被整组收掉。
-//
-// POSIX 上必须设；Windows 上**不要**设（会弹新控制台窗口，且 taskkill 已能处理树）。
-func SetProcessGroup(cmd *exec.Cmd, platform string) {
-	if platform == "" {
-		platform = CurrentPlatform()
-	}
-	if platform == "windows" {
-		return
-	}
-	if cmd.SysProcAttr == nil {
-		cmd.SysProcAttr = &syscall.SysProcAttr{}
-	}
-	cmd.SysProcAttr.Setpgid = true
 }
 
 func min(a, b time.Duration) time.Duration {
