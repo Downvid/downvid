@@ -7,6 +7,7 @@
    */
   import { CONNECTION_STOPS, nearestConnectionStop } from '../lib/mock'
   import { t } from '../lib/i18n.svelte'
+  import { drawRadiation, resizeCanvas, type RadiationState } from '../lib/radiation'
 
   interface Props {
     value: number
@@ -19,6 +20,11 @@
 
   const STOPS = CONNECTION_STOPS
   let dragging = $state(false)
+
+  // 能量辐射层（canvas）。移植自 dsh-reasoning-effort 的 drawRadiation，
+  // 配色改成 DownVid 的琥珀 → 橙红。
+  let canvas = $state<HTMLCanvasElement | null>(null)
+  let dark = $state(false)
   const index = $derived(Math.max(0, STOPS.indexOf(nearestConnectionStop(value))))
   const current = $derived(STOPS[index])
   const percent = $derived((index / (STOPS.length - 1)) * 100)
@@ -47,6 +53,72 @@
   function onInput(event: Event): void {
     select(Number((event.currentTarget as HTMLInputElement).value))
   }
+
+  /**
+   * 跟随系统深浅色。
+   *
+   * 不用 `matchMedia` 的 change 监听 + 手动卸载：`$effect` 的返回函数就是清理，
+   * 只有一个出口（旧版漏过这个，热重载会累积监听）。
+   */
+  $effect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    dark = mq.matches
+    const onChange = (e: MediaQueryListEvent) => { dark = e.matches }
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  })
+
+  /**
+   * 辐射层动画。
+   *
+   * 三个关键点：
+   *   1. **reduced-motion 下只画一帧**，不起 rAF——「减少动态」不是「慢一点」
+   *   2. 尺寸用 ResizeObserver 跟，不读 layout 造成强制回流
+   *   3. 卸载时 cancelAnimationFrame 与 disconnect 都要做
+   */
+  $effect(() => {
+    const el = canvas
+    if (!el) return
+    const ctx = el.getContext('2d')
+    if (!ctx) return
+
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)')
+    let size = resizeCanvas(el)
+    let frame = 0
+
+    // 状态从 $state 读，但 draw 是 rAF 驱动的（不经过 Svelte 的响应式），
+    // 所以每次读最新值
+    const stateOf = (): RadiationState => ({
+      progress: percent / 100,
+      dragging,
+      top: index === STOPS.length - 1,
+      dark,
+    })
+
+    const draw = (time = performance.now()) => {
+      drawRadiation(ctx, size.width, size.height, time, stateOf())
+    }
+
+    const loop = (time: number) => {
+      draw(time)
+      frame = requestAnimationFrame(loop)
+    }
+
+    const observer = new ResizeObserver(() => {
+      size = resizeCanvas(el)
+      // reduced-motion 下不跑 loop，所以要手动重画一次
+      if (reduced.matches) draw()
+    })
+    observer.observe(el)
+
+    draw()
+    if (!reduced.matches) frame = requestAnimationFrame(loop)
+
+    return () => {
+      cancelAnimationFrame(frame)
+      observer.disconnect()
+    }
+  })
 </script>
 
 <div
@@ -72,6 +144,10 @@
         ></span>
       {/each}
     </div>
+
+    <!-- 能量辐射层：裁剪在拇指左侧。canvas 比 CSS 渐变更能做出
+         「逐列波动 + 拖尾衰减」的层次，而重绘成本仍在一帧 1ms 以内 -->
+    <canvas class="effort-radiation" bind:this={canvas} aria-hidden="true"></canvas>
 
     {#if !compact}
       <span
@@ -205,6 +281,24 @@
     background: var(--rule);
     transform: translateY(-50%);
   }
+  /* 辐射层：铺满轨道，不吃事件（thumb 与 input 要能点） */
+  .effort-radiation {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+    pointer-events: none;
+    mix-blend-mode: screen;
+    /* 浅色主题下 screen 会让橙色发白，改用 multiply 更贴合纸感 */
+    z-index: 1;
+  }
+  :global([data-theme='light']) .effort-radiation,
+  :global(.theme-light) .effort-radiation {
+    mix-blend-mode: multiply;
+    opacity: 0.85;
+  }
+
   .effort-fill {
     position: absolute;
     left: 0;
