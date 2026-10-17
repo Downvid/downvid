@@ -73,7 +73,7 @@ const RAW_RELEASE = {
     name,
     size,
     browser_download_url:
-      'https://github.com/yxxbc/downvid/releases/download/v1.3.4/' + encodeURIComponent(name),
+      'https://github.com/Downvid/downvid/releases/download/v1.3.4/' + encodeURIComponent(name),
   })),
 }
 
@@ -321,6 +321,6 @@ describe('formatSize', () => {
 
 describe('页面与仓库坐标', () => {
   it('REPO 指向 shared/app.ts 里的仓库（lint:website 也会比对，这里再兜一层）', () => {
-    expect(api.REPO).toEqual({ owner: 'yxxbc', repo: 'downvid' })
+    expect(api.REPO).toEqual({ owner: 'Downvid', repo: 'downvid' })
   })
 })

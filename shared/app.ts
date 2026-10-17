@@ -15,7 +15,7 @@
 
 export const APP = {
   name: 'DownVid',
-  owner: 'yxxbc',
+  owner: 'Downvid',
   repo: 'downvid',
 } as const
 

@@ -9,7 +9,7 @@
 | 最新 release | ✅ 支持 |
 | 更早的 release | ❌ 不支持（请先升级后复现） |
 
-如果你正在使用的版本存在安全问题，请先升级到 [最新版本](https://github.com/yxxbc/downvid/releases/latest) 再确认是否仍然存在。
+如果你正在使用的版本存在安全问题，请先升级到 [最新版本](https://github.com/Downvid/downvid/releases/latest) 再确认是否仍然存在。
 
 ## 报告漏洞
 
@@ -17,7 +17,7 @@
 
 优先使用 GitHub 的私密报告通道：
 
-1. 打开 [Security → Report a vulnerability](https://github.com/yxxbc/downvid/security/advisories/new)
+1. 打开 [Security → Report a vulnerability](https://github.com/Downvid/downvid/security/advisories/new)
 2. 填写复现步骤、影响范围、受影响的版本，以及可行的修复建议
 
 如果无法使用上述通道，请发邮件至 `downvid@example.com`，标题以 `[SECURITY]` 开头。
@@ -45,7 +45,7 @@
 | 初步评估（是否成立、严重程度） | 7 个工作日内 |
 | 修复并发布 | 视严重程度而定，高危问题优先 |
 
-评估结论与修复计划会在私密报告中同步。修复发布后，如你同意，会在 [安全公告](https://github.com/yxxbc/downvid/security/advisories) 与 CHANGELOG 中致谢。
+评估结论与修复计划会在私密报告中同步。修复发布后，如你同意，会在 [安全公告](https://github.com/Downvid/downvid/security/advisories) 与 CHANGELOG 中致谢。
 
 ## 披露政策
 

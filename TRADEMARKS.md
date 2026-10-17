@@ -17,7 +17,7 @@ You may refer to DownVid accurately, for example:
 
 - In reviews, tutorials, comparisons, documentation, bug reports, and discussions about the project.
 - To explain that a fork or integration is based on, compatible with, or uses DownVid, provided the statement is true and does not imply endorsement.
-- In installation instructions or screenshots that identify the original project, with a link to the [official repository](https://github.com/yxxbc/downvid).
+- In installation instructions or screenshots that identify the original project, with a link to the [official repository](https://github.com/Downvid/downvid).
 
 Use only as much of the name or visual identity as reasonably needed to identify the project. Do not edit the logo in a way that suggests the project approved the edit.
 
@@ -50,7 +50,7 @@ This policy does **not** assume that all logo files are automatically excluded f
 
 ## 6. Questions and suspected impersonation
 
-If you are unsure whether a particular use is misleading, link to the official repository and clearly disclose who operates the product. To report a potential impersonation or confusing use, open an issue in the [DownVid repository](https://github.com/yxxbc/downvid/issues) and include the public URL and a concise explanation. Do not post private user data.
+If you are unsure whether a particular use is misleading, link to the official repository and clearly disclose who operates the product. To report a potential impersonation or confusing use, open an issue in the [DownVid repository](https://github.com/Downvid/downvid/issues) and include the public URL and a concise explanation. Do not post private user data.
 
 ---
 
@@ -73,7 +73,7 @@ DownVid 源代码采用 [MIT License](./LICENSE) 发布。MIT 许可允许在遵
 
 - 评测、教程、比较、文档、问题报告及项目讨论。
 - 如实说明某个 fork、集成或部署方案基于 DownVid、兼容 DownVid 或使用了 DownVid，但不得暗示获得官方认可。
-- 在安装指南或截图中识别原项目，并适当链接到 [官方仓库](https://github.com/yxxbc/downvid)。
+- 在安装指南或截图中识别原项目，并适当链接到 [官方仓库](https://github.com/Downvid/downvid)。
 
 只使用识别项目所合理需要的名称或视觉素材。不要以容易让人误认为获得官方批准的方式修改 Logo。
 
@@ -106,4 +106,4 @@ Docker 镜像、Compose 文件和自托管部署只是运行软件的方式，�
 
 ## 6. 咨询与疑似冒充
 
-如不确定某种使用方式是否会造成误导，应链接官方仓库并明确披露产品的运营方。如需报告疑似冒充官方或容易造成混淆的使用，请在 [DownVid 仓库](https://github.com/yxxbc/downvid/issues) 提交 Issue，附上公开 URL 和简要说明。请勿发布用户的私人数据。
+如不确定某种使用方式是否会造成误导，应链接官方仓库并明确披露产品的运营方。如需报告疑似冒充官方或容易造成混淆的使用，请在 [DownVid 仓库](https://github.com/Downvid/downvid/issues) 提交 Issue，附上公开 URL 和简要说明。请勿发布用户的私人数据。

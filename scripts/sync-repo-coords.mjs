@@ -80,6 +80,10 @@ const TARGETS = [
 
   // --- 用户可见的入口 ---
   { file: 'website/index.html', kind: 'text', required: true, note: '官网下载按钮拼 API 地址' },
+  // 两份 compose **都要**：根目录那份是用户实际 `docker compose up` 用的入口，
+  // docker/ 那份是内部构建用。实测迁移时只列了后者，结果根目录的
+  // `ghcr.io/<owner>/downvid` 被漏掉——用户会 pull 到旧镜像，表现为「升级了还是旧版」。
+  { file: 'docker-compose.yml', kind: 'text', required: false, note: '根目录 compose（用户实际入口）' },
   { file: 'docker/docker-compose.yml', kind: 'text', required: false, note: '默认镜像坐标' },
 
   // --- 测试里的快照（改了会红，必须同步）---
@@ -156,6 +160,22 @@ if (CHECK) {
       if (pubOwner && pubOwner !== owner) problems.push(`electron-builder.json5 的 publish.owner=${pubOwner}，与 shared/app.ts 的 ${owner} 不一致`)
       if (pubRepo && pubRepo !== repo) problems.push(`electron-builder.json5 的 publish.repo=${pubRepo}，与 shared/app.ts 的 ${repo} 不一致`)
     }
+    // 字段形式的自检：`owner:` / `repo:` 的值必须与 shared/app.ts 一致。
+    //
+    // 这一条防的是迁移脚本自己的 bug：往返迁移时曾把 `repo:` 也替换成 owner
+    // （因为按「值」而不是「字段名」判断），于是 publish.repo 变成 `Downvid`，
+    // 打包烧进 app-update.yml 的坐标就是错的 —— 用户更新检查 404，且没有任何报错。
+    if (t.kind === 'publish' || t.file === 'shared/app.ts') {
+      const fieldOwner = /\b"?(owner)"?\s*[:=]\s*['"]([^'"]+)['"]/.exec(text)?.[2]
+      const fieldRepo = /\b"?(repo)"?\s*[:=]\s*['"]([^'"]+)['"]/.exec(text)?.[2]
+      if (fieldOwner && fieldOwner !== owner) {
+        problems.push(`${t.file}：owner 字段是 "${fieldOwner}"，与 shared/app.ts 的 "${owner}" 不一致`)
+      }
+      if (fieldRepo && fieldRepo !== repo) {
+        problems.push(`${t.file}：repo 字段是 "${fieldRepo}"，与 shared/app.ts 的 "${repo}" 不一致（大小写也要一致）`)
+      }
+    }
+
     if (t.docs && hits.length > 0) notes.push(`${t.file}：文档里出现 ${hits.length} 处旧坐标（历史提及可保留）`)
   }
 
@@ -197,12 +217,18 @@ for (const t of TARGETS) {
 
   // 用带捕获组的方式整体替换，保留原有大小写风格是不必要的（GitHub 大小写不敏感），
   // 但必须避免误伤 owner 与 repo 恰好是常见词的场景——故整段 `${owner}/${repo}` 一起换。
-  // 两种形态都要换：拼接形式整体替换，字段形式只换值本身
+  // 两种形态都要换：拼接形式整体替换，字段形式**按字段名**决定替换成什么。
+  //
+  // 这里踩过一个坑：早先按「值」判断（值等于旧 owner 就换成新 owner），
+  // 于是在 owner 与 repo 同名时（往返迁移会出现 `Downvid/Downvid`）两个字段
+  // 都被换成 owner，`shared/app.ts` 的 `repo:` 变成 `Downvid` 而不是 `downvid`。
+  // 结果：publish.repo 与实际仓库名不符——打包时烧进 app-update.yml 的坐标是错的，
+  // 用户更新检查 404。**按字段名判断**才是唯一可靠的依据。
   let next = text.replace(new RegExp(`${esc(owner)}/${esc(repo)}`, 'gi'), `${newOwner}/${newRepo}`)
   next = next.replace(
-    new RegExp(`(\\b"?(?:owner|repo)"?\\s*[:=]\\s*['"])(${esc(owner)}|${esc(repo)})(['"])`, 'gi'),
-    (whole, pre, value, post) => {
-      const replacement = value.toLowerCase() === owner.toLowerCase() ? newOwner : newRepo
+    new RegExp(`(\\b"?(owner|repo)"?\\s*[:=]\\s*['"])(${esc(owner)}|${esc(repo)})(['"])`, 'gi'),
+    (whole, pre, field, _value, post) => {
+      const replacement = field.toLowerCase() === 'owner' ? newOwner : newRepo
       return `${pre}${replacement}${post}`
     },
   )

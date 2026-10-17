@@ -18,7 +18,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
-const OWNER = 'yxxbc'
+const OWNER = 'Downvid'
 const REPO = 'downvid'
 
 const [artifactsDir, version, changelogFile] = process.argv.slice(2)

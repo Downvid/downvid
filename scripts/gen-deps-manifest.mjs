@@ -351,7 +351,7 @@ function render(ytdlp, ffmpeg, aria2, existing) {
 
 package manifest
 
-import rt "github.com/yxxbc/downvid/backend/internal/runtime"
+import rt "github.com/Downvid/downvid/backend/internal/runtime"
 
 // YtDlpTag yt-dlp nightly 构建的固定 tag（日期版本号）
 const YtDlpTag = "${ytdlp.tag}"

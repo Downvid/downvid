@@ -43,13 +43,13 @@ docker run -d --name downvid \
   -p 6080:6080 \
   -v "$PWD/data/downloads:/data/downloads" \
   -v "$PWD/data/userdata:/data/userdata" \
-  ghcr.io/yxxbc/downvid:latest
+  ghcr.io/Downvid/downvid:latest
 ```
 
 或者用 compose（**推荐**：升级只要两条命令，见[升级容器](#升级容器)）：
 
 ```bash
-curl -O https://raw.githubusercontent.com/yxxbc/downvid/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/Downvid/downvid/main/docker-compose.yml
 docker compose up -d
 ```
 
@@ -91,7 +91,7 @@ docker compose up -d
 | `DOWNVID_DATA_DIR` | `/data/userdata` | 用户数据与下载历史存放目录 |
 | `DOWNVID_DOWNLOADS` | `/data/downloads` | 默认视频下载落盘目录 |
 | `TZ` | `Asia/Shanghai` | 容器时区，影响日志时间戳 |
-| `DOWNVID_IMAGE` | 未设置 | 镜像名（如 `ghcr.io/yxxbc/downvid:latest`）。用于检查 registry 上有没有新 digest，并原样出现在「升级命令」里 |
+| `DOWNVID_IMAGE` | 未设置 | 镜像名（如 `ghcr.io/Downvid/downvid:latest`）。用于检查 registry 上有没有新 digest，并原样出现在「升级命令」里 |
 | `DOWNVID_UPDATE_SOURCE` | `auto` | 更新源：`auto` / `github` / `jsdelivr` / `ghproxy` / `gitee` / `website`。也可以在界面里改 |
 
 ---
@@ -204,7 +204,7 @@ curl http://127.0.0.1:6080/healthz
 ```
 预期返回（镜像名与版本都会带上，排障时贴这一行就够）：
 ```json
-{"ok":true,"app":"DownVid","image":"ghcr.io/yxxbc/downvid:latest","repo":"yxxbc/downvid","version":"1.4.0","tz":"Asia/Shanghai"}
+{"ok":true,"app":"DownVid","image":"ghcr.io/Downvid/downvid:latest","repo":"Downvid/downvid","version":"1.4.0","tz":"Asia/Shanghai"}
 ```
 
 ### 3. 下载报 EACCES / 提示目录不可写

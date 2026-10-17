@@ -276,7 +276,7 @@ ffmpeg 只在合并音视频与音频转码时需要，因此**字幕下载不�
 2. **界面卡死**
    - 尝试按 `Ctrl+Shift+I`（Windows/Linux）或 `Cmd+Option+I`（macOS）打开开发者工具
    - 查看 Console 中是否有红色错误信息
-   - 如果有错误，截图提交 [Issue](https://github.com/yxxbc/downvid/issues)
+   - 如果有错误，截图提交 [Issue](https://github.com/Downvid/downvid/issues)
 
 3. **窗口太小**
    - DownVid 最小窗口为 1000x700
@@ -294,7 +294,7 @@ ffmpeg 只在合并音视频与音频转码时需要，因此**字幕下载不�
 **解决方案：**
 1. 确保网络正常（需要加载 Google Fonts）
 2. 重启应用
-3. 如果问题持续，提交 [Issue](https://github.com/yxxbc/downvid/issues) 并附截图
+3. 如果问题持续，提交 [Issue](https://github.com/Downvid/downvid/issues) 并附截图
 
 ---
 
@@ -507,7 +507,7 @@ sudo pacman -S gtk3 libnotify nss libxss libxtst xdg-utils at-spi2-core libsecre
 
 ### 提交 Issue
 
-如果以上方法都无法解决问题，请 [提交 Issue](https://github.com/yxxbc/downvid/issues)，并包含以下信息：
+如果以上方法都无法解决问题，请 [提交 Issue](https://github.com/Downvid/downvid/issues)，并包含以下信息：
 
 1. **操作系统和版本**（如 macOS 15.0、Windows 11、Ubuntu 24.04）
 2. **DownVid 版本号**（在"关于"页面查看）
@@ -520,5 +520,5 @@ sudo pacman -S gtk3 libnotify nss libxss libxtst xdg-utils at-spi2-core libsecre
 ## 还是解决不了？
 
 1. 查看 [常见问题](./faq.md)
-2. 搜索 [GitHub Issues](https://github.com/yxxbc/downvid/issues) 看看有没有类似问题
-3. 如果没有，[提交新 Issue](https://github.com/yxxbc/downvid/issues/new)
+2. 搜索 [GitHub Issues](https://github.com/Downvid/downvid/issues) 看看有没有类似问题
+3. 如果没有，[提交新 Issue](https://github.com/Downvid/downvid/issues/new)

@@ -183,7 +183,7 @@ DownVid 会列出所有可用的画质选项供你选择。
 
 **Releases 版本：**
 - 内置自动更新功能，有新版本时会提示
-- 也可以手动从 [Releases](https://github.com/yxxbc/downvid/releases) 下载最新版
+- 也可以手动从 [Releases](https://github.com/Downvid/downvid/releases) 下载最新版
 
 **从源码构建：**
 ```bash
@@ -275,7 +275,7 @@ pnpm 更快、更节省磁盘空间，且 workspace 功能更强大。本项目�
 
 ### 如何报告 Bug？
 
-请 [提交 Issue](https://github.com/yxxbc/downvid/issues/new)，并包含：
+请 [提交 Issue](https://github.com/Downvid/downvid/issues/new)，并包含：
 1. 操作系统和版本
 2. DownVid 版本号
 3. 复现步骤

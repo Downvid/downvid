@@ -21,7 +21,7 @@
 
 ### 下载地址
 
-👉 **[点击这里前往 Releases 页面下载最新版](https://github.com/yxxbc/downvid/releases/latest)**
+👉 **[点击这里前往 Releases 页面下载最新版](https://github.com/Downvid/downvid/releases/latest)**
 
 ### 选择正确的文件
 
@@ -151,7 +151,7 @@ AppImage 是最通用的格式，不需要安装，下载即可运行。
 
 ```bash
 # 1. 下载 AppImage（替换为实际版本号）
-# 从 https://github.com/yxxbc/downvid/releases/latest 下载
+# 从 https://github.com/Downvid/downvid/releases/latest 下载
 
 # 2. 添加可执行权限
 chmod +x DownVid-*-x64-Linux-*.AppImage
@@ -264,13 +264,13 @@ uname -m
 docker run -d --name downvid -p 6080:6080 \
   -v "$PWD/data/downloads:/data/downloads" \
   -v "$PWD/data/userdata:/data/userdata" \
-  ghcr.io/yxxbc/downvid:latest
+  ghcr.io/Downvid/downvid:latest
 ```
 
 或用 compose（推荐，升级只要 `docker compose pull && docker compose up -d`）：
 
 ```bash
-git clone https://github.com/yxxbc/downvid.git
+git clone https://github.com/Downvid/downvid.git
 cd downvid
 docker compose up -d
 ```

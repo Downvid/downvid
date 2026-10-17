@@ -149,7 +149,7 @@ jobs:
 
           docker run -d --name "${CONTAINER}" \
             -p 6080:6080 \
-            -e DOWNVID_IMAGE=ghcr.io/yxxbc/downvid:smoke \
+            -e DOWNVID_IMAGE=ghcr.io/Downvid/downvid:smoke \
             "${IMAGE}"
 
           ok=0

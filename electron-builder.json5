@@ -101,7 +101,7 @@
   // ===== Auto Update =====
   "publish": {
     "provider": "github",
-    "owner": "yxxbc",
+    "owner": "Downvid",
     "repo": "downvid",
     "releaseType": "release"
   }

@@ -15,23 +15,23 @@
 </table>
 
 <p>
-  <a href="https://github.com/yxxbc/downvid/releases"><img src="https://img.shields.io/github/downloads/yxxbc/downvid/total?style=flat&label=Downloads&logo=github&logoColor=white&color=2563eb" alt="Downloads" /></a>
-  <a href="https://github.com/yxxbc/downvid/releases/latest"><img src="https://img.shields.io/github/v/release/yxxbc/downvid?style=flat&label=Release&logo=github&logoColor=white&color=0284c7" alt="Latest Release" /></a>
-  <a href="https://github.com/yxxbc/downvid/stargazers"><img src="https://img.shields.io/github/stars/yxxbc/downvid?style=flat&label=Stars&logo=github&logoColor=white&color=eab308" alt="GitHub Stars" /></a>
+  <a href="https://github.com/Downvid/downvid/releases"><img src="https://img.shields.io/github/downloads/Downvid/downvid/total?style=flat&label=Downloads&logo=github&logoColor=white&color=2563eb" alt="Downloads" /></a>
+  <a href="https://github.com/Downvid/downvid/releases/latest"><img src="https://img.shields.io/github/v/release/Downvid/downvid?style=flat&label=Release&logo=github&logoColor=white&color=0284c7" alt="Latest Release" /></a>
+  <a href="https://github.com/Downvid/downvid/stargazers"><img src="https://img.shields.io/github/stars/Downvid/downvid?style=flat&label=Stars&logo=github&logoColor=white&color=eab308" alt="GitHub Stars" /></a>
   <a href="https://alternativeto.net/software/downvid/"><img src="https://img.shields.io/badge/AlternativeTo-DownVid-0289d5?style=flat&logo=alternativeto&logoColor=white" alt="AlternativeTo" /></a>
-  <a href="https://github.com/yxxbc/downvid/actions/workflows/ci-linux.yml"><img src="https://img.shields.io/github/actions/workflow/status/yxxbc/downvid/ci-linux.yml?branch=main&label=CI%20Linux&logo=github-actions&logoColor=white&color=16a34a" alt="CI Linux" /></a>
-  <a href="https://github.com/yxxbc/downvid/actions/workflows/ci-macos.yml"><img src="https://img.shields.io/github/actions/workflow/status/yxxbc/downvid/ci-macos.yml?branch=main&label=CI%20macOS&logo=github-actions&logoColor=white&color=16a34a" alt="CI macOS" /></a>
-  <a href="https://github.com/yxxbc/downvid/actions/workflows/ci-windows.yml"><img src="https://img.shields.io/github/actions/workflow/status/yxxbc/downvid/ci-windows.yml?branch=main&label=CI%20Windows&logo=github-actions&logoColor=white&color=16a34a" alt="CI Windows" /></a>
-  <a href="https://github.com/yxxbc/downvid/actions/workflows/codeql.yml"><img src="https://img.shields.io/github/actions/workflow/status/yxxbc/downvid/codeql.yml?branch=main&label=CodeQL&logo=github-actions&logoColor=white&color=16a34a" alt="CodeQL" /></a>
+  <a href="https://github.com/Downvid/downvid/actions/workflows/ci-linux.yml"><img src="https://img.shields.io/github/actions/workflow/status/Downvid/downvid/ci-linux.yml?branch=main&label=CI%20Linux&logo=github-actions&logoColor=white&color=16a34a" alt="CI Linux" /></a>
+  <a href="https://github.com/Downvid/downvid/actions/workflows/ci-macos.yml"><img src="https://img.shields.io/github/actions/workflow/status/Downvid/downvid/ci-macos.yml?branch=main&label=CI%20macOS&logo=github-actions&logoColor=white&color=16a34a" alt="CI macOS" /></a>
+  <a href="https://github.com/Downvid/downvid/actions/workflows/ci-windows.yml"><img src="https://img.shields.io/github/actions/workflow/status/Downvid/downvid/ci-windows.yml?branch=main&label=CI%20Windows&logo=github-actions&logoColor=white&color=16a34a" alt="CI Windows" /></a>
+  <a href="https://github.com/Downvid/downvid/actions/workflows/codeql.yml"><img src="https://img.shields.io/github/actions/workflow/status/Downvid/downvid/codeql.yml?branch=main&label=CodeQL&logo=github-actions&logoColor=white&color=16a34a" alt="CodeQL" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-7c3aed?style=flat&logo=open-source-initiative&logoColor=white" alt="MIT License" /></a>
 </p>
 
 <p>
   <a href="https://downvid-coral.vercel.app">Website</a>
   ·
-  <a href="https://github.com/yxxbc/downvid/releases">Download</a>
+  <a href="https://github.com/Downvid/downvid/releases">Download</a>
   ·
-  <a href="https://github.com/yxxbc/downvid/issues">Report an issue</a>
+  <a href="https://github.com/Downvid/downvid/issues">Report an issue</a>
   ·
   <a href="mailto:xynrin@icloud.com?subject=%5BDownVid%5D%20Business">Sponsorship / business</a>
   ·
@@ -44,7 +44,7 @@
 
 <p>
   <a href="https://www.producthunt.com/products/github-460eee39-2e5c-447d-b207-531e944feebd?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-downvid" target="_blank" rel="noopener noreferrer"><img alt="Downvid - Downvid | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1280091&amp;theme=light&amp;t=1792127974682"></a>
-  <a href="https://trendshift.io/repositories/180707?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-180707" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/180707/daily?language=TypeScript" alt="yxxbc/downvid | Trendshift" width="250" height="55" /></a>
+  <a href="https://trendshift.io/repositories/180707?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-180707" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/180707/daily?language=TypeScript" alt="Downvid/downvid | Trendshift" width="250" height="55" /></a>
 </p>
 </div>
 
@@ -59,7 +59,7 @@ Sponsorship, or business enquiries such as advertising placements — email **xy
 | Sponsorship | <a href="mailto:xynrin@icloud.com?subject=%5BDownVid%5D%20Sponsorship">xynrin@icloud.com</a> |
 | Business / advertising | <a href="mailto:xynrin@icloud.com?subject=%5BDownVid%5D%20Business">xynrin@icloud.com</a> |
 
-Please use the [issue tracker](https://github.com/yxxbc/downvid/issues) for bug reports and feature
+Please use the [issue tracker](https://github.com/Downvid/downvid/issues) for bug reports and feature
 requests instead, so that other users can find the answers too.
 
 **The app itself contains no ads and never will.** These enquiries are about the project — for example
@@ -104,7 +104,7 @@ Built as a graphical frontend for [yt-dlp](https://github.com/yt-dlp/yt-dlp) and
 - 🎨 **Modern Design**: Designed with Material 3 design tokens, clean typography, responsive layout, and full cross-platform dark mode compatibility.
 
 The project is under active development. If you hit a problem or have a suggestion, please
-[open an issue](https://github.com/yxxbc/downvid/issues).
+[open an issue](https://github.com/Downvid/downvid/issues).
 
 ## Features
 
@@ -132,7 +132,7 @@ Availability can change as sites change.
 
 ## Install
 
-Download the latest build from [**GitHub Releases**](https://github.com/yxxbc/downvid/releases) and pick the
+Download the latest build from [**GitHub Releases**](https://github.com/Downvid/downvid/releases) and pick the
 package for your OS.
 
 | Platform | Package |
@@ -153,14 +153,14 @@ full app, on desktop, tablet or phone:
 docker run -d --name downvid -p 6080:6080 \
   -v "$PWD/data/downloads:/data/downloads" \
   -v "$PWD/data/userdata:/data/userdata" \
-  ghcr.io/yxxbc/downvid:latest
+  ghcr.io/Downvid/downvid:latest
 # then open http://127.0.0.1:6080/
 ```
 
 Or, with compose (recommended — upgrades become one command):
 
 ```bash
-curl -O https://raw.githubusercontent.com/yxxbc/downvid/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/Downvid/downvid/main/docker-compose.yml
 docker compose up -d
 # upgrade later: docker compose pull && docker compose up -d
 ```
@@ -183,7 +183,7 @@ is already on your machine, and can download them in-app when missing.
 ### Steps
 
 ```bash
-git clone https://github.com/yxxbc/downvid.git
+git clone https://github.com/Downvid/downvid.git
 cd downvid
 pnpm install
 pnpm dev       # development
@@ -301,17 +301,17 @@ See the [contributing guide](./CONTRIBUTING.md) and [repository standards](./doc
 
 Thanks to everyone who has contributed to DownVid:
 
-<a href="https://github.com/yxxbc/downvid/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=yxxbc/downvid" alt="Contributors" />
+<a href="https://github.com/Downvid/downvid/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=Downvid/downvid" alt="Contributors" />
 </a>
 
 ## Star history
 
 <a href="https://www.star-history.com/?repos=yxxbc%2Fdownvid&type=date&legend=bottom-right">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=yxxbc/downvid&type=date&theme=dark&legend=bottom-right" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=yxxbc/downvid&type=date&legend=bottom-right" />
-    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=yxxbc/downvid&type=date&legend=bottom-right" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Downvid/downvid&type=date&theme=dark&legend=bottom-right" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Downvid/downvid&type=date&legend=bottom-right" />
+    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Downvid/downvid&type=date&legend=bottom-right" />
   </picture>
 </a>
 
@@ -349,6 +349,6 @@ For sponsorship and business enquiries, see [Sponsorship and business](#sponsors
 
 <div align="center">
 
-<a href="https://github.com/yxxbc/downvid">DownVid</a> · Made with care by yxxbc
+<a href="https://github.com/Downvid/downvid">DownVid</a> · Made with care by yxxbc
 
 </div>

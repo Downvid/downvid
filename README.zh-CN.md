@@ -15,23 +15,23 @@
 </table>
 
 <p>
-  <a href="https://github.com/yxxbc/downvid/releases"><img src="https://img.shields.io/github/downloads/yxxbc/downvid/total?style=flat&label=Downloads&logo=github&logoColor=white&color=2563eb" alt="Downloads" /></a>
-  <a href="https://github.com/yxxbc/downvid/releases/latest"><img src="https://img.shields.io/github/v/release/yxxbc/downvid?style=flat&label=Release&logo=github&logoColor=white&color=0284c7" alt="Latest Release" /></a>
-  <a href="https://github.com/yxxbc/downvid/stargazers"><img src="https://img.shields.io/github/stars/yxxbc/downvid?style=flat&label=Stars&logo=github&logoColor=white&color=eab308" alt="GitHub Stars" /></a>
+  <a href="https://github.com/Downvid/downvid/releases"><img src="https://img.shields.io/github/downloads/Downvid/downvid/total?style=flat&label=Downloads&logo=github&logoColor=white&color=2563eb" alt="Downloads" /></a>
+  <a href="https://github.com/Downvid/downvid/releases/latest"><img src="https://img.shields.io/github/v/release/Downvid/downvid?style=flat&label=Release&logo=github&logoColor=white&color=0284c7" alt="Latest Release" /></a>
+  <a href="https://github.com/Downvid/downvid/stargazers"><img src="https://img.shields.io/github/stars/Downvid/downvid?style=flat&label=Stars&logo=github&logoColor=white&color=eab308" alt="GitHub Stars" /></a>
   <a href="https://alternativeto.net/software/downvid/"><img src="https://img.shields.io/badge/AlternativeTo-DownVid-0289d5?style=flat&logo=alternativeto&logoColor=white" alt="AlternativeTo" /></a>
-  <a href="https://github.com/yxxbc/downvid/actions/workflows/ci-linux.yml"><img src="https://img.shields.io/github/actions/workflow/status/yxxbc/downvid/ci-linux.yml?branch=main&label=CI%20Linux&logo=github-actions&logoColor=white&color=16a34a" alt="CI Linux" /></a>
-  <a href="https://github.com/yxxbc/downvid/actions/workflows/ci-macos.yml"><img src="https://img.shields.io/github/actions/workflow/status/yxxbc/downvid/ci-macos.yml?branch=main&label=CI%20macOS&logo=github-actions&logoColor=white&color=16a34a" alt="CI macOS" /></a>
-  <a href="https://github.com/yxxbc/downvid/actions/workflows/ci-windows.yml"><img src="https://img.shields.io/github/actions/workflow/status/yxxbc/downvid/ci-windows.yml?branch=main&label=CI%20Windows&logo=github-actions&logoColor=white&color=16a34a" alt="CI Windows" /></a>
-  <a href="https://github.com/yxxbc/downvid/actions/workflows/codeql.yml"><img src="https://img.shields.io/github/actions/workflow/status/yxxbc/downvid/codeql.yml?branch=main&label=CodeQL&logo=github-actions&logoColor=white&color=16a34a" alt="CodeQL" /></a>
+  <a href="https://github.com/Downvid/downvid/actions/workflows/ci-linux.yml"><img src="https://img.shields.io/github/actions/workflow/status/Downvid/downvid/ci-linux.yml?branch=main&label=CI%20Linux&logo=github-actions&logoColor=white&color=16a34a" alt="CI Linux" /></a>
+  <a href="https://github.com/Downvid/downvid/actions/workflows/ci-macos.yml"><img src="https://img.shields.io/github/actions/workflow/status/Downvid/downvid/ci-macos.yml?branch=main&label=CI%20macOS&logo=github-actions&logoColor=white&color=16a34a" alt="CI macOS" /></a>
+  <a href="https://github.com/Downvid/downvid/actions/workflows/ci-windows.yml"><img src="https://img.shields.io/github/actions/workflow/status/Downvid/downvid/ci-windows.yml?branch=main&label=CI%20Windows&logo=github-actions&logoColor=white&color=16a34a" alt="CI Windows" /></a>
+  <a href="https://github.com/Downvid/downvid/actions/workflows/codeql.yml"><img src="https://img.shields.io/github/actions/workflow/status/Downvid/downvid/codeql.yml?branch=main&label=CodeQL&logo=github-actions&logoColor=white&color=16a34a" alt="CodeQL" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-7c3aed?style=flat&logo=open-source-initiative&logoColor=white" alt="MIT License" /></a>
 </p>
 
 <p>
   <a href="https://downvid-coral.vercel.app">官网</a>
   ·
-  <a href="https://github.com/yxxbc/downvid/releases">下载 DownVid</a>
+  <a href="https://github.com/Downvid/downvid/releases">下载 DownVid</a>
   ·
-  <a href="https://github.com/yxxbc/downvid/issues">反馈问题</a>
+  <a href="https://github.com/Downvid/downvid/issues">反馈问题</a>
   ·
   <a href="mailto:xynrin@icloud.com?subject=%5BDownVid%5D%20%E8%B5%9E%E5%8A%A9">赞助 / 商务合作</a>
   ·
@@ -44,7 +44,7 @@
 
 <p>
   <a href="https://www.producthunt.com/products/github-460eee39-2e5c-447d-b207-531e944feebd?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-downvid" target="_blank" rel="noopener noreferrer"><img alt="Downvid - Downvid | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1280091&amp;theme=light&amp;t=1792127974682"></a>
-  <a href="https://trendshift.io/repositories/180707?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-180707" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/180707/daily?language=TypeScript" alt="yxxbc/downvid | Trendshift" width="250" height="55" /></a>
+  <a href="https://trendshift.io/repositories/180707?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-180707" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/180707/daily?language=TypeScript" alt="Downvid/downvid | Trendshift" width="250" height="55" /></a>
 </p>
 </div>
 
@@ -59,7 +59,7 @@
 | 赞助支持 | <a href="mailto:xynrin@icloud.com?subject=%5BDownVid%5D%20%E8%B5%9E%E5%8A%A9">xynrin@icloud.com</a> |
 | 商务合作 / 广告位 | <a href="mailto:xynrin@icloud.com?subject=%5BDownVid%5D%20%E5%95%86%E5%8A%A1%E5%90%88%E4%BD%9C">xynrin@icloud.com</a> |
 
-缺陷报告与功能建议请走 [Issues](https://github.com/yxxbc/downvid/issues)，这样其他人也能搜到答案。
+缺陷报告与功能建议请走 [Issues](https://github.com/Downvid/downvid/issues)，这样其他人也能搜到答案。
 
 **软件本身不含任何广告，将来也不会有。** 这里谈的是项目层面的合作 —— 例如本 README 或
 [官网](https://downvid-coral.vercel.app) 上的展示位，与安装包里装了什么无关。
@@ -99,7 +99,7 @@
 - 📦 **开箱即用依赖管理**：内置 Go 依赖边车，自动探测并使用系统已有工具；缺失时支持一键自动下载配置，无需折腾环境变量。
 - 🎨 **精致现代视觉交互**：基于 Material 3 设计语言，界面纯粹干练，全平台提供流畅统一的视觉与操作体验。
 
-项目仍在积极持续演进中。遇到问题或有功能建议，欢迎提交 [Issue](https://github.com/yxxbc/downvid/issues)。
+项目仍在积极持续演进中。遇到问题或有功能建议，欢迎提交 [Issue](https://github.com/Downvid/downvid/issues)。
 
 ## 功能特性
 
@@ -126,7 +126,7 @@ DownVid 通过 yt-dlp 支持 **1000+ 个**视频和音频网站。以下是常�
 
 ## 下载安装
 
-前往 [**GitHub Releases**](https://github.com/yxxbc/downvid/releases) 下载最新版本，并按操作系统选择对应安装包。
+前往 [**GitHub Releases**](https://github.com/Downvid/downvid/releases) 下载最新版本，并按操作系统选择对应安装包。
 
 | 平台 | 安装包 |
 | --- | --- |
@@ -146,14 +146,14 @@ DownVid 通过 yt-dlp 支持 **1000+ 个**视频和音频网站。以下是常�
 docker run -d --name downvid -p 6080:6080 \
   -v "$PWD/data/downloads:/data/downloads" \
   -v "$PWD/data/userdata:/data/userdata" \
-  ghcr.io/yxxbc/downvid:latest
+  ghcr.io/Downvid/downvid:latest
 # 然后打开 http://127.0.0.1:6080/
 ```
 
 或者用 compose（推荐，升级只要一条命令）：
 
 ```bash
-curl -O https://raw.githubusercontent.com/yxxbc/downvid/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/Downvid/downvid/main/docker-compose.yml
 docker compose up -d
 # 以后升级：docker compose pull && docker compose up -d
 ```
@@ -175,7 +175,7 @@ yt-dlp 和 FFmpeg **无需预先安装**。运行时会优先探测并复用系�
 ### 构建步骤
 
 ```bash
-git clone https://github.com/yxxbc/downvid.git
+git clone https://github.com/Downvid/downvid.git
 cd downvid
 pnpm install
 pnpm dev       # 开发模式
@@ -287,17 +287,17 @@ pnpm lint:ipc
 
 感谢所有为 DownVid 做出贡献的人：
 
-<a href="https://github.com/yxxbc/downvid/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=yxxbc/downvid" alt="Contributors" />
+<a href="https://github.com/Downvid/downvid/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=Downvid/downvid" alt="Contributors" />
 </a>
 
 ## Star History
 
 <a href="https://www.star-history.com/?repos=yxxbc%2Fdownvid&type=date&legend=bottom-right">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=yxxbc/downvid&type=date&theme=dark&legend=bottom-right" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=yxxbc/downvid&type=date&legend=bottom-right" />
-    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=yxxbc/downvid&type=date&legend=bottom-right" />
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Downvid/downvid&type=date&theme=dark&legend=bottom-right" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Downvid/downvid&type=date&legend=bottom-right" />
+    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Downvid/downvid&type=date&legend=bottom-right" />
   </picture>
 </a>
 
@@ -335,6 +335,6 @@ DownVid 最初基于 [Videdown](https://github.com/cshuangyy/videdown) 开发，
 
 <div align="center">
 
-<a href="https://github.com/yxxbc/downvid">DownVid</a> · Made with care by yxxbc
+<a href="https://github.com/Downvid/downvid">DownVid</a> · Made with care by yxxbc
 
 </div>

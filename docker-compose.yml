@@ -9,7 +9,7 @@ services:
   downvid:
     # 优先用 GHCR 上的官方多架构镜像（docker compose pull 一条命令升级）；
     # 想从源码构建就在同一条命令里加 --build，或用 docker/Dockerfile 手动构建。
-    image: ${DOWNVID_IMAGE:-ghcr.io/yxxbc/downvid:latest}
+    image: ${DOWNVID_IMAGE:-ghcr.io/Downvid/downvid:latest}
     build:
       context: .
       dockerfile: docker/Dockerfile
@@ -27,7 +27,7 @@ services:
       DOWNVID_WEB_HOST: 0.0.0.0
       # 镜像名：容器版的更新检查靠它问 registry 有没有新 digest，
       # 「升级命令」里也会原样回显这个名字
-      DOWNVID_IMAGE: ${DOWNVID_IMAGE:-ghcr.io/yxxbc/downvid:latest}
+      DOWNVID_IMAGE: ${DOWNVID_IMAGE:-ghcr.io/Downvid/downvid:latest}
       # 更新源：auto / github / jsdelivr / ghproxy / gitee / website
       # （镜像内不写死，留给用户在设置界面或这里改 —— 更新通道本身就是最需要能换路的一条）
       DOWNVID_UPDATE_SOURCE: ${DOWNVID_UPDATE_SOURCE:-auto}

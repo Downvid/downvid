@@ -44,11 +44,11 @@ describe('更新源候选', () => {
 
   it('每个源的 URL 都指向正确的主机与仓库（拼错=永远已是最新）', () => {
     const bySource = new Map(latestCandidates('auto').map((c) => [c.source, c.url]))
-    expect(bySource.get('github')).toBe('https://api.github.com/repos/yxxbc/downvid/releases/latest')
+    expect(bySource.get('github')).toBe('https://api.github.com/repos/Downvid/downvid/releases/latest')
     expect(bySource.get('jsdelivr')).toContain('data.jsdelivr.com')
-    expect(bySource.get('jsdelivr')).toContain('yxxbc/downvid')
+    expect(bySource.get('jsdelivr')).toContain('Downvid/downvid')
     expect(bySource.get('ghproxy')).toContain('gh-proxy')
-    expect(bySource.get('ghproxy')).toContain('api.github.com/repos/yxxbc/downvid/releases/latest')
+    expect(bySource.get('ghproxy')).toContain('api.github.com/repos/Downvid/downvid/releases/latest')
     expect(bySource.get('gitee')).toContain('gitee.com')
     expect(bySource.get('website')).toMatch(/^https:\/\//)
   })
