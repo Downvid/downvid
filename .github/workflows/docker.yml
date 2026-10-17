@@ -147,7 +147,7 @@ jobs:
 
           docker run -d --name "${CONTAINER}" \
             -p 6080:6080 \
-            -e DOWNVID_IMAGE=ghcr.io/Downvid/downvid:smoke \
+            -e DOWNVID_IMAGE=ghcr.io/downvid/downvid:smoke \
             "${IMAGE}"
 
           ok=0
@@ -266,7 +266,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          IMAGE="ghcr.io/${{ github.repository_owner }}/downvid"
+          # 镜像名必须**全小写**：Docker 拒绝含大写的 repository 名，
+          # 报 `invalid tag "…": repository name must be lowercase`。
+          # GitHub 的 owner 允许大写（本仓库就是 `Downvid`），直接拼接会让
+          # publish job 在推送那一刻才失败——镜像早已构建完成，白等十几分钟。
+          OWNER=$(echo "${GITHUB_REPOSITORY_OWNER}" | tr '[:upper:]' '[:lower:]')
+          IMAGE="ghcr.io/${OWNER}/downvid"
           TAGS=""
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             V="${GITHUB_REF_NAME#v}"

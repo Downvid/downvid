@@ -250,10 +250,14 @@ if (!/'\/healthz'|"\/healthz"|\/healthz/.test(serverIndex)) {
   if (!owner || !repo) {
     problems.push('shared/app.ts 里解析不出 owner/repo（格式变了？）')
   } else {
-    const expected = `ghcr.io/${owner}/${repo}`
+    // GHCR 的 repository 名**必须全小写**（Docker 会报
+    // `repository name must be lowercase`），而 GitHub 的 owner 允许大写
+    // （本仓库就是 `Downvid`）。所以比较时统一小写化：这条规则要守的是
+    // 「owner/repo 一致」，不是「大小写也一致」。
+    const expected = `ghcr.io/${owner}/${repo}`.toLowerCase()
     for (const [file, text] of [['docker-compose.yml', composeRoot], ['docker/docker-compose.yml', composeDocker]]) {
       for (const m of text.matchAll(/ghcr\.io\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+/g)) {
-        if (!m[0].startsWith(expected)) {
+        if (!m[0].toLowerCase().startsWith(expected)) {
           problems.push(`${file} 引用了 ${m[0]}，但仓库坐标是 ${expected}（换 owner 时会拉到错误镜像/旧镜像）`)
         }
       }

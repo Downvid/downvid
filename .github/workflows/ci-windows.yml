@@ -122,6 +122,12 @@ jobs:
 
       - uses: pnpm/action-setup@v6
 
+      # `wails generate module` 要跑 Go 编译器
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.25'
+          cache: false
+
       - run: pnpm install --frozen-lockfile
 
       # 路径断言是这里的重点：测试里写死 `/tmp/out/...` 会在 Windows 上失败，
@@ -182,13 +188,24 @@ jobs:
       - name: 容器镜像定义校验
         run: pnpm lint:docker
 
-      # 新前端（app/frontend，Svelte 5）：`tsc` **不解析 .svelte**，
-      # 于是组件与 store 的契约漂移长期无人发现——累计 48 个真错误，
-      # 其中「设置页每个按钮都失效」就是这么漏出去的。
+      # 新前端是**独立包**（不在根 pnpm workspace 里），要单独装依赖
       - name: 前端依赖安装（app/frontend 是独立包，不在根 workspace）
         working-directory: app/frontend
         run: pnpm install --frozen-lockfile
 
+      # wailsjs/ 是**生成**的（wails generate module），不入库。
+      # 不生成就直接 svelte-check，会报三条 "Cannot find module
+      # '../../wailsjs/go/main/App'"——那是 CI 缺步骤，不是代码错。
+      - name: 安装 Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
+
+      - name: 生成 Wails 绑定（wailsjs）
+        working-directory: app
+        run: wails generate module
+
+      # 新前端（app/frontend，Svelte 5）：`tsc` **不解析 .svelte**，
+      # 于是组件与 store 的契约漂移长期无人发现——累计 48 个真错误，
+      # 其中「设置页每个按钮都失效」就是这么漏出去的。
       - name: 前端类型检查（svelte-check）
         working-directory: app/frontend
         run: pnpm check

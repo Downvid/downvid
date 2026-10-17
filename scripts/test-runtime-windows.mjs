@@ -52,6 +52,17 @@ function check(name, setup, verify) {
   verify(results, expected, Date.now() - start)
   console.log(`通过：${name}`)
 }
+
+/** 把一个 TS 模块转成 CJS 并在独立上下文里求值，返回它的 exports */
+function tsTranspiledModule(file) {
+  const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
+  }).outputText
+  const mod = { exports: {} }
+  vm.runInNewContext(code, { exports: mod.exports, module: mod, process, require })
+  return mod.exports
+}
+
 const entry = (results, kind) => results.find(item => item.kind === kind)
 
 try {
@@ -174,7 +185,21 @@ try {
     const pauseModule = { exports: {} }
     vm.runInNewContext(pauseCode, {
       exports: pauseModule.exports, module: pauseModule, process,
-      require: name => name === '../store' ? { activeDownloads } : name.startsWith('.') ? {} : require(name),
+      // `./process-tree` 必须给**真实现**，不能返回空对象。
+      //
+      // 早先这里对一切相对路径都返回 `{}`，于是 `killProcessTree` 是 undefined，
+      // 暂停路径直接抛 `(0, process_tree_1.killProcessTree) is not a function`。
+      // 那个错误看起来像生产代码缺函数，实际是测试桩太粗——而 Windows job
+      // 的确因此红了很久。
+      require: name => {
+        if (name === '../store') return { activeDownloads }
+        if (name === './process-tree') {
+          // 只需要两个导出：spawn 选项与杀树。杀树走真实的 taskkill。
+          return tsTranspiledModule(path.join(root, 'electron', 'download', 'process-tree.ts'))
+        }
+        if (name.startsWith('.')) return {}
+        return require(name)
+      },
     })
     let timer
     try {
