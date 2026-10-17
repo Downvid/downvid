@@ -128,6 +128,113 @@ const MODULES = {
       return mod.buildYtdlpArgs(testCase.options, testCase.outDir, testCase.ctx)
     },
   },
+
+  /**
+   * 格式列表生成。
+   *
+   * 比参数组装更值得交叉验证——这里有**排序 + 去重**，而两者的顺序敏感：
+   * 排序决定「同一清晰度留哪一个」，去重决定「留下哪些」。任何一处不同都会
+   * 让界面显示不同的选项，但两边单测都绿。
+   */
+  formats: {
+    tsFile: 'electron/parsers/formats.ts',
+    goDir: 'app/internal/parse',
+    goTest: 'TestCrossCheckFormats',
+    mocks: {},
+    buildCases() {
+      // 真实 bilibili 数据的 12 条（三编码 + 浮点 fps 抖动）
+      const bilibili = {
+        duration: 1206.833,
+        formats: [
+          { format_id: '30011', height: 360, fps: 29.969, vcodec: 'hev1.1.6.L120', acodec: 'none', tbr: 253.637 },
+          { format_id: '100022', height: 360, fps: 29.969, vcodec: 'av01.0.00M.10', acodec: 'none', tbr: 226.967 },
+          { format_id: '30016', height: 360, fps: 29.97, vcodec: 'avc1.64001E', acodec: 'none', tbr: 363.121 },
+          { format_id: '30033', height: 480, fps: 29.969, vcodec: 'hev1.1.6.L120', acodec: 'none', tbr: 415.96 },
+          { format_id: '100023', height: 480, fps: 29.969, vcodec: 'av01.0.00M.10', acodec: 'none', tbr: 382.091 },
+          { format_id: '30032', height: 480, fps: 29.97, vcodec: 'avc1.64001F', acodec: 'none', tbr: 621.299 },
+          { format_id: '30066', height: 720, fps: 29.969, vcodec: 'hev1.1.6.L120', acodec: 'none', tbr: 878.474 },
+          { format_id: '100024', height: 720, fps: 29.969, vcodec: 'av01.0.00M.10', acodec: 'none', tbr: 819.378 },
+          { format_id: '30064', height: 720, fps: 29.97, vcodec: 'avc1.640028', acodec: 'none', tbr: 1301.438 },
+          { format_id: '30077', height: 1080, fps: 29.969, vcodec: 'hev1.1.6.L150', acodec: 'none', tbr: 2070.001 },
+          { format_id: '100026', height: 1080, fps: 29.969, vcodec: 'av01.0.00M.10', acodec: 'none', tbr: 2000.529 },
+          { format_id: '30080', height: 1080, fps: 29.97, vcodec: 'avc1.640032', acodec: 'none', tbr: 3252.336 },
+        ],
+      }
+      return [
+        { info: bilibili, isYoutube: false, allow: false },
+        { info: bilibili, isYoutube: true, allow: false },
+        { info: bilibili, isYoutube: true, allow: true },
+        // 无 vcodec（X/Twitter）
+        { info: { formats: [{ format_id: 'http-1', url: 'https://x/v.mp4', ext: 'mp4', width: 1280, height: 720 }] }, isYoutube: false, allow: false },
+        // m3u8 共存
+        { info: { formats: [
+          { format_id: 'direct-720', vcodec: 'h264', height: 720, width: 1280, ext: 'mp4', protocol: 'https' },
+          { format_id: 'hls-720', vcodec: 'h264', height: 720, width: 1280, ext: 'mp4', protocol: 'm3u8_native' },
+        ] }, isYoutube: false, allow: false },
+        // 只有 m3u8
+        { info: { formats: [
+          { format_id: 'direct-360', vcodec: 'h264', height: 360, width: 640, ext: 'mp4', protocol: 'https' },
+          { format_id: 'hls-1080', vcodec: 'h264', height: 1080, width: 1920, ext: 'mp4', protocol: 'm3u8_native' },
+        ] }, isYoutube: false, allow: false },
+        // 无分辨率 → 兜底
+        { info: { formats: [{ format_id: 'x', vcodec: 'h264', ext: 'mp4' }] }, isYoutube: false, allow: false },
+        // 空
+        { info: { formats: [] }, isYoutube: false, allow: false },
+        { info: {}, isYoutube: false, allow: false },
+        // 音轨标记
+        { info: { formats: [
+          { format_id: 'with-audio', vcodec: 'h264', acodec: 'aac', height: 720, width: 1280, ext: 'mp4' },
+          { format_id: 'video-only', vcodec: 'h264', acodec: 'none', height: 1080, width: 1920, ext: 'mp4' },
+        ] }, isYoutube: false, allow: false },
+        // 编码优先级 vs 码率
+        { info: { formats: [
+          { format_id: 'av1', vcodec: 'av01.0.00M.10', height: 1080, fps: 30, acodec: 'none', tbr: 9999 },
+          { format_id: 'hevc', vcodec: 'hev1.1.6.L150', height: 1080, fps: 30, acodec: 'none', tbr: 5000 },
+          { format_id: 'avc', vcodec: 'avc1.640032', height: 1080, fps: 30, acodec: 'none', tbr: 1000 },
+        ] }, isYoutube: false, allow: false },
+        // fps 抖动去重
+        { info: { formats: [
+          { format_id: 'x1', vcodec: 'hev1.1.6.L150', height: 1080, fps: 29.969, acodec: 'none' },
+          { format_id: 'x2', vcodec: 'avc1.640032', height: 1080, fps: 29.97, acodec: 'none' },
+        ] }, isYoutube: false, allow: false },
+        // quality 标签不同但同 height
+        { info: { formats: [
+          { format_id: 'lab1', vcodec: 'avc1', height: 1080, fps: 30, acodec: 'none', format_note: '1080P' },
+          { format_id: 'lab2', vcodec: 'hev1', height: 1080, fps: 30, acodec: 'none', format_note: '1080P60' },
+        ] }, isYoutube: false, allow: false },
+        // 30 vs 60 fps
+        { info: { formats: [
+          { format_id: 'a', vcodec: 'avc1', height: 1080, fps: 30, acodec: 'none' },
+          { format_id: 'b', vcodec: 'avc1', height: 1080, fps: 60, acodec: 'none' },
+        ] }, isYoutube: false, allow: false },
+        // 分辨率档位与 fps 后缀
+        { info: { formats: [
+          { format_id: 'h4k', vcodec: 'avc1', height: 2160, fps: 60, acodec: 'none' },
+          { format_id: 'h2k', vcodec: 'avc1', height: 1440, fps: 30, acodec: 'none' },
+          { format_id: 'h144', vcodec: 'avc1', height: 144, fps: 0, acodec: 'none' },
+        ] }, isYoutube: false, allow: false },
+        // filesize 由 tbr + duration 推算
+        { info: { duration: 100, formats: [
+          { format_id: 'bitrate', vcodec: 'avc1', height: 720, tbr: 1000, acodec: 'none' },
+        ] }, isYoutube: false, allow: false },
+        // filesize 缺失、只有 vbr+abr
+        { info: { duration: 100, formats: [
+          { format_id: 'vbr', vcodec: 'avc1', height: 720, vbr: 800, abr: 128, acodec: 'aac' },
+        ] }, isYoutube: false, allow: false },
+        // **fps 不在常见档位**：走 NormalizeFPS 的 round 分支而不是「命中容差」分支。
+        // 少了这条，把 round 改成截断（29.9 → 29）这类变异不会被发现——
+        // 因为其他用例的 fps 都在容差内，两条分支结果相同。
+        { info: { formats: [
+          { format_id: 'odd', vcodec: 'avc1', height: 720, fps: 29.4, acodec: 'none' },
+          { format_id: 'odd2', vcodec: 'avc1', height: 480, fps: 33.7, acodec: 'none' },
+          { format_id: 'odd3', vcodec: 'avc1', height: 360, fps: 7.6, acodec: 'none' },
+        ] }, isYoutube: false, allow: false },
+      ]
+    },
+    tsCall(mod, testCase) {
+      return mod.buildVideoFormats(testCase.info, testCase.isYoutube, testCase.allow)
+    },
+  },
 }
 
 const selected = onlyModule ? { [onlyModule]: MODULES[onlyModule] } : MODULES
@@ -160,19 +267,20 @@ for (const [name, spec] of Object.entries(selected)) {
     continue
   }
 
-  // 交给 Go 侧比对（Go 测试会读这两个文件）
-  const casesFile = path.join(os.tmpdir(), 'downvid-port-cases.json')
-  const outFile = path.join(os.tmpdir(), 'downvid-port-ts-out.json')
+  // 交给 Go 侧比对。
+  //
+  // **每个模块用独立文件名**：早先所有模块都写 /tmp/cases.json，虽然因为
+  // 「写一份→立刻比对」的顺序而碰巧没出错，但一旦有人把比对挪到循环外，
+  // 后一个模块就会覆盖前一个的用例，表现为「莫名通过」或「莫名不一致」。
+  const casesFile = `/tmp/downvid-cases-${name}.json`
+  const outFile = `/tmp/downvid-tsout-${name}.json`
   fs.writeFileSync(casesFile, JSON.stringify(cases, null, 1))
   fs.writeFileSync(outFile, JSON.stringify(results, null, 1))
-
-  // Go 测试里读的是固定路径，保持一致
-  fs.copyFileSync(casesFile, '/tmp/cases.json')
-  fs.copyFileSync(outFile, '/tmp/ts-out.json')
 
   console.log(`  TS 侧生成 ${results.length} 组结果 → ${casesFile}`)
   try {
     const out = execFileSync('go', ['test', '-run', spec.goTest, '-v', `./${path.relative('app', path.join(ROOT, spec.goDir))}/`], {
+      env: { ...process.env, DOWNVID_CROSSCHECK_MODULE: name },
       cwd: path.join(ROOT, 'app'),
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],

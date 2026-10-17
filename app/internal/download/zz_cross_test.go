@@ -39,11 +39,11 @@ type tsCase struct {
 }
 
 func TestCrossCheckWithTS(t *testing.T) {
-	raw, err := os.ReadFile("/tmp/cases.json")
+	raw, err := os.ReadFile(casesPath())
 	if err != nil {
 		t.Skip("无 /tmp/cases.json，跳过交叉验证")
 	}
-	tsRaw, err := os.ReadFile("/tmp/ts-out.json")
+	tsRaw, err := os.ReadFile(tsOutPath())
 	if err != nil {
 		t.Skip("无 /tmp/ts-out.json，跳过交叉验证")
 	}
@@ -90,3 +90,17 @@ func TestCrossCheckWithTS(t *testing.T) {
 	}
 	t.Logf("交叉验证通过：%d 组参数与 TS 逐字一致", len(cases))
 }
+
+// 用例文件按模块命名，由 scripts/crosscheck-port.mjs 通过环境变量指定。
+//
+// 早先所有模块共用一个 /tmp/cases.json，靠「写一份→立刻比对」的顺序才碰巧没出错；
+// 一旦有人把比对挪出循环，后一个模块就会覆盖前一个的用例。
+func crossModule() string {
+	if m := os.Getenv("DOWNVID_CROSSCHECK_MODULE"); m != "" {
+		return m
+	}
+	return "ytdlp-args"
+}
+
+func casesPath() string { return "/tmp/downvid-cases-" + crossModule() + ".json" }
+func tsOutPath() string { return "/tmp/downvid-tsout-" + crossModule() + ".json" }
