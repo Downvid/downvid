@@ -249,8 +249,8 @@ uname -m
 
 如果你有一台常开的机器，或者不想在主机上装 Electron 与运行时库，可以用容器跑 DownVid。
 
-DownVid 是桌面应用，容器里没有显示器，因此镜像内置了虚拟显示（Xvfb）并把界面
-通过 noVNC 暴露到浏览器——**打开网页就是完整应用**。
+容器镜像跑的是**原生 WebUI**：由轻量 Node 服务托管前端页面与下载引擎，浏览器直接访问
+即可——**打开网页就是完整应用**，不需要虚拟显示，也没有远程桌面延迟。
 
 ### 前置条件
 
@@ -260,13 +260,22 @@ DownVid 是桌面应用，容器里没有显示器，因此镜像内置了虚拟
 ### 启动
 
 ```bash
+# 官方多架构镜像（amd64 + arm64），不需要先 clone 仓库
+docker run -d --name downvid -p 6080:6080 \
+  -v "$PWD/data/downloads:/data/downloads" \
+  -v "$PWD/data/userdata:/data/userdata" \
+  ghcr.io/yxxbc/downvid:latest
+```
+
+或用 compose（推荐，升级只要 `docker compose pull && docker compose up -d`）：
+
+```bash
 git clone https://github.com/yxxbc/downvid.git
 cd downvid
 docker compose up -d
 ```
 
-然后打开 <http://127.0.0.1:6080/vnc.html>，点「连接」即可看到 DownVid 窗口。
-从其他设备访问时把 `127.0.0.1` 换成本机 IP。
+然后打开 <http://127.0.0.1:6080/>。从其他设备访问时把 `127.0.0.1` 换成本机 IP。
 
 ### 下载文件在哪
 

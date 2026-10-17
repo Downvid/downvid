@@ -55,6 +55,7 @@ import {
 } from '../../electron/utils/runtime'
 import { dedupeHistory, upsertHistory } from '../../electron/history'
 import { getCookieStatus } from '../../electron/utils/cookies'
+import { checkContainerUpdate, containerInfo } from './update'
 
 const APP_VERSION = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')).version
 
@@ -93,6 +94,8 @@ function notifyHistoryUpdated(history: any[]) {
 // ===== 依赖设置清洗 =====
 interface DepsSettings extends DetectOptions {
   proxy?: string
+  /** 依赖下载源（见 shared/acceleration.ts 的 DEP_MIRROR_IDS） */
+  mirror?: string
 }
 
 function sanitizeDepsSettings(raw: any): DepsSettings {
@@ -102,7 +105,13 @@ function sanitizeDepsSettings(raw: any): DepsSettings {
     const value = source[kind]
     if (typeof value === 'string' && value.trim()) manualPaths[kind] = value.trim()
   }
-  return { manualPaths, proxy: typeof raw?.proxy === 'string' ? raw.proxy : undefined }
+  return {
+    manualPaths,
+    proxy: typeof raw?.proxy === 'string' ? raw.proxy : undefined,
+    // 下载源：与桌面版同一套（Go 边车实现镜像回退）。
+    // 容器里尤其重要：镜像一旦漏装依赖，用户只能靠界面里的「下载」救回来。
+    mirror: typeof raw?.mirror === 'string' ? raw.mirror : undefined,
+  }
 }
 
 // ===== 日志与空间 =====
@@ -157,6 +166,37 @@ async function fetchImage(url: string, referer: string): Promise<string | null> 
     return `data:${contentType};base64,${base64}`
   } catch {
     return null
+  }
+}
+
+// ===== 更新源与自动检查开关（由渲染进程同步，与桌面版同一套语义）=====
+let updateSource: unknown = process.env.DOWNVID_UPDATE_SOURCE
+let autoCheck = true
+
+/** 周期检查间隔：6 小时。自托管服务长期挂着，太频繁只会白耗请求配额 */
+const UPDATE_CHECK_INTERVAL = 6 * 60 * 60 * 1000
+
+/**
+ * 更新可用时主动广播一次。
+ *
+ * 前端已挂载时如果自己没检查过，这条广播能让界面上出现提示；
+ * 检查在服务启动后延迟触发，避免和首屏渲染抢带宽。
+ */
+async function broadcastUpdateCheck() {
+  if (!autoCheck) return
+  try {
+    const state = await checkContainerUpdate(updateSource)
+    if (state.hasUpdate) {
+      wsEventBus.emit('update:status', {
+        status: 'available',
+        version: state.latestVersion || '',
+        manual: true,
+        manualReason: '容器版通过更新镜像升级',
+        container: state,
+      })
+    }
+  } catch (e: any) {
+    console.warn(`[web:update] 检查更新失败：${e?.message || e}`)
   }
 }
 
@@ -333,10 +373,35 @@ const channels: Record<string, Handler> = {
   'shell:openExternal': () => undefined,
   'app:setProxy': () => true,
   'app:testProxy': async () => ({ success: true, latency: 10 }),
-  'app:checkForUpdates': () => ({ hasUpdate: false, currentVersion: APP_VERSION, downloadUrl: '' }),
-  'app:setUpdatePrefs': () => true,
-  'app:downloadUpdate': () => ({ success: false, error: '容器版请通过更新镜像升级' }),
-  'app:installUpdate': () => ({ success: false, error: '容器版请通过更新镜像升级' }),
+  // 容器版的更新检查：查最新版本 + 给出「拉镜像并重建」的命令。
+  //
+  // 桌面版走 electron-updater 下载安装包并静默替换；容器里进程跑在镜像的
+  // 只读层上，自更新会在下次 docker run 时消失 —— 所以这里只回答
+  // 「有没有新版本」与「怎么升级」，绝不执行任何写操作。
+  'app:checkForUpdates': async args => {
+    const state = await checkContainerUpdate(args[0])
+    return {
+      hasUpdate: state.hasUpdate,
+      version: state.latestVersion ?? undefined,
+      currentVersion: state.currentVersion,
+      // 容器版没有「自动安装」这条路（manual 恒为 true）：
+      // 前端据此展示升级命令，而不是「下载更新 / 重启安装」按钮
+      manual: true,
+      manualReason: '容器版通过更新镜像升级，不能在容器内自更新',
+      container: state,
+      error: state.error ?? undefined,
+    }
+  },
+  // 设置里同步过来的更新源：只记下来，下次检查时用
+  'app:setUpdatePrefs': args => {
+    const prefs = (args[0] || {}) as { source?: unknown; autoCheck?: unknown }
+    if (prefs.source !== undefined) updateSource = prefs.source
+    if (typeof prefs.autoCheck === 'boolean') autoCheck = prefs.autoCheck
+    return true
+  },
+  'app:downloadUpdate': () => ({ success: false, error: '容器版请通过更新镜像升级（docker compose pull）' }),
+  'app:installUpdate': () => ({ success: false, error: '容器版请通过更新镜像升级（docker compose pull）' }),
+  'app:containerInfo': () => containerInfo(),
   'window:minimize': () => undefined,
   'window:maximize': () => undefined,
   'window:close': () => undefined,
@@ -376,9 +441,11 @@ function serveStatic(req: http.IncomingMessage, res: http.ServerResponse) {
 
 // ===== HTTP 与 WebSocket 实例 =====
 const server = http.createServer((req, res) => {
-  if (req.url === '/healthz') {
-    res.writeHead(200, { 'Content-Type': 'application/json' })
-    res.end(JSON.stringify({ ok: true, version: APP_VERSION }))
+  if (req.url === '/healthz' || req.url?.startsWith('/healthz?')) {
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+    // 带上镜像名与仓库坐标：用户排障时把这一行贴出来就够了，
+    // 不用再去问「你装的是哪个镜像、什么版本」
+    res.end(JSON.stringify({ ok: true, ...containerInfo() }))
     return
   }
   serveStatic(req, res)
@@ -443,6 +510,15 @@ fs.mkdirSync(DATA_DIR, { recursive: true })
 server.listen(PORT, HOST, () => {
   console.log(`[web] DownVid ${APP_VERSION} WebUI 服务已启动：http://${HOST}:${PORT}/`)
   console.log(`[web] 下载保存目录：${DOWNLOADS_DIR}`)
+
+  // 启动 5 秒后检查一次更新：容器版用户往往一装就是几个月，
+  // 而 yt-dlp 落后会随站点改版逐渐失效 —— 没有提示时用户只会觉得「下载器坏了」。
+  // 延迟是为了不和首屏、以及并发的依赖探测抢带宽。
+  // 用 setInterval 而不是只在启动时查：长期运行的容器同样需要知道有新版本。
+  if (autoCheck) {
+    setTimeout(() => { void broadcastUpdateCheck() }, 5000)
+    setInterval(() => { void broadcastUpdateCheck() }, UPDATE_CHECK_INTERVAL)
+  }
 })
 
 export { server, isAllowedOrigin }

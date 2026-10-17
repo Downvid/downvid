@@ -45,6 +45,23 @@ updates:
           - "minor"
           - "patch"
 
+  # ===== 容器基础镜像 =====
+  # node:22-bookworm-slim 是镜像体积与 Node 版本的主要来源；大版本升级
+  # （Node 22 → 24）会改变运行时行为，必须人工验证下载/合并链路，故忽略 major。
+  - package-ecosystem: "docker"
+    directory: "/docker"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "build(docker)"
+    labels: ["dependencies", "docker"]
+    ignore:
+      # Node 大版本带原生模块 ABI 变化，且镜像里 Node 版本要与桌面端/CI 对齐
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
+
   # ===== GitHub Actions =====
   # 本项目大量依赖 CI 完成发布，Action 版本落后会带来供应链风险
   - package-ecosystem: "github-actions"

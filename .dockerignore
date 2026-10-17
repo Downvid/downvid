@@ -15,11 +15,15 @@
 
 # 依赖与构建产物（镜像内会重新 install / build）
 node_modules
+# 宿主机的边车产物是「宿主平台」的（macOS 上开发时就是 darwin-*）。
+# 不排除会把它们一起送进构建上下文，再被 COPY 进 Linux 镜像。
+backend/build
 docker/node_modules
 dist
 dist-electron
 dist-web
 docker/dist-web
+docker/dist-server
 release
 .pnpm-store
 

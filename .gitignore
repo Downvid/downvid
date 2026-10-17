@@ -73,4 +73,5 @@ Thumbs.db
 # Docker 本地运行数据（由 docker-compose 生成）
 data/
 docker/dist-web/
+docker/dist-server/
 docker/node_modules/

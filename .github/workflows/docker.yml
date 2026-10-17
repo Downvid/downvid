@@ -1,20 +1,29 @@
 name: Docker image
 
-# DownVid 容器镜像的构建与冒烟验证。
+# DownVid 容器镜像的构建、冒烟与发布。
 #
-# 为什么要有这个工作流：镜像构建是本仓库**唯一**「非宿主平台语义」之外
-# 还需要外部工具链的一环（Docker、Linux 图形栈、Electron 二进制），
-# 本地不装 Docker 的贡献者改完 Dockerfile 是验证不了的。
-# 这里做两件事：
+# ## 这个工作流负责什么
 #
-#   1. `build`  job：真的把镜像 build 出来，并跑一遍**容器冒烟**
-#      ——启动容器、等 Xvfb 与 noVNC 就绪、确认 DownVid 进程活着。
-#      「docker build 成功」不等于「容器能用」，Electron 在容器里起不来
-#      是最常见的失败形态，只能靠启动后探测。
-#   2. `publish` job：推送 tag 时发布镜像到 GHCR（手动触发可选 latest）。
+#   1. `lint` / `verify`：静态校验镜像定义 + 跑 web 服务集成回归。
+#      都很快（几十秒），任何 Docker 镜像问题应当在这里被拦住。
+#   2. `build`：真的把镜像 build 出来并跑一遍**容器冒烟**（启动容器、
+#      等 /healthz、确认 WebUI 能托管页面、确认三个运行依赖都被识别）。
+#      「docker build 成功」不等于「容器能用」——依赖缺失、命令路径写错、
+#      entrypoint 起来就退出，这些只有启动后探测才发现。
+#   3. `publish`：把 **amd64 + arm64 多架构镜像推到 GHCR**。
+#      触发条件：push 到 main（打 latest）、推 v* tag（打 1.2.3 与 1.2）、
+#      手动 dispatch（可选是否推送）。
 #
-# 不发布二进制到 Release——镜像里也不带自动更新逻辑（升级方式是重建镜像），
-# 见 AGENTS.md 的「容器镜像」一节。
+# ## 关于「制品」在哪
+#
+# 镜像本身就是制品：`ghcr.io/<owner>/downvid:<tag>`。这里**不**把镜像导出成
+# tar 附到 Release 上 —— 那样每次发布要多传 1GB+，而且用户还得自己 load。
+# Release 那边只放安装包，容器用户走 `docker compose pull`。
+#
+# ⚠️ GHCR 的包默认是 **private**。首次发布后需要去
+#    https://github.com/users/<owner>/packages/container/downvid/settings
+#    把可见性改成 public，否则用户 `docker pull` 会报 denied / not found
+#    混在一起的怪错误。
 
 on:
   push:
@@ -22,36 +31,79 @@ on:
     tags: ['v*']
   pull_request:
     paths:
-      - 'Dockerfile'
-      - '.dockerignore'
       - 'docker/**'
       - 'docker-compose.yml'
+      - '.dockerignore'
+      - 'scripts/deps-asset.mjs'
+      - 'scripts/lint-docker.mjs'
+      - 'scripts/test-web-server.mjs'
+      - 'shared/update-*.ts'
+      - 'backend/internal/manifest/**'
       - '.github/workflows/docker.yml'
   workflow_dispatch:
     inputs:
       publish:
-        description: '推送镜像到 GHCR（需在默认分支或 tag 上运行才有意义）'
+        description: '推送镜像到 GHCR'
         type: boolean
         required: false
         default: false
 
 permissions:
   contents: read
+  # 推送 GHCR 需要 packages: write（GITHUB_TOKEN 自带，不需要额外 secret）
+  packages: write
 
 concurrency:
   group: docker-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # ===== 静态校验：不需要 Docker，几十秒出结果 =====
+  #
+  # 放在最前面，是为了让「Dockerfile 里写死了依赖版本」这类问题立刻变红，
+  # 而不是等镜像构建到一半（甚至发布之后）才被发现。
+  verify:
+    name: 校验 · 镜像定义与 Web 服务
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: 镜像定义静态校验
+        run: pnpm lint:docker
+
+      # 容器侧（docker/server/）是独立的 tsconfig，不进 `pnpm vue-tsc`。
+      # 早先它长期是红的（shim 的类型太宽），等于没有类型检查 —— 现在钉住为 0 错误。
+      - name: 容器侧类型检查
+        run: pnpm typecheck:docker
+
+      - name: 依赖清单与上游一致
+        run: pnpm deps:manifest:check
+
+      # 用**打包后的**服务端跑回归（与镜像里是同一份产物）。
+      # 源码能跑不等于打包能跑：externals、import.meta.url 推出来的路径都会变形。
+      - name: Web 服务集成回归
+        run: pnpm test:web
+
+  # ===== 构建 + 容器冒烟 =====
   build:
     name: 构建 · 容器冒烟
+    needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
 
-      # QEMU：让 x86 runner 能跑 arm64 容器，冒烟阶段才有东西可跑。
-      # buildx 是在多架构镜像与缓存导出时才必需的。
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
         with:
@@ -60,8 +112,9 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # 只构建，不推送。冒烟需要镜像在本地 daemon 里，
-      # 所以用 `load: true` 而不是 cache-only/cache-to。
+      # 只构建，不推送。冒烟需要镜像在本地 daemon 里，所以用 load: true。
+      # cache-from/to 用 GHA 缓存：这条缓存让 publish job 的 arm64
+      # 构建只需要重编 Go 与前端，不用重下 100MB 依赖。
       - name: 构建镜像（amd64）
         uses: docker/build-push-action@v6
         with:
@@ -71,15 +124,17 @@ jobs:
           push: false
           load: true
           tags: downvid:smoke-amd64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=docker-amd64
+          cache-to: type=gha,mode=max,scope=docker-amd64
 
       # ===== 容器冒烟 =====
       #
       # 逐项探测而不是 `sleep 5` 后看一眼：
-      #   - Web 服务健康探针返回 200 与版本号（/healthz）
+      #   - /healthz 返回 200、版本号、仓库坐标
       #   - 根路径正确托管 SPA 页面（包含 #app）
-      #   - 服务进程存活、未在启动阶段崩溃
+      #   - 三个运行依赖（yt-dlp / ffmpeg / ffprobe）都被边车识别为「系统安装」
+      #     —— 这条最关键：镜像瘦身的全部努力都在这里兑现，装不上就是装不上
+      #   - 容器内没有残留的 tsx / node_modules
       - name: 容器冒烟
         env:
           IMAGE: downvid:smoke-amd64
@@ -94,10 +149,11 @@ jobs:
 
           docker run -d --name "${CONTAINER}" \
             -p 6080:6080 \
+            -e DOWNVID_IMAGE=ghcr.io/yxxbc/downvid:smoke \
             "${IMAGE}"
 
           ok=0
-          for i in $(seq 1 60); do
+          for i in $(seq 1 90); do
             state=$(docker inspect -f '{{.State.Status}}' "${CONTAINER}" 2>/dev/null || echo missing)
             if [ "${state}" != "running" ]; then
               echo "::error::容器未在运行（状态：${state}）"
@@ -112,25 +168,47 @@ jobs:
           done
 
           if [ "${ok}" != "1" ]; then
-            echo "::error::容器冒烟失败：60 秒内 Web 服务未就绪"
-            echo "----- docker logs -----"
+            echo "::error::容器冒烟失败：90 秒内 Web 服务未就绪"
             docker logs "${CONTAINER}" || true
             exit 1
           fi
 
           echo "----- 健康探针输出 -----"
-          curl -fsS "http://127.0.0.1:6080/healthz"
-          echo ""
+          HEALTH=$(curl -fsS "http://127.0.0.1:6080/healthz")
+          echo "${HEALTH}"
+          echo "${HEALTH}" | grep -q '"ok":true' || { echo "::error::/healthz 未返回 ok"; exit 1; }
+          echo "${HEALTH}" | grep -q '"version"' || { echo "::error::/healthz 缺版本号"; exit 1; }
 
           echo "----- 首页 HTML 校验 -----"
           PAGE=$(curl -fsS "http://127.0.0.1:6080/")
-          if ! echo "${PAGE}" | grep -q "id=\"app\""; then
-            echo "::error::首页未包含 #app 挂载点"
-            exit 1
-          fi
+          echo "${PAGE}" | grep -q 'id="app"' || { echo "::error::首页未包含 #app 挂载点"; exit 1; }
           echo "首页 HTML 校验通过"
 
-          echo "冒烟通过：DownVid WebUI（6080）正常服务"
+          echo "----- 运行依赖校验 -----"
+          # 直接问容器里的边车：镜像里的 yt-dlp / ffmpeg / ffprobe 必须都能被识别。
+          # 依赖装错平台 / 装到 PATH 之外 / 少了 ffprobe（合并视频必需）都在这里暴露。
+          docker exec "${CONTAINER}" yt-dlp --version | grep -E '^[0-9]{4}\.' \
+            || { echo "::error::镜像里的 yt-dlp 不能执行"; exit 1; }
+          docker exec "${CONTAINER}" ffmpeg -version | head -1 \
+            || { echo "::error::镜像里的 ffmpeg 不能执行"; exit 1; }
+          docker exec "${CONTAINER}" ffprobe -version | head -1 \
+            || { echo "::error::镜像里的 ffprobe 不能执行（合并视频会失败）"; exit 1; }
+          for dep in yt-dlp ffmpeg ffprobe; do
+            docker exec "${CONTAINER}" command -v "${dep}" >/dev/null \
+              || { echo "::error::${dep} 不在 PATH 中"; exit 1; }
+          done
+
+          echo "----- 瘦身校验：不能残留构建期依赖 -----"
+          if docker exec "${CONTAINER}" sh -c 'command -v tsx' >/dev/null 2>&1; then
+            echo "::error::镜像里还有 tsx（服务端应当已打包成单文件）"
+            exit 1
+          fi
+          if docker exec "${CONTAINER}" sh -c 'test -d /opt/downvid/node_modules'; then
+            echo "::error::镜像里还有 node_modules（运行期不需要）"
+            exit 1
+          fi
+
+          echo "冒烟通过：DownVid WebUI（6080）正常服务，运行依赖齐备"
 
       - name: 上传冒烟日志
         if: always()
@@ -141,19 +219,26 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  # ===== 多架构构建 =====
+  # ===== 发布：多架构推 GHCR =====
   #
-  # 单独一个 job：arm64 在 QEMU 下构建慢（Go 与 Chromium 都要模拟执行），
-  # 和 amd64 挤在一个 job 里会让失败定位变难。推 tag 时才需要 arm64 产物，
-  # 所以只在 push tag / 手动发布时构建并推送。
+  # 单独一个 job：arm64 在 QEMU 下构建慢（Go 与前端都要模拟执行），
+  # 和 amd64 挤在一个 job 里会让失败定位变难。
+  #
+  # 触发规则（务必与 README / docs/docker.md 的说法一致）：
+  #   - push 到 main：:latest            → 让「装完不管」的用户能靠 pull 拿到修复
+  #   - push v1.2.3：  :1.2.3 与 :1.2    → 固定版本可回滚
+  #   - 手动 dispatch：按 publish 输入决定，ref 决定 tag
   publish:
     name: 发布 · GHCR 多架构
     needs: build
     if: >-
-      github.event_name == 'workflow_dispatch' && inputs.publish == true ||
-      startsWith(github.ref, 'refs/tags/v')
+      github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')) ||
+      github.event_name == 'workflow_dispatch' && inputs.publish == true
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v7
 
@@ -165,9 +250,6 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # GHCR：不需要额外 secret，用 GitHub 自带的 token。
-      # 包默认私有；发布后需要去组织/个人主页把它改为 public，
-      # 否则用户 pull 不到（会报 denied / not found 混在一起的怪错误）。
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -175,22 +257,32 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # 标签策略：
-      #   - tag 触发：v1.2.3 → :1.2.3 与 :1.2（ minor 固定，方便跟随小版本）
-      #   - main 分支手动发布：latest
+      # 镜像名固定为 <owner>/downvid，与 compose 里的 ghcr.io/<owner>/downvid 对应。
+      # 用 github.repository_owner 而不是固定 owner：fork 的人推自己的包不会撞名。
       - name: 生成镜像标签
         id: meta
         shell: bash
         run: |
-          REF="${GITHUB_REF_NAME}"
-          if [[ "${REF}" == v* ]]; then
-            V="${REF#v}"
-            echo "tags=ghcr.io/${{ github.repository_owner }}/downvid:${V}" >> "${GITHUB_OUTPUT}"
-            echo "tags=ghcr.io/${{ github.repository_owner }}/downvid:${V%.*}" >> "${GITHUB_OUTPUT}"
+          set -euo pipefail
+          IMAGE="ghcr.io/${{ github.repository_owner }}/downvid"
+          TAGS=""
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            V="${GITHUB_REF_NAME#v}"
+            # 1.2.3 + 1.2：小版本固定，方便「跟随 1.2 的最新补丁」
+            TAGS="${IMAGE}:${V}"$'\n'"${IMAGE}:${V%.*}"
           else
-            echo "tags=ghcr.io/${{ github.repository_owner }}/downvid:latest" >> "${GITHUB_OUTPUT}"
+            TAGS="${IMAGE}:latest"
           fi
+          {
+            echo "tags<<EOF"
+            echo "${TAGS}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+          echo "将推送："
+          echo "${TAGS}"
 
+      # 缓存与 build job 分开 scope：amd64-only 的缓存键与多架构的不同，
+      # 混用会让 publish 每次都退化成全量构建（QEMU 下 arm64 全量要 20+ 分钟）。
       - name: 构建并推送 amd64 + arm64
         uses: docker/build-push-action@v6
         with:
@@ -199,13 +291,39 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          labels: |
+            org.opencontainers.image.title=DownVid
+            org.opencontainers.image.description=Cross-platform video downloader with a native WebUI
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.licenses=MIT
+          cache-from: |
+            type=gha,scope=docker-amd64
+            type=gha,scope=docker-multi
+          cache-to: type=gha,mode=max,scope=docker-multi
 
-      - name: 校验推送结果
+      # ===== 推送后核对：真的能拉到吗 =====
+      #
+      # 「push 成功」不等于「用户能 pull」：GHCR 的包默认 private，
+      # manifest 也可能是空壳（多架构 list 少了一个平台）。
+      # 这里拉一次并按平台核对，把问题留在 CI 而不是用户那儿。
+      - name: 校验推送结果（可拉取 + 两个平台都在）
         shell: bash
         run: |
-          for t in ${{ steps.meta.outputs.tags }}; do
-            echo "已推送：${t}"
+          set -euo pipefail
+          FIRST_TAG=$(echo "${{ steps.meta.outputs.tags }}" | head -1)
+          echo "核对：${FIRST_TAG}"
+          docker buildx imagetools inspect "${FIRST_TAG}" | tee /tmp/inspect.txt
+
+          for platform in linux/amd64 linux/arm64; do
+            if ! grep -q "${platform}" /tmp/inspect.txt; then
+              echo "::error::多架构清单里缺少 ${platform}（该平台用户 pull 会拿到 amd64 镜像然后跑不起来）"
+              exit 1
+            fi
           done
-          echo "提示：首次发布后需在 GitHub Package 设置里把镜像改为 public，用户才能拉取。"
+
+          docker pull "${FIRST_TAG}"
+          docker run --rm --entrypoint sh "${FIRST_TAG}" -c 'yt-dlp --version && ffmpeg -version | head -1'
+
+          echo "::notice::已发布 ${FIRST_TAG}"
+          echo "::notice::若这是首次发布，请到 GitHub Packages 设置把镜像改为 public，否则用户 pull 会被拒绝"
