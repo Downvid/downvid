@@ -32,6 +32,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Downvid/downvid/app/internal/download"
 	"github.com/Downvid/downvid/app/internal/history"
 	"github.com/Downvid/downvid/app/internal/parse"
 	"github.com/Downvid/downvid/app/internal/update"
@@ -53,12 +54,27 @@ type App struct {
 	downloadsDir string
 	historyPath  string
 
+	// emitHook 是测试钩子：非 nil 时代替 Wails 的事件发送。
+	// 生产路径上永远是 nil——这样测试不用启动 Wails 运行时也能验证事件。
+	emitHook func(event string, data any)
+
+	// 下载相关（由 bindings_download.go 使用）
+	runner           *download.Runner
+	proxy            string
+	accelEnabled     bool
+	accelConnections int
+
 	mu sync.Mutex
 }
 
 // NewApp 构造绑定对象。
 func NewApp() *App {
-	return &App{}
+	return &App{
+		runner: download.NewRunner(),
+		// 默认开启加速、8 连接——与 shared/acceleration.ts 的 normalizeAcceleration 一致
+		accelEnabled:     true,
+		accelConnections: 8,
+	}
 }
 
 // startup 是 Wails 的启动回调，拿到可用于发事件的 context。
@@ -257,6 +273,10 @@ func (a *App) OpenExternal(url string) {
 //
 // 事件名与容器端的 WebSocket 事件保持一致，这样前端只写一套订阅逻辑。
 func (a *App) emit(event string, data any) {
+	if a.emitHook != nil {
+		a.emitHook(event, data)
+		return
+	}
 	if a.ctx == nil {
 		return
 	}

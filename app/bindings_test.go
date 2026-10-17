@@ -7,9 +7,11 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/Downvid/downvid/app/internal/download"
 	"github.com/Downvid/downvid/app/internal/history"
 )
 
@@ -224,5 +226,81 @@ func TestBindingBuildFormatsHonorsAllowManifests(t *testing.T) {
 	}
 	if len(allowed) != 1 || allowed[0].FormatID != "hls" {
 		t.Fatalf("allowManifests=true 时应保留 hls，got %+v", allowed)
+	}
+}
+
+// ===== 下载绑定 =====
+
+// 缺 yt-dlp 时必须给出**可行动**的提示，并带上 missingKind 让前端弹一键下载。
+//
+// 返回空指针或空字符串会让界面卡在「下载中」——那比报错更难排查。
+func TestStartDownloadWithoutYtdlp(t *testing.T) {
+	app := newTestApp(t)
+	app.runner = download.NewRunner()
+
+	res := app.StartDownload(DownloadRequest{
+		TaskID: "t1", URL: "https://example.com/v", FormatID: "137", OutputDir: t.TempDir(),
+	})
+	if res.OK {
+		t.Fatal("没有 yt-dlp 时不该报告成功")
+	}
+	if res.Error == "" {
+		t.Fatal("必须给出错误说明")
+	}
+	if res.MissingKind != "yt-dlp" {
+		t.Fatalf("应带 missingKind=yt-dlp（前端据此弹「一键下载」），got %q", res.MissingKind)
+	}
+}
+
+// 缺 taskId / url 时立刻拒绝。
+func TestStartDownloadValidatesInput(t *testing.T) {
+	app := newTestApp(t)
+	app.runner = download.NewRunner()
+
+	for _, req := range []DownloadRequest{
+		{URL: "https://x"}, // 缺 taskId
+		{TaskID: "t1"},     // 缺 url
+		{},                 // 都缺
+	} {
+		if res := app.StartDownload(req); res.OK {
+			t.Fatalf("参数不全应拒绝：%+v", req)
+		}
+	}
+}
+
+// PauseDownload 对不存在的任务返回 false（而不是 panic）。
+func TestPauseDownloadUnknownTask(t *testing.T) {
+	app := newTestApp(t)
+	app.runner = download.NewRunner()
+	if app.PauseDownload("nope") {
+		t.Fatal("不存在的任务应返回 false")
+	}
+}
+
+// 平台的目录键必须与 electron 侧的命名一致。
+//
+// 不一致的话边车在打包产物里找不到，表现是「依赖一直显示未找到」。
+func TestPlatformKeyMatchesElectronNaming(t *testing.T) {
+	key := platformKey()
+	switch runtime.GOOS {
+	case "darwin":
+		if !strings.HasPrefix(key, "darwin-") {
+			t.Fatalf("macOS 的键应以 darwin- 开头，got %q", key)
+		}
+		if strings.HasSuffix(key, "amd64") {
+			t.Fatal("macOS 上应写 x64 而不是 amd64（与 backend/build 的目录名一致）")
+		}
+	case "linux":
+		if !strings.HasPrefix(key, "linux-") {
+			t.Fatalf("Linux 的键应以 linux- 开头，got %q", key)
+		}
+		if strings.HasSuffix(key, "amd64") {
+			t.Fatal("Linux 上应写 x64 而不是 amd64")
+		}
+	case "windows":
+		// **关键**：Node 用 win32，Go 用 windows。直接透传会找不到边车。
+		if !strings.HasPrefix(key, "win32-") {
+			t.Fatalf("Windows 的键必须以 win32- 开头（Node 的命名），got %q", key)
+		}
 	}
 }
