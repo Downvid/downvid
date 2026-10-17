@@ -105,7 +105,7 @@ M 系列（用户可见的移动端）与 C 系列（内部解耦）**可以并�
 - 搬到 `core/`，`shared/` 保留转发层（`export * from '../core/...'`）一个版本周期，
   避免一次改动 40+ 处 import。
 - `shared/app.ts` 是仓库坐标与外部链接的**唯一来源**，被 `electron/constants.ts`、
-  `website/index.html` 的脚本、`scripts/lint-ipc.mjs`、`scripts/lint-website.mjs`、`tests/app-links.test.ts`
+  `website/app.js`、`scripts/lint-ipc.mjs`、`scripts/lint-website.mjs`、`tests/app-links.test.ts`
   共同引用。**搬运必须同步这 5 处**，否则会出现「网站链接和桌面不一致」这类静默失败。
 
 **验收**：`tests/app-links.test.ts`、`update-sources.test.ts`、`deps-mirror.test.ts`、

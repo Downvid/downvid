@@ -32,6 +32,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Downvid/downvid/app/internal/deps"
 	"github.com/Downvid/downvid/app/internal/download"
 	"github.com/Downvid/downvid/app/internal/history"
 	"github.com/Downvid/downvid/app/internal/parse"
@@ -60,6 +61,9 @@ type App struct {
 
 	// 解析器（带缓存，复用避免每次解析都新建）
 	parser *parse.Parser
+
+	// 依赖管理器（惰性创建，见 bindings_download.go 的 depsManager）
+	deps *deps.Manager
 
 	// 下载相关（由 bindings_download.go 使用）
 	runner           *download.Runner

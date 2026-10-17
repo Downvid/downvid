@@ -38,7 +38,7 @@ pnpm lint:ipc                                  # IPC 契约静态校验（三处
 pnpm lint:docker                               # 容器镜像定义（依赖版本来自清单 / 未退回 tsx / 更新检查未退化）
 pnpm test:web                                  # WebUI 服务端回归（跑的是打包产物，与镜像里同一份）
 pnpm lint:icons                                # 图标名是否有效（写错会静默渲染成文字）
-pnpm lint:website                              # 官网单文件 / 引用资源 / 中英词条 / 配色一致性
+pnpm lint:website                              # 官网多文件 / 引用资源 / 中英词条 / 配色一致性
 pnpm lint:docs                                 # AGENTS.md ↔ CLAUDE.md 一致 + 引用路径与数字真实存在
 pnpm audit:provenance                          # 代码来源审计：上游逐字存活率 + 登记表是否覆盖（见 docs/provenance/audit.md）
 pnpm deps:manifest:check                       # 依赖清单是否落后上游
@@ -118,7 +118,7 @@ Dependabot 已忽略其大版本升级。
 | `shared/app.ts` | 仓库坐标与外部链接的**唯一来源** | 被三方共同引用 |
 | `tests/` | Vitest 纯逻辑单测 | — |
 | `docker/` | 容器镜像（原生 WebUI，见 `docs/docker.md` 与 `docker/README.md`） | GHCR 多架构镜像 |
-| `website/` | 产品落地页（单文件、无构建，由 Vercel 的 Git 集成发布） | — |
+| `website/` | 产品落地页（index.html + styles.css + app.js，无构建，由 Vercel 的 Git 集成发布） | — |
 | `scripts/` | 清单生成、构建边车、IPC / 官网校验、Release 正文 | — |
 
 两个 Electron 进程由 `vite-plugin-electron/simple` 从**同一个** `vite.config.ts` 构建；
@@ -225,7 +225,7 @@ Linux 用 `amd64`/`x86_64` 而不是 `x64`（与 electron-builder 的 `${arch}` 
 
 ### 7. 改产品官网（`website/`）
 
-单文件 `website/index.html`，**无构建步骤**，由 Vercel 项目 `downvid` 的 Git 集成在推送 main 后
+无构建的多文件站点（`index.html` / `styles.css` / `app.js`），由 Vercel 项目 `downvid` 的 Git 集成在推送 main 后
 直接发布（`vercel.json` 指定 `outputDirectory: "website"`，域名 <https://downvid-coral.vercel.app>）。
 GitHub Pages **不再使用**：仓库从未在 Settings 里选过 Pages 源，`actions/configure-pages` 只会稳定报
 `Get Pages site failed`，那个工作流已删除。校验改由 `pnpm lint:website` 在三个 `ci-*.yml` 的 frontend job 跑。
@@ -237,31 +237,32 @@ GitHub Pages **不再使用**：仓库从未在 Settings 里选过 Pages 源，`
 - **中英词条双向成对**：`data-i18n` 占位 ↔ `I18N.en` 词条，缺英文会永远显示中文；
   脚本拼装的文案（下载区的 `t('...')`）还要在 `I18N.zh` 里补中文，否则界面直接把 key 显示出来
 - **配色是手抄的**：官网 `:root` 的 `--primary` 等必须与 `src/style.css` 的 `@theme` 一致
-- **零依赖**：除 Google Fonts 外不得外链脚本/样式（`.vercelignore` 只排除源码目录，不做校验）
+- **无构建 / 零依赖**：只允许本地 `styles.css` / `app.js`，除 Google Fonts 外不得外链脚本/样式
+  （`.vercelignore` 只排除源码目录，不做校验；`lint:website` 会拒绝第三方脚本/样式表）
 - **下载量 / 星标用 shields.io 徽章**：hero 用 README 同款徽章，数字实时，省掉
   「发布后手动刷新」。徽章是 `<img>`，不违反零依赖约定；URL 里的仓库坐标由 `lint:website`
   与 `shared/app.ts` 比对（写错只会静默显示 `no data`）。原先的
   `scripts/gen-website-stats.mjs`（`pnpm website:stats`）已删除
-- **版式参考 deepseek.com/harness**：居中 hero + 大预览图、两列卡片网格、代码块 + 复制按钮、
-  居中的社区 CTA、极简页脚。配色仍必须取自 `src/style.css` 的 `@theme`，
-  取舍与细节写在 `website/README.md`
-- **顶栏在两种形态间切换**（`is-stuck`）：贴顶时是通栏细条，下滑超过 12px 才收成浮动圆角胶囊
-  并钉在顶部，滑回顶部自动还原；且**不放导航链接**——页面就是一路往下滑，品牌在左、语言切换在右。
-  别再加回「功能 / 下载 / FAQ」那排按钮
+- **hero 预览已同步新版 UI**：默认首页（命令条 + effort 滑块 + 44 周热力图 + 最近下载），
+  解析 / 下载 / 历史 / 关于仍可交互。版式仍参考 deepseek.com/harness，配色取自 `src/style.css` 的 `@theme`
+- **顶栏在两种形态间切换**（`is-stuck`）：贴顶时是通栏细条，下滑超过 12px 才收成实色胶囊
+  并钉在顶部，滑回顶部自动还原；新版 UI 不再用玻璃模糊。且**不放导航链接**——页面一路往下滑，
+  品牌在左、语言切换在右。别再加回「功能 / 下载 / FAQ」那排按钮
 - **「能做什么」的卡片是可点的**：平台 / 画质 / 浏览器分组单选 `data-pick-set`（画质还带出体积
-  `data-pick-out`）、下载加速开始 / 暂停、依赖逐个检测、检查更新用真实最新版本作答。
+  `data-pick-out`）、下载加速是四档 effort 选择、依赖逐个检测、检查更新用真实最新版本作答。
   全部纯前端、不联网改状态；文案走 `t()`，切语言时由 `syncDemos()` 重刷——
   新增演示按钮时记得把它挂进 `syncDemos`，否则切语言后文案不会更新
 - **hero 的预览是应用主界面的可交互复刻**（不是截图）：结构 / 文案 / 配色照
   `src/components/` 里的下载界面组件搬，只把真实解析与下载换成本地动画；画布按应用窗口宽度
-  1100px 设计，再用 `transform: scale()` 等比缩放到容器宽度。**默认就是「已粘贴 + 已解析 +
-  正在下载」**的样子，一进页面就是完整界面。缩略图是 `src/assets/demo-thumb.jpg`
+  1100px 设计，再用 `transform: scale()` 等比缩放到容器宽度。**默认是新的工具型首页**
+  （命令条 + effort 滑块 + 44 周热力图 + 最近下载）；点解析进入结果页，点下载才出现队列。
+  缩略图是 `src/assets/demo-thumb.jpg`
   （从应用截图里裁的原链接预览图，自带时长角标），失败时退回内置 SVG。改应用界面时要同步
   这一份，`lint:website` 会比对复刻里抄来的那批 `@theme` 颜色 token；切语言的文案重刷挂在
   `syncAppDemo()` 上（新增按钮记得挂进去）
 - **平台图标只在 `#osIcons` 里维护一份**：脚本按 `data-os` 克隆给主按钮与下载菜单，
   `lint:website` 会核它和脚本 `PLATFORMS` 双向对得上（键名写错只是没图标，不报错）
-- **下载按钮按系统直链产物**：hero 主按钮在浏览器里识别系统与芯片，再按 `index.html`
+- **下载按钮按系统直链产物**：hero 主按钮在浏览器里识别系统与芯片，再按 `app.js`
   里的 `ARTIFACTS` 产物名模板，在 `releases/latest` 的产物列表里挑包，`href` 直接指向
   产物直链——点击即下载，不跳转。结果在 `sessionStorage` 里缓存 30 分钟；离线 / 限流 /
   产物缺失 / 系统未识别一律退回 Releases 页面（不留死链，也不弹错误框）。

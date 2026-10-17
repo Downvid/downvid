@@ -51,8 +51,7 @@
       </p>
       <h1 data-i18n="hero.title">把喜欢的视频，<br>轻松保存到本地。</h1>
       <p class="lede" data-i18n="hero.lede">
-        面向 macOS、Windows 与 Linux 的开源桌面工具。基于 yt-dlp，支持 1000+ 网站，
-        界面简洁，不需要记任何命令行参数。
+        开源桌面下载器，基于 yt-dlp，支持 1000+ 网站；解析、下载、合并与字幕都在本机完成。
       </p>
       <div class="hero-cta">
         <div class="dl-split">
@@ -230,7 +229,7 @@
                 <div class="dv-video-meta">
                   <p class="dv-video-title">Day Trip to Mt. Fuji Area from Tokyo | Winter Train Trip | JAPAN TRAVEL VLOG</p>
                   <p class="dv-uploader">Unique Japan Travel · 18:42 · 8 个格式</p>
-                  <p class="dv-stats"><span class="dv-mono" id="dvSize">2.28 GB</span><span class="dv-badge-soft">已下载过？</span></p>
+                  <p class="dv-stats"><span class="dv-mono" id="dvSize">2.28 GB</span></p>
                 </div>
               </div>
               <p class="dv-label" id="dvVideoHeader">视频格式 (MP4) - 共 8 个</p>
@@ -281,7 +280,7 @@
   </div>
 </div>
 
-<p class="shot-caption" data-i18n="demo.caption">上面是应用界面的可交互演示——可以直接点</p>
+<p class="shot-caption" data-i18n="demo.caption">新版界面的可交互预览——可以点解析、下载，也会进入历史 / 关于</p>
     </div>
   </section>
 
@@ -322,9 +321,19 @@
           <h3 data-i18n="feat.speed.t">下载加速</h3>
           <p data-i18n="feat.speed.d">直链使用小块工作队列（默认 8 路、最多 16 路），可选 aria2 多连接。</p>
           <div class="card-media">
-            <div class="mock-row"><b>8×</b><span class="mono">5.4 MB/s</span><span class="mono" data-percent>0%</span></div>
-            <div class="mock-bar"><span data-bar style="width:0%"></span></div>
-            <button class="pick demo-btn" type="button" data-run aria-pressed="false">开始</button>
+            <div class="feat-effort" data-feat-effort>
+              <div class="feat-effort-head">
+                <span data-i18n="demo.accel">下载加速</span>
+                <span><b data-effort-value>8</b> <em data-effort-name>均衡</em></span>
+              </div>
+              <div class="feat-effort-track"><span class="feat-effort-fill"></span></div>
+              <div class="feat-effort-labels">
+                <button type="button" data-effort="0" data-i18n="demo.effortlight">轻量</button>
+                <button type="button" data-effort="1" class="is-on" data-i18n="demo.effortbalanced">均衡</button>
+                <button type="button" data-effort="2" data-i18n="demo.effortfast">快速</button>
+                <button type="button" data-effort="3" data-i18n="demo.effortaggressive">激进</button>
+              </div>
+            </div>
           </div>
         </article>
         <article class="card">

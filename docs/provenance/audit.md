@@ -174,7 +174,7 @@ node scripts/audit-provenance.mjs --report   # 打印完整表格，不写文件
 - `docker/` 全部（Dockerfile、`server/index.ts` 524 行、`web/bridge.ts` 164 行、`security.ts`、`entrypoint.sh`）
 - `scripts/`（11744 行：依赖清单生成、IPC/官网/i18n/文档/工作流/来源校验、集成回归）
 - `tests/`（3498 行，28 个测试文件 / 334 个用例）
-- `website/`（1882 行单文件落地页）
+- `website/`（2410 行：index.html + styles.css + app.js 三个本地文件）
 - `shared/` 五个模块（`app.ts` 仓库坐标、`acceleration.ts`、`parse-error.ts`、`update-check.ts`、`update-sources.ts`）
 - `electron/` 下的 `download/direct.ts`、`download/direct-state.ts`、`download/process-tree.ts`、
   `download/aria2.ts`、`download/aria2-progress.ts`、`download/progress.ts`（重写）、`parsers/formats.ts`、

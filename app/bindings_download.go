@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Downvid/downvid/app/internal/deps"
 	"github.com/Downvid/downvid/app/internal/download"
 	"github.com/Downvid/downvid/app/internal/parse"
 )
@@ -418,4 +419,102 @@ func (a *App) ParseDump() *parse.VideoInfo {
 			{ID: "ja", Name: "日本語", Language: "ja", FormatID: "251"},
 		},
 	}
+}
+
+// ===== 运行依赖（你的 DepsDialog / SettingsView 需要）=====
+
+// DetectDeps 探测所有运行依赖（带 60 秒缓存）。
+//
+// 边车缺失时返回一条「未找到」而不是空数组：空数组会让界面显示
+// 「没有依赖」而不是「探测程序缺失」，两者的排查方向完全不同。
+func (a *App) DetectDeps(force bool) []deps.Status {
+	m := a.depsManager()
+	snap, err := m.Detect(force)
+	if err != nil {
+		return []deps.Status{{
+			Kind: deps.KindYtdlp, Found: false,
+			Reason: err.Error(),
+		}}
+	}
+	return snap.Results
+}
+
+// DepsSummary 返回「缺什么 / 哪个版本过旧」。
+//
+// 分开返回是因为修法不同：缺失要点「下载」，过旧要点「更新」。
+func (a *App) DepsSummary() map[string]any {
+	m := a.depsManager()
+	snap, err := m.Detect(false)
+	if err != nil {
+		return map[string]any{"error": err.Error()}
+	}
+	missing, stale := deps.Summarize(snap)
+	return map[string]any{
+		"missing":    missing,
+		"stale":      stale,
+		"managedDir": m.ManagedDir(),
+		"platform":   snap.Platform,
+	}
+}
+
+// InstallDeps 下载并安装依赖。
+//
+// **异步**：立即返回，进度走 `deps:progress` 事件。
+// 同步的话整个下载期间（可能几分钟）界面会卡住。
+func (a *App) InstallDeps(opts DepsInstallRequest) StartDownloadResult {
+	m := a.depsManager()
+
+	go func() {
+		err := m.Install(deps.FetchOptions{
+			Only:    opts.Only,
+			Force:   opts.Force,
+			Proxy:   a.proxy,
+			Mirror:  opts.Mirror,
+			Timeout: 10 * time.Minute,
+		}, func(p deps.Progress) {
+			// 事件名与 TS 版一致：前端只把订阅方式换成 EventsOn
+			a.emit("deps:progress", p)
+		})
+
+		if err != nil {
+			a.emit("deps:progress", deps.Progress{Event: "error", Message: err.Error()})
+			return
+		}
+		// 下载完成后探测结果已失效（内容变了），主动推一次新状态
+		a.emit("deps:progress", deps.Progress{Event: "done", Message: "依赖已就绪"})
+	}()
+
+	return StartDownloadResult{OK: true}
+}
+
+// CancelDepsInstall 取消依赖下载。
+func (a *App) CancelDepsInstall() bool {
+	return a.depsManager().Cancel()
+}
+
+// IsInstallingDeps 报告是否正在下载依赖。
+func (a *App) IsInstallingDeps() bool {
+	return a.depsManager().IsDownloading()
+}
+
+// OpenManagedDir 返回托管目录路径（前端用 OpenPath 打开）。
+func (a *App) OpenManagedDir() string {
+	return a.depsManager().ManagedDir()
+}
+
+// DepsInstallRequest 是依赖下载参数。
+type DepsInstallRequest struct {
+	Only   []deps.Kind `json:"only"`
+	Force  bool        `json:"force"`
+	Mirror string      `json:"mirror"`
+}
+
+// depsManager 惰性创建（sidecarPath 依赖 startup 里算出的路径）。
+func (a *App) depsManager() *deps.Manager {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.deps == nil {
+		a.deps = deps.NewManager(a.sidecarPath(), filepath.Join(a.dataDir, "runtime", "bin"))
+	}
+	return a.deps
 }

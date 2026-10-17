@@ -541,3 +541,25 @@ header::before{background:linear-gradient(180deg,var(--surface) 0%,rgba(255,248,
   .dv-heat-layout{grid-template-columns:minmax(0,1fr) 118px}
   .dv-feature{min-height:150px}
 }
+
+/* display:flex 的类会盖掉浏览器对 hidden 的默认样式，必须显式收回 */
+.dv-home[hidden],
+.dv-result-view[hidden],
+.dv-result[hidden],
+.dv-parsing[hidden],
+.dv-alt[hidden],
+.dv-alt-panel[hidden],
+.dv-right[hidden]{display:none!important}
+
+.dv-left[hidden],.dv-right[hidden]{display:none!important}
+
+.feat-effort{display:flex;flex-direction:column;gap:8px;width:100%}
+.feat-effort-head{display:flex;align-items:center;justify-content:space-between;gap:10px;font-family:var(--font-mono);font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:var(--on-surface-variant)}
+.feat-effort-head b{font-size:14px;color:var(--on-surface);letter-spacing:0}
+.feat-effort-head em{font-style:normal;color:var(--primary);background:rgba(255,152,0,.12);border-radius:3px;padding:1px 5px}
+.feat-effort-track{position:relative;height:6px;border-radius:99px;background:var(--surface-container-highest);overflow:hidden}
+.feat-effort-fill{display:block;width:100%;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--primary),var(--accent));transform:scaleX(.33333);transform-origin:left center;transition:transform .16s ease}
+.feat-effort.is-hot .feat-effort-fill{background:linear-gradient(90deg,var(--primary),var(--accent) 48%,#ff6338);box-shadow:0 0 14px rgba(255,99,56,.32)}
+.feat-effort-labels{display:flex;justify-content:space-between;gap:6px}
+.feat-effort-labels button{padding:0;border:0;background:none;color:var(--on-surface-variant);font:inherit;font-family:var(--font-mono);font-size:7.5px;cursor:pointer}
+.feat-effort-labels button.is-on{color:var(--primary);font-weight:700}

@@ -51,7 +51,7 @@ downvid/
 | `lint-ipc.mjs` | 校验 IPC 三处同步、env.d.ts 约束、产物命名契约、仓库坐标 | `pnpm lint:ipc`，CI 必跑 |
 | `lint-i18n.mjs` | 校验中英词条双向一致、占位符一致、无硬编码界面中文 | `pnpm lint:i18n`，CI 必跑 |
 | `lint-icons.mjs` | 校验图标名有效（写错会静默渲染成文字） | `pnpm lint:icons`，CI 必跑 |
-| `lint-website.mjs` | 校验官网单文件、引用资源、中英词条成对、配色与应用一致、产物名模板与徽章坐标 | `pnpm lint:website`，CI 必跑 |
+| `lint-website.mjs` | 校验官网多文件、引用资源、中英词条成对、配色与应用一致、产物名模板与徽章坐标 | `pnpm lint:website`，CI 必跑 |
 | `lint-docs.mjs` | 校验 `AGENTS.md` ↔ `CLAUDE.md` 一致、引用路径与关键数字真实存在 | `pnpm lint:docs`，CI 必跑 |
 | `lint-workflows.mjs` | 校验工作流里「用了某工具」与「装了该工具」成对 | `pnpm lint:workflows`，CI 必跑 |
 | `verify-release.mjs` | 核对 tag 是否真有 Release 且带全部 `latest*.yml` | `pnpm verify:release` |
@@ -69,5 +69,5 @@ downvid/
 2. **新增广播事件**：主进程 emit 点、preload 的 `on`、订阅方的 unsubscribe
 3. **改设置形状**：设置存在 `localStorage['settings']`，删改字段会让老用户设置失效
 4. **改产物名**：会切断存量用户的自动更新，见[发布流程](./release.md#产物命名契约)
-5. **改官网**：`website/index.html` 是单文件、由 Vercel 直接发布，改完跑 `pnpm lint:website`
-   （引错图、漏翻译、配色漂移都只会在线上暴露，见 `website/README.md`）
+5. **改官网**：`website/index.html` + `styles.css` + `app.js`，由 Vercel 直接发布，
+   改完跑 `pnpm lint:website`（引错图、漏翻译、配色漂移都只会在线上暴露，见 `website/README.md`）

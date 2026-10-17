@@ -87,8 +87,8 @@ git tag -d v1.3.0 && git push origin :refs/tags/v1.3.0
 
 ## 官网版本号为什么需要自动刷新
 
-官网（`website/index.html`）是单文件、由 Vercel 从 `main` 直接发布，**没有构建步骤**，
-页面上的版本号因此只能是硬编码的：
+官网（`website/index.html` + `styles.css` + `app.js`）由 Vercel 从 `main` 直接发布，
+**没有构建步骤**；版本号占位在 `index.html` 中，因此只能是硬编码的：
 
 - 页面脚本加载后会请求 `releases/latest`，把版本号覆盖成真实 tag
 - 但这条路径依赖三件事：能联网、没被 GitHub 限流、访问者没禁用 `sessionStorage`

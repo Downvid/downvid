@@ -66,7 +66,7 @@ const I18N = {
     'demo.back': '返回',
     'demo.placeholder': '在此处粘贴需要解析的视频链接...',
     'demo.paste': '粘贴链接',
-    'demo.parse': '解析视频信息',
+    'demo.parse': '解析',
     'demo.parsing': '解析中...',
     'demo.extracting': '正在提取视频元数据...',
     'demo.usuallyseconds': '通常需要几秒',
@@ -74,8 +74,8 @@ const I18N = {
     'demo.result': '解析结果预览',
     'demo.videohdr': '视频格式 (MP4) - 共 {count} 个',
     'demo.audiohdr': '纯音频格式 - 共 {count} 个',
-    'demo.download': '立即下载所选资源',
-    'demo.downloadaudio': '下载纯音频',
+    'demo.download': '下载',
+    'demo.downloadaudio': '下载音频',
     'demo.downloading': '正在下载...',
     'demo.queue': '任务队列',
     'demo.active': '{count} 进行中',
@@ -84,13 +84,13 @@ const I18N = {
     'demo.storage': '存储空间',
     'demo.historyempty': '暂无下载记录',
     'demo.about': '基于 yt-dlp 的开源桌面视频下载工具',
-    'demo.caption': '上面是应用界面的可交互演示——可以直接点',
+    'demo.caption': '新版界面的可交互预览——可以点解析、下载，也会进入历史 / 关于',
   },
   en: {
     'brand.tag': 'Open source',
     'hero.eyebrow': 'Open source · Cross-platform · Free',
     'hero.title': 'Save the videos<br>you like, locally.',
-    'hero.lede': 'An open-source desktop app for macOS, Windows and Linux. Powered by yt-dlp, supporting 1000+ sites, with a clean interface and no command-line flags to remember.',
+    'hero.lede': 'An open-source desktop downloader built on yt-dlp. 1000+ sites; parsing, downloading, merging and subtitles all run locally.',
     'hero.download': 'Download latest',
     'hero.source': 'View source',
     'dl.menu': 'All platforms and formats',
@@ -191,7 +191,7 @@ const I18N = {
     'demo.result': 'Result preview',
     'demo.videohdr': 'Video formats (MP4) - {count} total',
     'demo.audiohdr': 'Audio-only formats - {count} total',
-    'demo.download': 'Download the selected format',
+    'demo.download': 'Download',
     'demo.downloadaudio': 'Download audio only',
     'demo.downloading': 'Downloading...',
     'demo.queue': 'Task queue',
@@ -201,7 +201,7 @@ const I18N = {
     'demo.storage': 'Storage',
     'demo.historyempty': 'No download history',
     'demo.about': 'An open-source desktop video downloader built on yt-dlp',
-    'demo.caption': 'The app UI above is an interactive demo - go ahead and click',
+    'demo.caption': 'An interactive preview of the new UI — parse, download, and open History / About',
     'join.title': 'Join the open-source community',
     'join.sub': 'DownVid is an MIT-licensed open-source project. File an issue, send a pull request, or just leave a star.',
     'join.github': 'View on GitHub',
@@ -662,6 +662,26 @@ function initDemos() {
     });
   });
 
+  // 下载加速卡片：四档 effort（和 hero 预览同一套视觉）
+  const effortCards = [...document.querySelectorAll('[data-feat-effort]')];
+  const effortLabels = () => [t('demo.effortlight'), t('demo.effortbalanced'), t('demo.effortfast'), t('demo.effortaggressive')];
+  const paintEffortCard = (card, index) => {
+    const stops = [4, 8, 12, 16];
+    const valueNode = card.querySelector('[data-effort-value]');
+    const nameNode = card.querySelector('[data-effort-name]');
+    const fill = card.querySelector('.feat-effort-fill');
+    const buttons = [...card.querySelectorAll('[data-effort]')];
+    if (valueNode) valueNode.textContent = String(stops[index]);
+    if (nameNode) nameNode.textContent = effortLabels()[index];
+    if (fill) fill.style.transform = 'scaleX(' + (index / 3) + ')';
+    card.classList.toggle('is-hot', index >= 2);
+    buttons.forEach(button => button.classList.toggle('is-on', Number(button.getAttribute('data-effort')) === index));
+  };
+  effortCards.forEach(card => {
+    const buttons = [...card.querySelectorAll('[data-effort]')];
+    buttons.forEach(button => button.addEventListener('click', () => paintEffortCard(card, Number(button.getAttribute('data-effort')))));
+  });
+
   // 下载加速：开始 / 暂停，进度条与百分比一起走，走满自动停
   const runButton = document.querySelector('[data-run]');
   const runCard = runButton ? runButton.closest('.card-media') : null;
@@ -764,6 +784,11 @@ function initDemos() {
     depRows.forEach(row => {
       if (row.classList.contains('is-ok')) row.textContent = t('demo.ready');
     });
+    effortCards.forEach(card => {
+      const buttons = [...card.querySelectorAll('[data-effort]')];
+      const index = Math.max(0, buttons.findIndex(button => button.classList.contains('is-on')));
+      paintEffortCard(card, index);
+    });
     paintUpdate();
   };
 
@@ -795,6 +820,12 @@ const DV_AUDIO = [
 ];
 const DV_SAMPLE_URL = 'https://youtu.be/n_PxJ2Pyecl';
 const DV_TITLE = 'Day Trip to Mt. Fuji Area from Tokyo | Winter Train Trip | JAPAN TRAVEL VLOG';
+const DV_HISTORY = [
+  { title: DV_TITLE, meta: '4K · MP4 · 2.28 GB' },
+  { title: '【4K】京都 · 秋日寺院散步｜环境音 ASMR', meta: '1080P60 · MP4 · 612.0 MB' },
+  { title: '城市夜骑 · 滨江 4K｜风从耳边过', meta: '1080P · MP4 · 24.8 MB' },
+  { title: 'lofi 深夜工作电台 · 2 小时不间断', meta: 'Opus 160k · M4A · 86.3 MB' },
+];
 const DV_FOLDER_ICON = '<svg viewBox="0 0 24 24" class="dv-folder"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8z"/></svg>';
 
 let syncAppDemo = function () {};
@@ -1015,14 +1046,18 @@ function initAppDemo() {
     if (!historyHost) return;
     historyHost.textContent = '';
     const done = tasks.filter(task => task.status === 'completed');
-    if (historyEmpty) historyEmpty.hidden = done.length > 0;
-    for (const task of done) {
+    // 首页「最近下载」已经展示了 4 条，历史标签页不能反着说「暂无记录」。
+    const rows = done.length
+      ? done.map(task => ({ title: DV_TITLE, meta: task.quality + ' · ' + task.size }))
+      : DV_HISTORY;
+    if (historyEmpty) historyEmpty.hidden = rows.length > 0;
+    for (const item of rows) {
       const row = document.createElement('div');
       row.className = 'dv-history-row';
       const title = document.createElement('p');
-      title.textContent = DV_TITLE;
+      title.textContent = item.title;
       const meta = document.createElement('span');
-      meta.textContent = task.quality + ' - ' + task.size;
+      meta.textContent = item.meta;
       row.appendChild(title);
       row.appendChild(meta);
       historyHost.appendChild(row);

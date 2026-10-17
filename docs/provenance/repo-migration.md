@@ -72,7 +72,7 @@ node scripts/sync-repo-coords.mjs --target Downvid/Downvid --write
 | `.github/workflows/release.yml` | 用 `GITHUB_TOKEN` 自动推断，**通常不需写坐标**（写死反而在改名后失配） |
 | `.github/workflows/docker.yml` | GHCR 镜像坐标 |
 | `scripts/gen-*.mjs` | 生成 Release 正文与更新清单时的硬编码 |
-| `website/index.html` | 官网下载按钮运行时拼 API 地址 |
+| `website/app.js` | 官网下载按钮运行时拼 API 地址 |
 | `docker/docker-compose.yml` | 默认镜像坐标 |
 | `tests/*.test.ts` | 快照，改了会红 |
 | 两份 README + 若干 docs | 用户点进去的链接 |
@@ -129,7 +129,7 @@ pnpm verify:release       # tag ↔ Release ↔ latest*.yml 对得上
 | --- | --- | --- |
 | 老用户提示「已是最新」但明明发了新版 | 旧 URL 没有 301（用了新建仓库而非 Transfer） | **无法自动修复**，只能发公告让用户手动下载一次 |
 | 新装用户收不到更新 | `electron-builder.json5` 的 `publish` 没改 | `pnpm sync:repo` 会报出来 |
-| 官网下载按钮跳 404 | `website/index.html` 的 `REPO` 没改 | `pnpm lint:website` 会报 |
+| 官网下载按钮跳 404 | `website/app.js` 的 `REPO` 没改 | `pnpm lint:website` 会报 |
 | CI 发布失败 | secrets / GHCR 坐标未同步 | 检查 `docker.yml` 与组织级 secrets |
 | `verify:release` 失败 | 产物名或 `latest*.yml` 与坐标不匹配 | 见 `docs/release.md` 的产物命名契约 |
 

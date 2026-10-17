@@ -74,7 +74,7 @@
 | 更新 | `electron/updater.ts` | Windows/Linux 走 electron-updater；macOS 自实现替换 `.app` | 广播 `update:status` |
 | 队列 | `src/stores/download.ts` + `download-rules.ts` | 任务状态、并发闸门、错误翻译 | 启动任务只能经 `pumpQueue()` |
 | 设置 | `src/stores/settings.ts` | 读写与清洗 `localStorage['settings']` | 合并写入，不许整体覆盖 |
-| 官网 | `website/index.html` | 单文件落地页，Vercel 直接发布 | 无构建步骤，靠 `lint:website` 兜底 |
+| 官网 | `website/index.html` + `styles.css` + `app.js` | 无构建落地页，Vercel 直接发布 | 无构建步骤，靠 `lint:website` 兜底 |
 
 **跨进程共享的纯逻辑**放在 `shared/`（主进程与渲染进程都直接相对路径引用）：
 
@@ -295,7 +295,7 @@ pnpm lint:i18n   # 键双向一致 / 占位符一致 / t() 键真实存在 / src
 
 ### 5.9 发布新版本后刷新官网版本号
 
-官网是单文件、无构建，页面上的版本号只能是硬编码的（脚本拉到 `releases/latest`
+官网无构建，版本号占位在 `index.html` 中，只能是硬编码的（脚本拉到 `releases/latest`
 会覆盖成真实 tag，拉不到就退回写死的值）。**不需要手动做**：`release.yml` 在 Release
 创建成功并自检通过后会自动刷新并提交回 `main`。本地想核对时：
 
@@ -344,7 +344,7 @@ pnpm vue-tsc --noEmit        # strict + noUnusedLocals + noUnusedParameters
 pnpm lint:ipc                # IPC 三处同步 + env.d.ts 约束 + 产物命名 + 仓库坐标
 pnpm lint:i18n               # 词条双向一致 + 占位符 + 无硬编码中文
 pnpm lint:icons              # 图标名是否有效（写错会静默渲染成文字）
-pnpm lint:website            # 官网单文件 / 引用资源 / 中英词条 / 配色 / 产物名模板
+pnpm lint:website            # 官网多文件 / 引用资源 / 中英词条 / 配色 / 产物名模板
 pnpm lint:docs               # AGENTS.md ↔ CLAUDE.md 一致 + 引用路径与数字真实存在
 pnpm lint:workflows          # 工作流里「用了某工具」与「装了该工具」是否成对
 pnpm deps:manifest:check     # 依赖清单是否落后上游

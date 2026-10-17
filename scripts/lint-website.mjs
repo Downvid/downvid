@@ -311,7 +311,7 @@ if (iconKeys.length === 0) {
 }
 
 // ===== 7c. 版本号占位必须存在 =====
-// 官网是单文件、无构建，页面上的版本号只能是硬编码的：脚本拉到 releases/latest 时
+// 官网无构建，版本号占位在 index.html 中、只能是硬编码的：脚本拉到 releases/latest 时
 // 会覆盖成真实 tag，但**离线 / 被限流 / 禁用 sessionStorage** 时会退回那个写死的值。
 // 因此它必须每次发布后由 scripts/sync-website-version.mjs 刷新，而刷新脚本靠
 // `data-version` 定位。标记被删掉不会报错——只会让版本号安静地停在某个旧值上，

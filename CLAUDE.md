@@ -26,7 +26,7 @@ pnpm lint:ipc               # static check of the hand-maintained IPC wiring
 pnpm lint:docker            # container image definition (versions from manifest / no tsx / update check intact)
 pnpm test:web               # WebUI server regression (runs the *bundled* server, same file as in the image)
 pnpm lint:icons             # icon names must be valid (a typo renders as literal text)
-pnpm lint:website           # landing page: single file, assets, i18n pairs, theme colors
+pnpm lint:website           # landing page: local html/css/js, assets, i18n pairs, theme colors
 pnpm lint:docs              # AGENTS.md ↔ CLAUDE.md parity + referenced paths/numbers exist
 pnpm audit:provenance       # code-provenance audit: verbatim upstream survival + registry coverage
                             # (see docs/provenance/audit.md)
@@ -115,7 +115,7 @@ and a **Go sidecar** (detects and installs yt-dlp / ffmpeg). They talk over IPC 
 | `shared/app.ts` | **single source** of repo coordinates and external links | imported by all three |
 | `tests/` | Vitest pure-logic tests | — |
 | `docker/` | container image (entrypoint, virtual display and VNC orchestration; see `docs/docker.md`) | OCI image |
-| `website/` | landing page (single file, no build; published by Vercel's Git integration) | — |
+| `website/` | landing page (index.html + styles.css + app.js, no build; published by Vercel's Git integration) | — |
 | `scripts/` | manifest generation, sidecar build, IPC / website lint, release notes | — |
 
 Both Electron processes are built by `vite-plugin-electron/simple` from one `vite.config.ts`;
@@ -225,8 +225,8 @@ boundary rules and the three ports (`DataDirs` / `EventSink` / `UserPrompt`) tha
 
 ### 7. Landing page (`website/`)
 
-One file, `website/index.html`, **no build step**, published straight from `main` by the Git
-integration of the Vercel project `downvid` (`vercel.json` sets `outputDirectory: "website"`,
+Three local files — `website/index.html`, `styles.css`, `app.js` — **no build step**, published
+straight from `main` by the Git integration of the Vercel project `downvid` (`vercel.json` sets `outputDirectory: "website"`,
 site at <https://downvid-coral.vercel.app>). GitHub Pages is **no longer used**: the repo never
 had Pages enabled in Settings, so `actions/configure-pages` only ever failed with
 `Get Pages site failed` — that workflow is gone, and `pnpm lint:website` (frontend job of all three
@@ -242,8 +242,9 @@ Silent-failure traps, all covered by `lint:website`:
   download area) also needs a Chinese entry in `I18N.zh` or the UI prints the raw key
 - **Colors are copied by hand**: `--primary` etc. in the page's `:root` must match the
   `@theme` block in `src/style.css`
-- **Zero dependencies**: nothing but Google Fonts may be linked (`.vercelignore` excludes source
-  dirs only — it validates nothing)
+- **Zero dependencies**: only local `styles.css` / `app.js`; nothing but Google Fonts may be linked
+  (`.vercelignore` excludes source dirs only — it validates nothing; `lint:website` rejects
+  third-party scripts/stylesheets)
 - **The download count and stars use shields.io badges**: the hero shows the same badges as the
   README, so the numbers are live and nothing has to be refreshed after a release. A badge is an
   `<img>`, so the zero-dependency rule still holds; `lint:website` compares the repo coordinates
@@ -253,20 +254,21 @@ Silent-failure traps, all covered by `lint:website`:
   blocks with a copy button, a centered community CTA and a minimal footer. Colors still have to come
   from `src/style.css`'s `@theme`, and the details live in `website/README.md`.
 - **The header has two shapes, switched by `is-stuck`**: flush with the top of the page it is a
-  full-width bar; once you scroll past 12px it shrinks into a floating rounded capsule pinned to the
-  top (translucent + blur + shadow, with a fade above it) and returns to the bar when you scroll back
-  up. It has **no nav links** — the page is meant to be scrolled straight through, brand on the left,
-  language toggle on the right. Do not re-add a "Features / Download / FAQ" row.
+  full-width bar; once you scroll past 12px it shrinks into a solid rounded capsule pinned to the
+  top (the new UI no longer uses glass/blur) and returns to the bar when you scroll back up. It has
+  **no nav links** — the page is meant to be scrolled straight through, brand on the left, language
+  toggle on the right. Do not re-add a "Features / Download / FAQ" row.
 - **The "What it does" cards are clickable demos**: platform / quality / browser are single-select
   groups (`data-pick-set`, with `data-pick-out` showing the matching size), the acceleration card
-  starts and pauses a progress bar, dependency detection ticks the rows one by one, and the update
+  is a four-level effort selector, dependency detection ticks the rows one by one, and the update
   card answers with the **real latest version**. All of it is front-end only; labels go through
   `t()` and `syncDemos()` re-renders them on a language switch — hook any new demo control into it.
 - **The hero preview is an interactive replica of the app UI**, not a screenshot: structure, copy
   and colors are copied from the download-view components under `src/components/`, with the real
   parsing/download swapped for local animation. The canvas is designed at the app window's 1100px CSS
-  width and scaled to fit with `transform: scale()`. It **starts in the "pasted + parsed +
-  downloading" state** so the page shows a complete UI on load, and the thumbnail comes from
+  width and scaled to fit with `transform: scale()`. It **starts on the new tool-first home**
+  (command bar + effort slider + 44-week heatmap + recent downloads); parse opens the result view,
+  download opens the queue. The thumbnail comes from
   `src/assets/demo-thumb.jpg` (the original preview image cropped out of the app screenshot, duration
   badge included) with the built-in SVG as a fallback. Keep it in sync when the app UI changes;
   `lint:website` compares the extra `@theme` color tokens it copies, and `syncAppDemo()` re-renders
@@ -276,7 +278,7 @@ Silent-failure traps, all covered by `lint:website`:
   (a wrong key just means a missing icon, with no error).
 - **The download button links straight to an artifact per OS**: the hero button detects the
   visitor's platform and chip in the browser, matches the `ARTIFACTS` name templates in
-  `index.html` against the `releases/latest` asset list and points `href` at the artifact —
+  `app.js` against the `releases/latest` asset list and points `href` at the artifact —
   one click downloads, no navigation. The response is cached in `sessionStorage` for 30 minutes;
   offline / rate-limited / missing asset / unknown OS all fall back to the Releases page (no dead
   link, no error dialog). `tests/website-download.test.ts` pins "which OS gets which package"

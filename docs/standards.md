@@ -157,8 +157,9 @@ refactor(download): 拆分直链与 yt-dlp 两条路径
 
 ### 改产品官网
 
-`website/index.html` 是**单文件**，由 Vercel 的 Git 集成从 `main` 直接发布，中间没有构建步骤。
-引用的仓库资源、中英词条、配色都是手抄/硬写的，改完必须跑 `pnpm lint:website`。
+`website/` 是 **index.html + styles.css + app.js 三个本地文件**（无构建、零依赖），由 Vercel 的
+Git 集成从 `main` 直接发布，中间没有构建步骤。引用的仓库资源、中英词条、配色都是手抄/硬写的，
+改完必须跑 `pnpm lint:website`。
 详见 [`website/README.md`](../website/README.md)。**不要**恢复 `pages.yml`（仓库未启用 Pages）。
 
 ### 触碰更新逻辑
