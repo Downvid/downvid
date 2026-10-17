@@ -3,6 +3,18 @@ import { spawn } from 'node:child_process'
 import { killProcessTree, treeSpawnOptions } from '../electron/download/process-tree'
 
 /**
+ * 这两条用例断言的是 POSIX 语义（负数 pid 发给进程组、SIGTERM→SIGKILL 升级）。
+ *
+ * Windows 上**没有进程组信号**：`process.kill(-pid)` 会抛错，收树靠
+ * `taskkill /T /F`。在 Windows 上跑它们必然是红的——而且那不是代码坏了，
+ * 是断言写错了平台（CI 的 windows job 抓到的就是这个）。
+ *
+ * 用一个常量而不是 `it.skipIf`：后者在 vitest 的写法会随版本变，
+ * 而 `if (!POSIX) return` 在任何版本上都只是「什么也不做」。
+ */
+const POSIX = process.platform !== 'win32'
+
+/**
  * 结束整棵进程树。
  *
  * ## 回归背景（真实 bug，用户能直接感觉到）
@@ -44,6 +56,7 @@ describe('killProcessTree', () => {
   })
 
   it('POSIX：对进程组发信号（负 pid），而不是只杀直接子进程', async () => {
+    if (!POSIX) return // 见文件顶部 POSIX 的说明
     // 用一个真实存在但会立刻退出的子进程，验证走的是 -pid 分支
     const child = spawn(process.execPath, ['-e', 'setTimeout(()=>{}, 500)'], { detached: true, stdio: 'ignore' })
     await new Promise(r => setTimeout(r, 50))
@@ -56,6 +69,7 @@ describe('killProcessTree', () => {
   })
 
   it('POSIX：先 SIGTERM 再（必要时）SIGKILL——要给 aria2c 时间写控制文件', async () => {
+    if (!POSIX) return // 见文件顶部 POSIX 的说明
     // 忽略 SIGTERM 的子进程：验证宽限期结束后会升级为 SIGKILL
     const child = spawn(process.execPath, ['-e', 'process.on("SIGTERM",()=>{}); setInterval(()=>{},1000)'], {
       detached: true,
