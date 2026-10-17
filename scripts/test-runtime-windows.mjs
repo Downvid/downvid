@@ -7,6 +7,16 @@ import { createRequire } from 'node:module'
 import vm from 'node:vm'
 import ts from 'typescript'
 
+/**
+ * 模块级 require。
+ *
+ * 这个文件是 ESM，**没有**全局 `require`。早先它只在某个 try 块里临时声明，
+ * 于是后面新加的辅助函数用 `require` 时抛出
+ * `ReferenceError: require is not defined`（CI 的 windows job 抓到）；
+ * 本地跑不到那条分支，所以看不到。
+ */
+const nodeRequire = createRequire(import.meta.url)
+
 if (process.platform !== 'win32') {
   console.log('原生 Windows 依赖回归仅在 Windows 上运行')
   process.exit(0)
@@ -59,7 +69,13 @@ function tsTranspiledModule(file) {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
   }).outputText
   const mod = { exports: {} }
-  vm.runInNewContext(code, { exports: mod.exports, module: mod, process, require })
+  vm.runInNewContext(code, {
+    exports: mod.exports,
+    module: mod,
+    process,
+    // 沙箱里的裸模块（node:child_process 之类）走真实的 require
+    require: nodeRequire,
+  })
   return mod.exports
 }
 
@@ -125,14 +141,13 @@ try {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
   }).outputText
   const module = { exports: {} }
-  const require = createRequire(import.meta.url)
   vm.runInNewContext(jsCode, {
     exports: module.exports, module,
     process: { platform: 'win32', env: {
       PATH: '', LOCALAPPDATA: jsLocal, ProgramFiles: path.join(jsHome, 'programs'),
       'ProgramFiles(x86)': path.join(jsHome, 'programs-x86'), ProgramData: path.join(jsHome, 'data'),
     } },
-    require: name => name === 'node:os' ? { ...os, homedir: () => jsHome } : require(name),
+    require: name => name === 'node:os' ? { ...os, homedir: () => jsHome } : nodeRequire(name),
   })
   const runtime = await module.exports.checkJsRuntime()
   assert.equal(runtime.kind, 'deno')
