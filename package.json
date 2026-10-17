@@ -83,7 +83,7 @@
     "bufferutil": "^4.1.0",
     "electron-updater": "^6.8.3",
     "marked": "^18.1.1",
-    "pinia": "^4.0.3",
+    "pinia": "^4.1.0",
     "puppeteer-core": "^25.13.0",
     "utf-8-validate": "^6.0.6",
     "vue": "^3.5.44"
