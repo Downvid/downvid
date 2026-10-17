@@ -60,11 +60,18 @@ function scan(file) {
       found.push({ i, kind: 'go', current: m[2], expected: goMin })
     } else if ((m = /^(\s*node-version:\s*'?)([^'\s]+)('?)/.exec(line))) {
       found.push({ i, kind: 'node', current: m[2], expected: nodeMin })
-    } else if ((m = /^(\s*version:\s*'?)(\d+)(\s*'?)$/.exec(line))) {
-      // pnpm/action-setup 的 `with: version: 11`
+    } else if (/^\s*version:\s*'?\d+'?\s*$/.test(line)) {
+      // pnpm/action-setup 的 `with: version: 11` —— **现在应该一处都没有**。
+      //
+      // `package.json` 有了 `packageManager` 之后，action-setup 会自动读它；
+      // 再在 CI 里写 version 会直接报错退出：
+      //   Error: Multiple versions of pnpm specified:
+      //     - version 11 in the GitHub Action config with the key "version"
+      //     - version pnpm@11.0.0 in the package.json with the key "packageManager"
+      // 这个冲突本地完全发现不了（本机不跑 action-setup），只有 CI 会红。
       const before = lines.slice(Math.max(0, i - 6), i).join('\n')
       if (/pnpm\/action-setup/.test(before)) {
-        found.push({ i, kind: 'pnpm', current: m[2], expected: pnpmMajor })
+        found.push({ i, kind: 'pnpm-conflict', current: line.trim(), expected: '__REMOVE__' })
       }
     }
   })
@@ -81,12 +88,26 @@ for (const file of workflows) {
   const bad = hits.filter((h) => h.current !== h.expected)
   if (bad.length === 0) continue
   for (const b of bad) {
-    problems.push(`${file}:${b.i + 1}  ${b.kind} ${b.current} → 应为 ${b.expected}`)
+    if (b.kind === 'pnpm-conflict') {
+      problems.push(
+        `${file}:${b.i + 1}  写了 ${b.current}，但 package.json 的 packageManager 已经在管版本 → ` +
+          'action-setup 会报「Multiple versions of pnpm specified」直接退出（本地发现不了，只有 CI 红）',
+      )
+    } else {
+      problems.push(`${file}:${b.i + 1}  ${b.kind} ${b.current} → 应为 ${b.expected}`)
+    }
   }
   if (FIX) {
     const lines = read(file).split('\n')
-    for (const b of bad) {
-      lines[b.i] = lines[b.i].replace(String(b.current), String(b.expected))
+    // 倒序删，避免下标错位
+    for (const b of [...bad].sort((x, y) => y.i - x.i)) {
+      if (b.kind === 'pnpm-conflict') {
+        lines.splice(b.i, 1)
+        // 顺手删掉上面那行孤零零的 `with:`
+        if (/^\s*with:\s*$/.test(lines[b.i - 1] ?? '')) lines.splice(b.i - 1, 1)
+      } else {
+        lines[b.i] = lines[b.i].replace(String(b.current), String(b.expected))
+      }
     }
     fixes.push({ file, lines })
   }

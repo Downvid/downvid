@@ -62,8 +62,6 @@ jobs:
       # 必须显式装 pnpm：runner 上默认没有，缺了会以
       # `pnpm: command not found`（exit 127）失败——实测踩过一次
       - uses: pnpm/action-setup@v6
-        with:
-          version: 11
 
       - run: pnpm install --frozen-lockfile
 
@@ -91,8 +89,6 @@ jobs:
       # 必须显式装 pnpm：runner 上默认没有，缺了会以
       # `pnpm: command not found`（exit 127）失败——实测踩过一次
       - uses: pnpm/action-setup@v6
-        with:
-          version: 11
 
       # 需要 typescript 来加载 .ts 分类逻辑，与仓库其它校验脚本同一条路径
       - run: pnpm install --frozen-lockfile

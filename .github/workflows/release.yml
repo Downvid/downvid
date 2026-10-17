@@ -83,8 +83,6 @@ jobs:
           node-version: 22
 
       - uses: pnpm/action-setup@v6
-        with:
-          version: 11
 
       - run: pnpm install --frozen-lockfile
 
@@ -155,8 +153,6 @@ jobs:
           node-version: 22
       - name: Install pnpm
         uses: pnpm/action-setup@v6
-        with:
-          version: 11
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build
@@ -192,8 +188,6 @@ jobs:
           node-version: 22
       - name: Install pnpm
         uses: pnpm/action-setup@v6
-        with:
-          version: 11
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build
@@ -229,8 +223,6 @@ jobs:
           node-version: 22
       - name: Install pnpm
         uses: pnpm/action-setup@v6
-        with:
-          version: 11
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build
@@ -270,8 +262,6 @@ jobs:
           node-version: 22
       - name: Install pnpm
         uses: pnpm/action-setup@v6
-        with:
-          version: 11
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build
@@ -308,8 +298,6 @@ jobs:
           node-version: 22
       - name: Install pnpm
         uses: pnpm/action-setup@v6
-        with:
-          version: 11
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
       - name: Build
