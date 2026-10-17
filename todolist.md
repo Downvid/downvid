@@ -50,19 +50,15 @@
 
 ## 进行中
 
-### 后端补齐（按 UI 需要排序）
+### 后端补齐（按 UI 需要排序）—— 4/5 完成
 
-- [ ] `DepsDownload` —— 依赖下载 + 进度事件
-      → 你的 `DepsDialog` / `SettingsView` 需要
-      → 调 Go 边车 `fetch` 子命令，进度走 `deps:progress`
-- [ ] `OpenPath` / `ShowInFolder` —— 打开文件 / 在目录中显示
-      → `HistoryView`、`TaskCard` 的「打开目录」
-      → macOS `open -R`、Windows `explorer /select,`、Linux `xdg-open`
-- [ ] `SettingsGet` / `SettingsSet` —— 设置存到后端
-      → 现在你的 `DemoSettings` 在内存里，刷新即丢
-      → 需要与桌面端 `localStorage['settings']` 兼容（不能删字段）
+- [x] `DepsDownload` —— 依赖下载 + 流式进度（`internal/deps`，12 条测试）
+- [x] `OpenPath` / `ShowInFolder` / `OpenExternal` —— 打开文件/目录/链接
+      （`internal/shell`，含两个安全边界：只开存在的路径、只开 http(s)）
+- [x] `GetDiskSpace` —— 磁盘剩余空间（目录不存在时退到最近祖先）
+- [x] `SettingsGet` / `SettingsSet` —— 设置存到后端（`internal/settings`）
+      → 与 TS 版字段名/默认值逐字一致，损坏时报错并留备份
 - [ ] `FetchImage` —— 带 Referer 抓图（B 站封面防盗链）
-- [ ] `GetDiskSpace` —— 磁盘剩余空间
 
 ### UI 迁移（你负责）
 

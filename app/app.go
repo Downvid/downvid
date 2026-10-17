@@ -36,6 +36,7 @@ import (
 	"github.com/Downvid/downvid/app/internal/download"
 	"github.com/Downvid/downvid/app/internal/history"
 	"github.com/Downvid/downvid/app/internal/parse"
+	"github.com/Downvid/downvid/app/internal/settings"
 	"github.com/Downvid/downvid/app/internal/shell"
 	"github.com/Downvid/downvid/app/internal/update"
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -65,6 +66,9 @@ type App struct {
 
 	// 依赖管理器（惰性创建，见 bindings_download.go 的 depsManager）
 	deps *deps.Manager
+
+	// 设置存储（惰性创建）
+	settings *settings.Store
 
 	// 下载相关（由 bindings_download.go 使用）
 	runner           *download.Runner

@@ -27,6 +27,7 @@ import (
 	"github.com/Downvid/downvid/app/internal/deps"
 	"github.com/Downvid/downvid/app/internal/download"
 	"github.com/Downvid/downvid/app/internal/parse"
+	"github.com/Downvid/downvid/app/internal/settings"
 	"github.com/Downvid/downvid/app/internal/shell"
 )
 
@@ -566,4 +567,125 @@ func (a *App) GetDiskSpace(dir string) DiskSpaceResult {
 		return DiskSpaceResult{Error: err.Error()}
 	}
 	return DiskSpaceResult{Free: free, Total: total}
+}
+
+// ===== 用户设置 =====
+
+// GetSettings 读取用户设置。
+//
+// 文件损坏时**不静默**：返回默认值，同时通过 `settings:error` 事件告知前端
+// （附备份路径）。旧实现吞掉错误返回默认值，用户看到「设置全丢」却没有提示。
+func (a *App) GetSettings() settings.Settings {
+	s := a.settingsStore()
+	got, err := s.Load()
+	if err != nil {
+		a.emit("settings:error", map[string]any{
+			"message": err.Error(),
+			"path":    s.Path(),
+		})
+	}
+	return got
+}
+
+// UpdateSettings 合并写入设置。
+//
+// 参数是 JSON 字符串而不是结构体：Wails 生成的 TS 类型对「部分字段」表达不出来
+// （Go 的结构体字段没有 optional），而合并写入的前提就是「只传要改的字段」。
+// 前端传 `{"proxy": "http://..."}` 即可，其余字段保持不变。
+//
+// **这是唯一的写入入口**。整体覆盖会把别的组件写的字段抹掉——
+// 历史事故：在设置面板点一次「保存」，`depPaths` 就没了。
+func (a *App) UpdateSettings(patchJSON string) OpenPathResult {
+	var patch map[string]any
+	if err := json.Unmarshal([]byte(patchJSON), &patch); err != nil {
+		return OpenPathResult{Error: "设置格式无效：" + err.Error()}
+	}
+	if len(patch) == 0 {
+		return OpenPathResult{OK: true}
+	}
+
+	s := a.settingsStore()
+	_, err := s.Update(func(st *settings.Settings) {
+		applySettingsPatch(st, patch)
+	})
+	if err != nil {
+		return OpenPathResult{Error: err.Error()}
+	}
+
+	// 设置变了：清依赖探测缓存（手动路径 / 代理会影响探测结果）
+	a.depsManager().InvalidateCache()
+	return OpenPathResult{OK: true}
+}
+
+// ResetSettings 恢复默认值。
+func (a *App) ResetSettings() OpenPathResult {
+	if err := a.settingsStore().Save(settings.Defaults()); err != nil {
+		return OpenPathResult{Error: err.Error()}
+	}
+	a.depsManager().InvalidateCache()
+	return OpenPathResult{OK: true}
+}
+
+// GetSettingsPath 返回设置文件路径（排障用）。
+func (a *App) GetSettingsPath() string { return a.settingsStore().Path() }
+
+// applySettingsPatch 把 JSON patch 应用到设置上。
+//
+// 逐字段处理而不是 `json.Unmarshal` 到结构体：后者对**部分字段**会把
+// 未传的字段置零（`false` / `""`），那正是「合并写入」要避免的事。
+func applySettingsPatch(st *settings.Settings, patch map[string]any) {
+	str := func(key string, dst *string) {
+		if v, ok := patch[key].(string); ok {
+			*dst = v
+		}
+	}
+	boolean := func(key string, dst *bool) {
+		if v, ok := patch[key].(bool); ok {
+			*dst = v
+		}
+	}
+
+	str("downloadDir", &st.DownloadDir)
+	str("filenameTemplate", &st.FilenameTemplate)
+	str("preferredQuality", &st.PreferredQuality)
+	str("cookieMode", &st.CookieMode)
+	str("cookiesFile", &st.CookiesFile)
+	str("proxy", &st.Proxy)
+	str("depMirror", &st.DepMirror)
+	str("updateSource", &st.UpdateSource)
+	str("language", &st.Language)
+	boolean("autoCheckUpdate", &st.AutoCheckUpdate)
+	boolean("autoDownloadUpdate", &st.AutoDownloadUpdate)
+
+	if v, ok := patch["acceleration"].(map[string]any); ok {
+		if enabled, ok := v["enabled"].(bool); ok {
+			st.Acceleration.Enabled = &enabled
+		}
+		if n, ok := v["maxConnections"].(float64); ok {
+			st.Acceleration.MaxConnections = int(n)
+		}
+		if p, ok := v["aria2Path"].(string); ok {
+			st.Acceleration.Aria2Path = p
+		}
+	}
+
+	if v, ok := patch["depPaths"].(map[string]any); ok {
+		next := map[string]string{}
+		for k, raw := range v {
+			if s, ok := raw.(string); ok && s != "" {
+				next[k] = s
+			}
+		}
+		st.DepPaths = next
+	}
+}
+
+// settingsStore 惰性创建设置存储。
+func (a *App) settingsStore() *settings.Store {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.settings == nil {
+		a.settings = settings.NewStore(filepath.Join(a.dataDir, "settings.json"))
+	}
+	return a.settings
 }
