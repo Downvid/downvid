@@ -55,6 +55,7 @@
     "test:web": "node scripts/test-web-server.mjs",
     "test:e2e:real": "node scripts/test-e2e-real.mjs",
     "lint:boundaries": "node scripts/lint-boundaries.mjs",
+    "sync:repo": "node scripts/sync-repo-coords.mjs --check",
     "typecheck:docker": "tsc -p docker/server/tsconfig.json --noEmit",
     "build:docker:web": "vite build --config docker/web/vite.config.ts",
     "deps:build": "bash scripts/build-backend.sh",

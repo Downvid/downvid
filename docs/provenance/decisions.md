@@ -65,14 +65,30 @@
 
 **尚未验证的风险（必须在 G1 阶段收敛）**
 
-| 平台 | WebView | 风险 |
+| 平台 | WebView | 验证结果 |
 | --- | --- | --- |
-| macOS | WKWebView（系统自带） | 已实测通过 |
-| Windows | WebView2（Win10+ 预装） | 未实测；Win7/8 需装运行时（当前 DownVid 已不支持） |
-| **Linux** | **WebKitGTK 4.0/4.1** | **未实测，且本机（macOS）装不了。发行版依赖差异大，是最大风险点** |
+| macOS | WKWebView（系统自带） | ✅ 实测通过，8.2 MB，DOM 就绪 ~320 ms |
+| Windows | WebView2（Win10+ 预装） | ⚠️ 交叉编译可验证，运行时需真机 |
+| Linux | WebKitGTK 4.0 / 4.1 | ✅ **已实测通过**（见下） |
 
-Linux 若验证不通过，回退方案是用容器版（浏览器访问）覆盖该平台，并把这一点写进安装文档——
-**不要假装支持然后让用户装不上**。
+**Linux 验证详情**（Docker + `golang:1.25-bookworm`，2026-10-17 实测）：
+
+| 项 | 结果 |
+| --- | --- |
+| `libwebkit2gtk-4.1-dev` 可安装 | ✅ Debian 12 提供 `2.50.6-1~deb12u2` |
+| `libwebkit2gtk-4.0-dev` 可安装 | ✅ 同样提供（老发行版走这条） |
+| `-tags webkit2_41` 构建 | ✅ 成功，产物 **4.8 MB** |
+| 不带 tag（默认找 4.0）构建 | ✅ 成功，产物 4.8 MB |
+
+**由此确定两条硬要求**：
+
+1. **Go ≥ 1.25**。Wails v2.16.0 明确要求（`go >= 1.25.0`）；仓库当前是 `go 1.24`，
+   而 `GOTOOLCHAIN=local` 会直接拒绝。升级 Go 是选 Wails 的前置条件。
+2. **构建要带 `-tags webkit2_41`**（Ubuntu 24.04 / Debian 12 及以后），
+   老发行版用 `webkit2gtk-4.0` 时不带 tag。两个 tag 不能同时给。
+
+Linux 分发仍需在安装文档里写清运行时依赖：`libwebkit2gtk-4.1-0` + `libgtk-3-0`。
+这是 Wails「轻」的代价——它不捆绑运行时，就得依赖系统提供。
 
 ---
 

@@ -155,6 +155,10 @@ jobs:
       - name: 架构边界校验
         run: pnpm lint:boundaries
 
+      # 仓库坐标散落 20+ 处，漏改任一处 = 存量用户收不到更新（唯一一类「发新版也修不好」的故障）
+      - name: 仓库坐标一致性
+        run: pnpm sync:repo
+
       # 词条漏英文 / 占位符对不上都不会报错，只会静默显示错文案
       - name: i18n 词条校验
         run: pnpm lint:i18n
