@@ -26,7 +26,7 @@
    */
   import { untrack } from 'svelte'
   import { Slider } from 'bits-ui'
-  import { CONNECTION_STOPS, nearestConnectionStop } from '../lib/mock'
+  import { CONNECTION_STOPS, nearestConnectionStop } from '../lib/constants'
   import { t } from '../lib/i18n.svelte'
   import { drawRadiation, resizeCanvas, type RadiationState } from '../lib/radiation'
 

@@ -23,13 +23,13 @@
  */
 
 import type {
-  DemoVideo,
+  VideoInfo,
   FormatOption,
   AudioOption,
   TrackOption,
   SubtitleOption,
-  PlatformId,
-} from './mock'
+} from './types'
+import { detectPlatform, platformName, hostOf } from './url'
 
 /** 后端是否可用（浏览器里为 false） */
 export const hasBackend = (): boolean =>
@@ -125,6 +125,23 @@ type Bindings = {
   CheckUpdate(source: string): Promise<Record<string, unknown>>
   GetVersion(): Promise<string>
   GetDefaultDownloadDir(): Promise<string>
+  GetDataDir(): Promise<string>
+  GetPlatform(): Promise<string>
+  GetSettings(): Promise<Record<string, unknown>>
+  UpdateSettings(patchJSON: string): Promise<{ ok: boolean; error?: string }>
+  ResetSettings(): Promise<{ ok: boolean; error?: string }>
+  GetDiskSpace(dir: string): Promise<{ free: number; total: number; error?: string }>
+  FetchImage(url: string, referer: string): Promise<string>
+  OpenPath(path: string): Promise<{ ok: boolean; error?: string }>
+  ShowInFolder(path: string): Promise<{ ok: boolean; error?: string }>
+  OpenExternal(url: string): Promise<{ ok: boolean; error?: string }>
+  DepsSummary(): Promise<Record<string, unknown>>
+  InstallDeps(opts: Record<string, unknown>): Promise<{ ok: boolean; error?: string }>
+  CancelDepsInstall(): Promise<boolean>
+  IsInstallingDeps(): Promise<boolean>
+  OpenManagedDir(): Promise<string>
+  ClassifyError(raw: string): Promise<string>
+  Diagnostic(raw: string, ytdlp: string, runtime: string): Promise<string>
 }
 
 let cached: Bindings | null = null
@@ -149,43 +166,23 @@ export async function backend(): Promise<Bindings | null> {
   }
 }
 
-// ===== 适配：BackendVideoInfo → DemoVideo =====
+// ===== 适配：BackendVideoInfo → VideoInfo =====
 
 /**
- * 从 URL 判断平台（demo 的 DemoVideo 需要 platformId / platformName / host）。
+ * 把后端结果转成前端的形状。
  *
- * 放在前端而不是让后端给：这三个字段是**展示层**的（平台名要翻译、host 要显示），
- * 后端只该回答「这是什么视频」。
- */
-function platformOf(url: string): { id: PlatformId; name: string; host: string } {
-  const u = url.toLowerCase()
-  if (u.includes('youtube.com') || u.includes('youtu.be')) {
-    return { id: 'youtube', name: 'YouTube', host: 'youtube.com' }
-  }
-  if (u.includes('bilibili.com') || u.includes('b23.tv')) {
-    return { id: 'bilibili', name: '哔哩哔哩', host: 'bilibili.com' }
-  }
-  if (u.includes('douyin.com')) return { id: 'douyin', name: '抖音', host: 'douyin.com' }
-  if (u.includes('xiaohongshu.com')) return { id: 'xiaohongshu', name: '小红书', host: 'xiaohongshu.com' }
-  if (u.includes('instagram.com')) return { id: 'instagram', name: 'Instagram', host: 'instagram.com' }
-  if (u.includes('kuaishou.com')) return { id: 'kuaishou', name: '快手', host: 'kuaishou.com' }
-  try {
-    return { id: 'other', name: new URL(url).hostname, host: new URL(url).hostname }
-  } catch {
-    return { id: 'other', name: '其他', host: '' }
-  }
-}
-
-/**
- * 把后端结果转成 demo store 的形状。
- *
- * 两边形状**故意不合并**：demo 的 `label` 是展示文案（随语言变），
+ * 两边形状**故意不合并**：前端的 `label` 是展示文案（随语言变），
  * 后端只给 `quality`（「1080P」这种与语言无关的事实）。
  * 让后端给死文案就没法翻译了。
  */
-export function toDemoVideo(info: BackendVideoInfo, url: string): DemoVideo {
+export function toVideoInfo(info: BackendVideoInfo, url: string): VideoInfo {
   const effectiveUrl = info.webpageUrl || url
-  const platform = platformOf(effectiveUrl)
+  const platformId = detectPlatform(effectiveUrl)
+  const platform = {
+    id: platformId,
+    name: platformName(platformId),
+    host: hostOf(effectiveUrl),
+  }
 
   // formats 已经由后端去重并按「兼容性优先」排好序（AVC > HEVC > AV1），
   // 前端不再排序——两处各排一次必然漂移
@@ -244,7 +241,7 @@ export function toDemoVideo(info: BackendVideoInfo, url: string): DemoVideo {
 
 export interface ParseOutcome {
   ok: boolean
-  video?: DemoVideo
+  video?: VideoInfo
   /** 失败原因（已去掉标记，可直接显示） */
   message?: string
   /** 缺依赖时要弹「一键下载」 */
@@ -267,7 +264,7 @@ export async function parseUrl(url: string, proxy = ''): Promise<ParseOutcome> {
 
   try {
     const info = await b.Parse(url, proxy)
-    return { ok: true, video: toDemoVideo(info, url) }
+    return { ok: true, video: toVideoInfo(info, url) }
   } catch (e) {
     const raw = String((e as Error)?.message ?? e)
     const marker = errorMarker(raw)
@@ -397,4 +394,224 @@ export async function historyClear(): Promise<boolean> {
   const b = await backend()
   if (!b) return false
   return b.HistoryClear()
+}
+
+// ===== 依赖安装 =====
+
+export interface DepsInstallRequest {
+  only?: string[]
+  force?: boolean
+  mirror?: string
+}
+
+/** 下载并安装依赖（异步，进度走 onDepsProgress） */
+export async function installDeps(opts: DepsInstallRequest = {}): Promise<{ ok: boolean; message?: string }> {
+  const b = await backend()
+  if (!b) return { ok: false, message: '浏览器预览模式没有后端' }
+  try {
+    const res = await b.InstallDeps(opts as Record<string, unknown>)
+    return { ok: res.ok, message: res.error }
+  } catch (e) {
+    return { ok: false, message: String((e as Error)?.message ?? e) }
+  }
+}
+
+/** 取消依赖下载 */
+export async function cancelDeps(): Promise<boolean> {
+  const b = await backend()
+  return b ? b.CancelDepsInstall() : false
+}
+
+/** 依赖下载进度事件（与 download:progress 同一套订阅方式） */
+export async function onDepsProgress(cb: (p: unknown) => void): Promise<() => void> {
+  return subscribe('deps:progress', cb)
+}
+
+/** 依赖的「缺什么 / 哪个过旧」摘要 */
+export async function depsSummary(): Promise<Record<string, unknown> | null> {
+  const b = await backend()
+  if (!b) return null
+  try {
+    return await b.DepsSummary()
+  } catch {
+    return null
+  }
+}
+
+/** 托管目录（界面的「打开目录」用） */
+export async function managedDir(): Promise<string> {
+  const b = await backend()
+  return b ? b.OpenManagedDir() : ''
+}
+
+// ===== 设置 =====
+
+/**
+ * 读设置。
+ *
+ * 返回 `null` 表示「没有后端」或「读取失败」——调用方应退回本地默认值，
+ * 而不是把 undefined 散进界面。
+ */
+export async function loadSettings(): Promise<Record<string, unknown> | null> {
+  const b = await backend()
+  if (!b) return null
+  try {
+    return await b.GetSettings()
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 合并写入设置（只改传入的字段）。
+ *
+ * **不要用整体覆盖**：那会把别的组件写的字段抹掉——
+ * 历史事故：在设置面板点一次「保存」，`depPaths` 就没了。
+ */
+export async function saveSettings(patch: Record<string, unknown>): Promise<{ ok: boolean; message?: string }> {
+  const b = await backend()
+  if (!b) return { ok: false, message: '浏览器预览模式没有后端' }
+  try {
+    const res = await b.UpdateSettings(JSON.stringify(patch))
+    return { ok: res.ok, message: res.error }
+  } catch (e) {
+    return { ok: false, message: String((e as Error)?.message ?? e) }
+  }
+}
+
+export async function resetSettings(): Promise<{ ok: boolean; message?: string }> {
+  const b = await backend()
+  if (!b) return { ok: false, message: '浏览器预览模式没有后端' }
+  try {
+    const res = await b.ResetSettings()
+    return { ok: res.ok, message: res.error }
+  } catch (e) {
+    return { ok: false, message: String((e as Error)?.message ?? e) }
+  }
+}
+
+// ===== 系统集成 =====
+
+export async function openPath(path: string): Promise<{ ok: boolean; message?: string }> {
+  const b = await backend()
+  if (!b) return { ok: false }
+  const res = await b.OpenPath(path)
+  return { ok: res.ok, message: res.error }
+}
+
+export async function showInFolder(path: string): Promise<{ ok: boolean; message?: string }> {
+  const b = await backend()
+  if (!b) return { ok: false }
+  const res = await b.ShowInFolder(path)
+  return { ok: res.ok, message: res.error }
+}
+
+export async function openExternal(url: string): Promise<{ ok: boolean; message?: string }> {
+  const b = await backend()
+  if (!b) return { ok: false }
+  const res = await b.OpenExternal(url)
+  return { ok: res.ok, message: res.error }
+}
+
+/** 磁盘剩余空间 */
+export async function diskSpace(dir = ''): Promise<{ free: number; total: number } | null> {
+  const b = await backend()
+  if (!b) return null
+  try {
+    const res = await b.GetDiskSpace(dir)
+    if (res.error) return null
+    return { free: res.free, total: res.total }
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 抓远程图片（B 站封面防盗链）。
+ *
+ * 失败返回空串——前端渲染占位图，不弹错误框。
+ */
+export async function fetchImage(url: string, referer = ''): Promise<string> {
+  const b = await backend()
+  if (!b) return ''
+  try {
+    return await b.FetchImage(url, referer)
+  } catch {
+    return ''
+  }
+}
+
+export async function appVersion(): Promise<string> {
+  const b = await backend()
+  if (!b) return '0.0.0-preview'
+  try {
+    return await b.GetVersion()
+  } catch {
+    return '0.0.0-preview'
+  }
+}
+
+export async function defaultDownloadDir(): Promise<string> {
+  const b = await backend()
+  if (!b) return ''
+  try {
+    return await b.GetDefaultDownloadDir()
+  } catch {
+    return ''
+  }
+}
+
+// ===== 更新 =====
+
+export interface UpdateCheckResult {
+  hasUpdate: boolean
+  version?: string
+  currentVersion?: string
+  /** 各源的尝试轨迹（诊断面板用） */
+  attempts?: Array<{ source: string; ok: boolean; failure?: string; detail?: string }>
+  /** 人话版的失败说明 */
+  summary?: string
+  /** Release 正文（Markdown） */
+  notes?: string
+  /** 发布日期 */
+  date?: string
+}
+
+export async function checkUpdate(source = 'auto'): Promise<UpdateCheckResult | null> {
+  const b = await backend()
+  if (!b) return null
+  try {
+    const raw = await b.CheckUpdate(source)
+    const release = raw.release as { version?: string; releaseNotes?: string; releaseDate?: string } | null
+    return {
+      hasUpdate: Boolean(raw.hasUpdate),
+      version: release?.version,
+      currentVersion: raw.version as string | undefined,
+      attempts: raw.attempts as UpdateCheckResult['attempts'],
+      summary: raw.summary as string | undefined,
+      notes: release?.releaseNotes,
+      date: release?.releaseDate,
+    }
+  } catch {
+    return null
+  }
+}
+
+// ===== 通用事件订阅 =====
+
+/**
+ * 订阅一个广播事件。
+ *
+ * 抽成公共函数是因为 download / deps / history / update 都用同一套：
+ * `EventsOn(name, cb)` 返回 unsubscribe。**调用方必须在卸载时调用它**，
+ * 否则热重载会累积监听（旧版漏过，表现为「用久了越来越卡」）。
+ */
+async function subscribe(name: string, cb: (data: unknown) => void): Promise<() => void> {
+  try {
+    const mod = await import('../../wailsjs/runtime/runtime')
+    const off = mod.EventsOn(name, cb)
+    return typeof off === 'function' ? off : () => {}
+  } catch {
+    return () => {}
+  }
 }

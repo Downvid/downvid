@@ -2,8 +2,8 @@
  * 公告 = 作者的话，不是更新日志。
  *
  * 内容源文件：
- *   app/frontend/demo/announcements/author.zh.md
- *   app/frontend/demo/announcements/author.en.md
+ *   app/frontend/src/announcements/author.zh.md
+ *   app/frontend/src/announcements/author.en.md
  *
  * 正式应用里公告从远端读取，并且要做镜像降级——国内直连
  * raw.githubusercontent.com 经常超时/404，如果只有这一条路，用户会永远
@@ -19,7 +19,7 @@
  */
 import authorZh from '../announcements/author.zh.md?raw'
 import authorEn from '../announcements/author.en.md?raw'
-import { REPO_URL } from './mock'
+import { REPO_URL } from './constants'
 import type { Locale } from './i18n.svelte'
 
 export interface AnnouncementBlock {
@@ -101,7 +101,7 @@ const REPO_PATH = REPO_URL.replace(/^https:\/\/github\.com\//, '').replace(/\/$/
 
 function mirrorSources(locale: Locale): string[] {
   const lang = locale === 'zh-CN' ? 'zh' : 'en'
-  const path = 'app/frontend/demo/announcements/author.' + lang + '.md'
+  const path = 'app/frontend/src/announcements/author.' + lang + '.md'
   const raw = 'https://raw.githubusercontent.com/' + REPO_PATH + '/main/' + path
   return [
     raw,

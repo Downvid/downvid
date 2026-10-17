@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { CONNECTION_STOPS, nearestConnectionStop } from './mock'
+import { CONNECTION_STOPS, nearestConnectionStop } from './constants'
 
 /**
  * 加速滑块的**值域契约**。

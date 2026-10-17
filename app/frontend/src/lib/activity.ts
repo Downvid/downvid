@@ -1,8 +1,8 @@
 /**
- * 下载活动的假数据（GitHub contribution 风格）。
+ * 下载活动热力图（GitHub contribution 风格）。
  *
- * 纯函数、按天确定性生成：同一天打开两次得到同一张图，不会每次刷新都变。
- * 正式版应该从主进程的历史记录里按天聚合，这里只是演示形状。
+ * 从**真实的历史记录**按天聚合。调用方传入 `HistoryItem[]`，没有历史时
+ * 整张图是空的——这是刻意的：显示假数据会让用户以为下载过 1109 个视频。
  */
 
 export interface ActivityDay {
@@ -21,22 +21,31 @@ export interface ActivityBuild {
   last30: number
 }
 
-function hash(n: number): number {
-  const x = Math.sin(n * 127.1 + 311.7) * 43758.5453123
-  return x - Math.floor(x)
-}
-
 function startOfDay(date: Date): Date {
   const copy = new Date(date)
   copy.setHours(0, 0, 0, 0)
   return copy
 }
 
-function dayDiff(a: Date, b: Date): number {
-  return Math.round((startOfDay(a).getTime() - startOfDay(b).getTime()) / 86_400_000)
-}
+/**
+ * 按天聚合历史记录。
+ *
+ * @param history 真实下载历史（`HistoryItem[]`）
+ * @param now     用于测试注入
+ */
+export function buildActivity(
+  history: Array<{ createdAt: number }> = [],
+  now = new Date(),
+): ActivityBuild {
+  // 先按「本地日期」聚合成 { '2026-10-17': 3 } 这样的表
+  const perDay = new Map<string, number>()
+  for (const item of history) {
+    if (!Number.isFinite(item.createdAt)) continue
+    const d = startOfDay(new Date(item.createdAt))
+    const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+    perDay.set(key, (perDay.get(key) ?? 0) + 1)
+  }
 
-export function buildActivity(now = new Date()): ActivityBuild {
   const today = startOfDay(now)
   const first = new Date(today)
   first.setDate(first.getDate() - 364)
@@ -57,15 +66,8 @@ export function buildActivity(now = new Date()): ActivityBuild {
       if (date < first || date > today) {
         week.push(null)
       } else {
-        const offset = dayDiff(today, date)
-        let count = Math.floor(hash(offset) * 7)
-        // 最近 23 天保持连续，做出一个可信的 streak
-        if (offset < 23) count = Math.max(count, 1)
-        // 周末略多一点
-        const weekday = date.getDay()
-        if (weekday === 0 || weekday === 6) count += Math.floor(hash(offset + 101) * 3)
-        // 半年前偶尔断更
-        if (offset > 300 && hash(offset + 7) < 0.4) count = 0
+        const key = `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
+        const count = perDay.get(key) ?? 0
         const day = { date, count }
         week.push(day)
         days.push(day)

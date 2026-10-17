@@ -3,7 +3,7 @@
   import { app } from '../lib/store.svelte'
   import { t } from '../lib/i18n.svelte'
   import { formatEta, formatSpeed } from '../lib/format'
-  import type { TaskItem } from '../lib/mock'
+  import type { TaskItem } from '../lib/types'
 
   let { task }: { task: TaskItem } = $props()
 

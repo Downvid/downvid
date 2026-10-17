@@ -7,7 +7,6 @@
   import EffortSlider from './EffortSlider.svelte'
   import { app } from '../lib/store.svelte'
   import { t } from '../lib/i18n.svelte'
-  import { SAMPLE_URL } from '../lib/mock'
   import { formatClock } from '../lib/format'
 
   const recent = $derived(app.history.slice(0, 4))
@@ -64,11 +63,6 @@
     dragDepth = 0
   }
 
-  function useSample(): void {
-    app.url = SAMPLE_URL
-    app.parse()
-  }
-
   function openRecent(): void {
     app.setTab('history')
   }
@@ -109,10 +103,7 @@
 
       <header class="home-head">
         <span class="eyebrow">{t('hero.eyebrow')}</span>
-        <button class="link-btn" onclick={useSample}>
-          {t('hero.sample')}
-          <Icon name="arrow_forward" size={13} />
-        </button>
+
       </header>
 
       <div class="capture-block">

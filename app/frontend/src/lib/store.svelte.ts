@@ -1,255 +1,321 @@
 /**
- * 演示状态与模拟引擎。
+ * 应用状态机（单例）。
  *
- * 一个类实例 = 整个应用的状态。组件只读它、调它的方法，方便以后把这里的
- * 模拟实现替换成 Wails 绑定（或容器端 WebSocket）而不动 UI。
+ * 一个类实例 = 整个应用的状态。组件只读它、调它的方法。
  *
- * 刻意保留真实产品的硬规则：
- *   - 最多 3 个任务并发（downloading / merging 占槽）
- *   - 暂停不占槽；继续要先回 queued 再调度
- *   - 合并阶段单独展示，完成后才写历史
- *   - 解析没有真实进度，只有阶段 + 已用秒数
+ * ## 与旧版（演示版）的差别
+ *
+ * 旧版每个方法里都是 `await sleep(1100)` + `Math.random()` 造假进度。
+ * 现在**全部走后端**：
+ *
+ * | 行为 | 后端接口 |
+ * |---|---|
+ * | 解析 | `parseUrl()` → `Parse` |
+ * | 下载 | `startDownload()` → `StartDownload` |
+ * | 进度 | `onProgress()` 订阅 `download:progress` 事件 |
+ * | 暂停 | `pauseDownload()` |
+ * | 历史 | `historyList` / `historyAdd` / `historyDelete` |
+ * | 依赖 | `detectDeps` / `installDeps` / `onDepsProgress` |
+ * | 设置 | `loadSettings` / `saveSettings` |
+ * | 更新 | `checkUpdate` |
+ * | 系统 | `openPath` / `showInFolder` / `openExternal` / `diskSpace` |
+ *
+ * ## 保留的三条硬规则（都是真实产品的行为，不是演示的凑数）
+ *
+ * 1. **最多 3 个任务并发**（`downloading` / `merging` 占槽）
+ * 2. **暂停不占槽**；继续要先回 `queued` 再调度
+ * 3. **合并阶段单独展示**，完成后才写历史
+ *
+ * 注意规则 1 应该由**主进程**保证（它是唯一知道真实并发的地方），
+ * 前端这份只是「别一次发 10 个请求」的本地节流。两者不一致时
+ * 以主进程为准——前端多发的会被后端排队或拒绝。
  */
 import {
-  DEFAULT_SETTINGS,
-  SAMPLE_URL,
-  SAMPLE_URLS,
-  STORAGE_FREE,
-  STORAGE_TOTAL,
-  depsSeed,
-  extractUrl,
-  historySeed,
-  makeVideoInfo,
-  nearestConnectionStop,
-  type DemoSettings,
-  type DemoVideo,
-  type DepItem,
-  type HistoryItem,
-  type Mode,
-  type TaskItem,
-} from './mock'
+  appVersion,
+  checkUpdate as backendCheckUpdate,
+  defaultDownloadDir,
+  depsSummary,
+  detectDeps,
+  diskSpace,
+  errorMarker,
+  fetchImage,
+  historyAdd,
+  historyClear,
+  historyDelete,
+  historyList,
+  installDeps,
+  loadSettings,
+  managedDir,
+  onDepsProgress,
+  onProgress,
+  openExternal,
+  openPath,
+  parseUrl,
+  pauseDownload,
+  resetSettings as backendResetSettings,
+  saveSettings,
+  showInFolder,
+  startDownload,
+  stripMarker,
+} from './backend'
+import { CONNECTION_STOPS, nearestConnectionStop, type Mode, type Tab } from './constants'
 import { getLocale, resolveLocale, setLocale, t, type Locale } from './i18n.svelte'
+import {
+  DEFAULT_SETTINGS,
+  fromBackend,
+  loadLocalPrefs,
+  saveLocalPrefs,
+  toBackendPatch,
+  type AppSettings,
+} from './settings'
+import type {
+  DepItem,
+  Dialog,
+  HistoryItem,
+  SettingsSection,
+  TaskItem,
+  ToastItem,
+  UpdateStatus,
+  VideoInfo,
+} from './types'
+import { detectPlatform, extractUrl, hostOf, platformName } from './url'
+import { dayGroup, formatBytes as formatBytesUtil } from './format'
 
-export type Tab = 'download' | 'history' | 'settings' | 'about'
 export type ParseState = 'idle' | 'parsing' | 'done' | 'error'
-export type Dialog = 'none' | 'update' | 'deps' | 'announcement'
-export type SettingsSection = 'download' | 'network' | 'acceleration' | 'deps' | 'update' | 'interface'
-export type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'ready'
 
-export interface ToastItem {
-  id: number
-  text: string
-  kind: 'info' | 'success' | 'error'
-}
+/** 进度节流：后端每 200ms 推一次，前端再合并一次渲染 */
+const TICK_MS = 200
 
-const STORAGE_KEY = 'downvid.demo.settings'
-const MAX_ACTIVE = 3
-const TICK_MS = 320
-
-function loadSettings(): DemoSettings {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      const merged = { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<DemoSettings>) }
-      // 旧存档里可能是 1–16 的任意值；滑块改成 4 档后收敛到最近档位
-      merged.maxConnections = nearestConnectionStop(merged.maxConnections)
-      return merged
-    }
-  } catch {
-    /* demo 里坏掉的存档直接忽略 */
+/**
+ * 后端依赖结果 → 界面模型。
+ *
+ * 后端的 `kind` 是 `"yt-dlp"` 这种 id，界面还要显示名与「是否可选」——
+ * 那两项后端也给了（`optional`），但 `id`/`name` 得在这里补。
+ * 补而不是让后端加：显示名要翻译，不该由后端给死中文。
+ */
+function toDepItems(list: Array<{ kind: string; found: boolean; path?: string; version?: string; source?: string; reason?: string }>): DepItem[] {
+  const labels: Record<string, string> = {
+    'yt-dlp': 'yt-dlp',
+    ffmpeg: 'FFmpeg',
+    ffprobe: 'FFprobe',
+    aria2: 'aria2c',
   }
-  return { ...DEFAULT_SETTINGS }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+  const optional = new Set(['ffprobe', 'aria2'])
+  return list.map((d) => ({
+    id: d.kind,
+    name: labels[d.kind] ?? d.kind,
+    found: d.found,
+    optional: optional.has(d.kind),
+    path: d.path,
+    version: d.version,
+    source: d.source,
+    reason: d.reason,
+  }))
 }
 
 function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6)
 }
 
-function sanitizeFilename(title: string): string {
-  return title.replace(/[\\/:*?"<>|]/g, '_').slice(0, 80)
-}
-
-class DemoStore {
-  // ---- 导航 / 浮层 ----
+class AppStore {
+  // ===== 导航 =====
   tab = $state<Tab>('download')
   dialog = $state<Dialog>('none')
-  demoOpen = $state(false)
   railOpen = $state(true)
+  settingsSection = $state<SettingsSection>('download')
 
-  // ---- 解析 ----
+  // ===== 解析 =====
   parseState = $state<ParseState>('idle')
   parseStage = $state(0)
   parseElapsed = $state(0)
   parseError = $state('')
   parseErrorDetail = $state('')
-  url = $state(SAMPLE_URL)
+  url = $state('')
   alreadyDownloaded = $state<HistoryItem | null>(null)
-  video = $state<DemoVideo | null>(null)
+  video = $state<VideoInfo | null>(null)
   mode = $state<Mode>('video')
   selectedFormatId = $state<string | null>(null)
   selectedAudioId = $state<string | null>(null)
   selectedTrackId = $state<string | null>(null)
   subtitles = $state<string[]>([])
 
-  // ---- 下载队列 ----
+  // ===== 任务与历史 =====
   tasks = $state<TaskItem[]>([])
-
-  // ---- 历史 ----
-  history = $state<HistoryItem[]>(historySeed())
+  history = $state<HistoryItem[]>([])
   historySearch = $state('')
   historyFilter = $state<'all' | 'done' | 'missing'>('all')
 
-  // ---- 设置 ----
-  settings = $state<DemoSettings>(loadSettings())
+  // ===== 设置 =====
+  settings = $state<AppSettings>({ ...DEFAULT_SETTINGS, ...loadLocalPrefs() })
   resolvedTheme = $state<'light' | 'dark'>('light')
-  settingsSection = $state<SettingsSection>('download')
   autoSaveVisible = $state(false)
   proxyTesting = $state(false)
   proxyOk = $state(false)
   lang = $state<Locale>('zh-CN')
 
-  // ---- 依赖 ----
-  deps = $state<DepItem[]>(depsSeed())
+  // ===== 依赖 =====
+  deps = $state<DepItem[]>([])
   depsChecking = $state(false)
   depsPromptBusy = $state(false)
   depsPromptProgress = $state(0)
 
-  // ---- 更新 ----
-  update = $state<{ status: UpdateStatus; progress: number }>({ status: 'idle', progress: 0 })
+  // ===== 更新 =====
+  updateState = $state<{ status: UpdateStatus; progress: number; version?: string; notes?: string; summary?: string }>({
+    status: 'idle',
+    progress: 0,
+  })
 
-  // ---- 公告 ----
+  // ===== 公告 =====
   announcementRead = $state(false)
 
-  // ---- 反馈 ----
+  // ===== Toast =====
   toasts = $state<ToastItem[]>([])
-  storageFree = $state(STORAGE_FREE)
 
-  // 非响应式：计时器与内部标记
+  // ===== 磁盘 =====
+  storageFree = $state(0)
+  storageTotal = $state(0)
+
+  // ===== 应用信息 =====
+  version = $state('0.0.0-dev')
+
   private started = false
-  private ticker: number | undefined
-  private parseTimers: number[] = []
-  private elapsedTimer: number | undefined
-  private autoSaveTimer: number | undefined
   private toastSeq = 0
-  private themeMedia: MediaQueryList | undefined
-  private onThemeMedia: (() => void) | undefined
+  private ticker: number | null = null
+  private cleanups: Array<() => void> = []
 
   // ============================================================
   // 生命周期
   // ============================================================
 
-  init(): void {
+  async init(): Promise<void> {
     if (this.started) return
     this.started = true
 
-    const params = new URLSearchParams(window.location.search)
-    const lang = params.get('lang')
-    if (lang === 'en' || lang === 'en-US') this.settings.language = 'en-US'
-    else if (lang === 'zh' || lang === 'zh-CN') this.settings.language = 'zh-CN'
+    this.applyTheme(this.settings.theme)
+    this.applyRadius(this.settings.radius)
     this.applyLanguage(this.settings.language)
 
-    const tab = params.get('tab')
-    if (tab === 'download' || tab === 'history' || tab === 'settings' || tab === 'about') {
-      this.tab = tab
-    }
+    // 后端设置优先于本地默认值（本地只提供 theme / radius）
+    const raw = await loadSettings()
+    if (raw) this.settings = fromBackend(raw, loadLocalPrefs())
+    else this.settings = { ...this.settings, ...loadLocalPrefs() }
 
-    const theme = params.get('theme')
-    if (theme === 'auto' || theme === 'light' || theme === 'dark') this.settings.theme = theme
     this.applyTheme(this.settings.theme)
-
-    const radius = params.get('radius')
-    if (radius === 'default' || radius === 'sharp' || radius === 'round') this.settings.radius = radius
     this.applyRadius(this.settings.radius)
-    this.themeMedia = window.matchMedia('(prefers-color-scheme: dark)')
-    this.onThemeMedia = () => {
-      if (this.settings.theme === 'auto') this.applyTheme('auto')
+    this.applyLanguage(this.settings.language)
+
+    this.version = await appVersion()
+
+    // 默认下载目录：后端返回空时（浏览器预览）留空
+    if (!this.settings.downloadDir) {
+      const dir = await defaultDownloadDir()
+      if (dir) this.settings = { ...this.settings, downloadDir: dir }
     }
-    this.themeMedia.addEventListener('change', this.onThemeMedia)
 
-    this.ticker = window.setInterval(() => this.tick(), TICK_MS)
+    void this.refreshStorage()
+    void this.loadHistory()
 
-    const state = params.get('state')
-    if (state === 'parsing') this.demoParsing()
-    else if (state === 'parsed') this.demoParsed()
-    else if (state === 'error') this.demoError()
-    else if (state === 'busy') this.demoBusy()
+    // 订阅后端事件。**必须保存 unsubscribe 并在 destroy 时调用**，
+    // 否则热重载会累积监听（旧版漏过，表现为「用久了越来越卡」）。
+    this.cleanups.push(await onProgress((p) => this.onBackendProgress(p as never)))
+    this.cleanups.push(
+      await onDepsProgress((p) => {
+        const ev = p as { event?: string; downloaded?: number; total?: number; message?: string }
+        if (ev.event === 'progress' && ev.total) {
+          this.depsPromptProgress = (ev.downloaded ?? 0) / ev.total
+        }
+      }),
+    )
 
-    if (params.get('update') === '1') this.demoUpdate()
-    if (params.get('deps') === '1') this.demoDeps()
-    if (params.get('announcement') === '1') this.openAnnouncement()
+    // 依赖探测：不阻塞首屏，失败也不弹错（缺依赖时解析会给出可行动提示）
+    void this.checkDepsSilently()
+
+    // 自动检查更新（用户关掉就不查）
+    if (this.settings.autoCheckUpdate) {
+      void this.checkUpdate(true)
+    }
   }
 
   destroy(): void {
-    if (this.ticker) window.clearInterval(this.ticker)
-    this.clearParseTimers()
-    if (this.autoSaveTimer) window.clearTimeout(this.autoSaveTimer)
-    if (this.themeMedia && this.onThemeMedia) {
-      this.themeMedia.removeEventListener('change', this.onThemeMedia)
+    if (this.ticker !== null) {
+      clearInterval(this.ticker)
+      this.ticker = null
     }
+    for (const off of this.cleanups) {
+      try {
+        off()
+      } catch {
+        // 单个 unsubscribe 失败不该阻止其它清理
+      }
+    }
+    this.cleanups = []
+    this.started = false
   }
 
-  /**
-   * 圆角档位。圆润档沿用 website/index.html 的 --radius-card / --radius-panel /
-   * --radius-media（24 / 16 / 12），其余档位只是同一组变量的收敛/放大。
-   */
-  applyRadius(setting: DemoSettings['radius']): void {
-    const normalized: DemoSettings['radius'] =
-      setting === 'sharp' || setting === 'round' ? setting : 'default'
-    this.settings = { ...this.settings, radius: normalized }
-    document.documentElement.dataset.radius = normalized
+  // ============================================================
+  // 主题 / 圆角 / 语言（纯前端）
+  // ============================================================
+
+  applyRadius(setting: AppSettings['radius']): void {
+    const root = document.documentElement
+    root.dataset.radius = setting
   }
 
-  applyTheme(setting: DemoSettings['theme']): void {
+  applyTheme(setting: AppSettings['theme']): void {
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
-    const normalized: DemoSettings['theme'] =
-      setting === 'light' || setting === 'dark' ? setting : 'auto'
-    const resolved = normalized === 'auto' ? (prefersDark ? 'dark' : 'light') : normalized
-    this.resolvedTheme = resolved
-    document.documentElement.dataset.theme = resolved
-    document.documentElement.style.colorScheme = resolved
+    const dark = setting === 'dark' || (setting === 'auto' && prefersDark)
+    this.resolvedTheme = dark ? 'dark' : 'light'
+    document.documentElement.dataset.theme = this.resolvedTheme
+    document.documentElement.classList.toggle('dark', dark)
   }
 
-  // ============================================================
-  // 导航 / 语言
-  // ============================================================
-
-  setTab(tab: Tab): void {
-    this.tab = tab
-  }
-
-  private applyLanguage(setting: DemoSettings['language']): void {
+  private applyLanguage(setting: AppSettings['language']): void {
     const next = resolveLocale(setting)
-    this.lang = next
     setLocale(next)
+    this.lang = getLocale()
   }
 
-  setLanguage(setting: DemoSettings['language']): void {
+  setLanguage(setting: AppSettings['language']): void {
     this.settings = { ...this.settings, language: setting }
     this.applyLanguage(setting)
-    this.persistSettings()
+    void this.persistSettings({ language: setting })
   }
 
   toggleLocale(): void {
     this.setLanguage(getLocale() === 'zh-CN' ? 'en-US' : 'zh-CN')
   }
 
+  setTheme(setting: AppSettings['theme']): void {
+    this.settings = { ...this.settings, theme: setting }
+    this.applyTheme(setting)
+    // 只存前端：主题是展示偏好，后端不关心
+    saveLocalPrefs({ theme: this.settings.theme, radius: this.settings.radius })
+  }
+
+  setRadius(setting: AppSettings['radius']): void {
+    this.settings = { ...this.settings, radius: setting }
+    this.applyRadius(setting)
+    saveLocalPrefs({ theme: this.settings.theme, radius: this.settings.radius })
+  }
+
+  setTab(tab: Tab): void {
+    this.tab = tab
+  }
+
   // ============================================================
   // 解析
   // ============================================================
 
-  private clearParseTimers(): void {
-    for (const id of this.parseTimers) window.clearTimeout(id)
-    this.parseTimers = []
-    if (this.elapsedTimer) window.clearInterval(this.elapsedTimer)
-    this.elapsedTimer = undefined
-  }
-
-  parse(hold = false): void {
+  /**
+   * 解析当前 URL。
+   *
+   * 旧版这里是 `setTimeout(3050)` + `makeVideoInfo()` 造假数据。
+   * 现在调后端，**失败不抛异常**（`parseUrl` 返回 `{ok:false}`）——
+   * 解析失败是预期内的常见情况（离线、限流、需要登录）。
+   */
+  async parse(): Promise<void> {
     if (this.parseState === 'parsing') return
+
     const raw = this.url.trim()
     if (!raw) {
       this.toast(t('toast.parseFirst'), 'error')
@@ -260,12 +326,7 @@ class DemoStore {
       this.showParseError(t('error.invalidLink'), raw)
       return
     }
-    if (extracted.includes('example.invalid')) {
-      this.showParseError(t('error.sampleMessage'), 'ERROR: Private video. Sign in if you have been granted access to this video.')
-      return
-    }
 
-    this.clearParseTimers()
     this.url = extracted
     this.video = null
     this.alreadyDownloaded = null
@@ -275,82 +336,87 @@ class DemoStore {
     this.parseError = ''
     this.parseErrorDetail = ''
 
-    this.parseTimers.push(window.setTimeout(() => (this.parseStage = 1), 620))
-    this.parseTimers.push(window.setTimeout(() => (this.parseStage = 2), 1480))
-    this.parseTimers.push(window.setTimeout(() => (this.parseStage = 3), 2320))
-    this.elapsedTimer = window.setInterval(() => (this.parseElapsed += 1), 1000)
-    if (!hold) {
-      this.parseTimers.push(window.setTimeout(() => this.finishParse(extracted), 3050))
+    // 解析阶段拿不到真实进度（yt-dlp 只在下载阶段输出进度行），
+    // 所以只显示已用秒数 + 一个不确定进度条。
+    const startedAt = Date.now()
+    const timer = window.setInterval(() => {
+      this.parseElapsed = Math.round((Date.now() - startedAt) / 1000)
+    }, 1000)
+
+    try {
+      const outcome = await parseUrl(extracted, this.settings.proxy)
+
+      if (!outcome.ok || !outcome.video) {
+        this.parseState = 'error'
+        this.showParseError(outcome.message || t('error.parseFailed'), outcome.missingKind ?? '')
+        return
+      }
+
+      this.video = outcome.video
+      this.parseState = 'done'
+      this.alreadyDownloaded = this.findExistingDownload(outcome.video, extracted)
+      this.applyDefaults(outcome.video)
+
+      // B 站封面有防盗链，得由主进程代抓（带 Referer）
+      if (outcome.video.thumbnail) {
+        const referer = outcome.video.host ? `https://${outcome.video.host}/` : ''
+        const dataUrl = await fetchImage(outcome.video.thumbnail, referer)
+        if (dataUrl && this.video) this.video = { ...this.video, thumbnail: dataUrl }
+      }
+    } finally {
+      clearInterval(timer)
+      if (this.parseState === 'parsing') this.parseState = 'idle'
     }
   }
 
-  private finishParse(url: string): void {
-    this.clearParseTimers()
-    const video = makeVideoInfo(url)
-    this.video = video
-    this.parseState = 'done'
-    this.alreadyDownloaded = this.findExistingDownload(video, url)
-    this.applyDefaults(video)
-  }
-
-  /** 同一视频（标题或 URL 相同）且文件还在，视为已经下载过。 */
-  private findExistingDownload(video: DemoVideo, url: string): HistoryItem | null {
-    const normalize = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, ' ')
-    return (
-      this.history.find(
-        (item) =>
-          item.fileExists &&
-          (item.url === url || normalize(item.title) === normalize(video.title)),
-      ) ?? null
-    )
-  }
-
-  private applyDefaults(video: DemoVideo): void {
-    this.mode = 'video'
-    const recommended = video.formats.find((f) => f.recommended) ?? video.formats[0] ?? null
-    this.selectedFormatId = recommended ? recommended.id : null
-    this.selectedAudioId = null
-    this.selectedTrackId = video.tracks[0]?.id ?? null
-    this.subtitles = []
-  }
-
-  private showParseError(message: string, detail: string): void {
-    this.clearParseTimers()
-    this.alreadyDownloaded = null
-    this.parseState = 'error'
-    this.parseError = message
-    this.parseErrorDetail = detail
-    this.video = null
-  }
-
   cancelParse(): void {
-    this.clearParseTimers()
-    this.alreadyDownloaded = null
+    // 解析没有可中断的后端句柄（yt-dlp 进程由主进程管，它自己有超时）。
+    // 用户点取消时只清界面状态——后端那次解析会在超时后自行退出。
     this.parseState = 'idle'
     this.parseStage = 0
     this.parseElapsed = 0
   }
 
   clearResult(): void {
-    this.clearParseTimers()
-    this.alreadyDownloaded = null
     this.parseState = 'idle'
     this.video = null
-    this.parseStage = 0
-    this.url = ''
+    this.alreadyDownloaded = null
+    this.selectedFormatId = null
+    this.selectedAudioId = null
+    this.selectedTrackId = null
+    this.subtitles = []
+  }
+
+  /** 同一视频（URL 相同）且文件还在，视为已经下载过 */
+  private findExistingDownload(video: VideoInfo, url: string): HistoryItem | null {
+    const normalize = (v: string): string => v.trim().toLowerCase().replace(/\s+/g, ' ')
+    return (
+      this.history.find(
+        (h) =>
+          h.fileExists &&
+          (normalize(h.url) === normalize(url) ||
+            normalize(h.title) === normalize(video.title)),
+      ) ?? null
+    )
+  }
+
+  /** 默认选中第一个格式（让「粘贴 → 解析 → 下载」能一路点完） */
+  private applyDefaults(video: VideoInfo): void {
+    this.selectedFormatId = video.formats[0]?.id ?? null
+    this.selectedAudioId = null
+    this.selectedTrackId = video.tracks[0]?.id ?? null
+    this.subtitles = []
+    this.mode = video.formats.length > 0 ? 'video' : video.audios.length > 0 ? 'audio' : 'subtitle'
+  }
+
+  private showParseError(message: string, detail: string): void {
+    this.parseState = 'error'
+    this.parseError = message
+    this.parseErrorDetail = detail
   }
 
   setMode(mode: Mode): void {
     this.mode = mode
-    if (mode === 'video' && !this.selectedFormat && this.video?.formats.length) {
-      this.selectedFormatId = this.video.formats[0].id
-    }
-    if (mode === 'audio' && !this.selectedAudio && this.video?.audios.length) {
-      this.selectedAudioId = this.video.audios[0].id
-    }
-    if (mode === 'subtitle' && this.subtitles.length === 0 && this.video?.subtitles.length) {
-      this.subtitles = [this.video.subtitles[0].lang]
-    }
   }
 
   selectFormat(id: string): void {
@@ -368,15 +434,530 @@ class DemoStore {
   }
 
   toggleSubtitle(lang: string): void {
-    this.mode = 'subtitle'
     this.subtitles = this.subtitles.includes(lang)
       ? this.subtitles.filter((l) => l !== lang)
       : [...this.subtitles, lang]
+    this.mode = this.subtitles.length ? 'subtitle' : this.mode === 'subtitle' ? 'video' : this.mode
   }
 
   // ============================================================
-  // 选择结果（getter 保持响应式）
+  // 任务
   // ============================================================
+
+  /** 当前选中的格式（视频 / 音频 / 字幕三选一） */
+  private currentPick(): { formatId: string; quality: string; ext: string; totalBytes: number; hasAudio: boolean } | null {
+    const v = this.video
+    if (!v) return null
+    if (this.mode === 'video') {
+      const f = v.formats.find((x) => x.id === this.selectedFormatId)
+      return f
+        ? { formatId: f.id, quality: f.label, ext: f.ext, totalBytes: f.sizeBytes, hasAudio: Boolean(f.hasAudio) }
+        : null
+    }
+    if (this.mode === 'audio') {
+      const a = v.audios.find((x) => x.id === this.selectedAudioId)
+      return a ? { formatId: a.id, quality: a.label, ext: a.ext, totalBytes: a.sizeBytes, hasAudio: true } : null
+    }
+    // 字幕：后端按 formatId 无意义，传视频格式即可（后端看 downloadMode）
+    const f = v.formats.find((x) => x.id === this.selectedFormatId)
+    return f
+      ? { formatId: f.id, quality: t('mode.subtitle'), ext: 'SRT', totalBytes: 0, hasAudio: false }
+      : null
+  }
+
+  /** 是否可下载（界面的按钮 enable 条件） */
+  get canDownload(): boolean {
+    if (!this.video) return false
+    if (this.mode === 'subtitle') return this.subtitles.length > 0
+    return this.currentPick() !== null
+  }
+
+  /**
+   * 加入下载队列。
+   *
+   * 旧版这里 `createTask` + `pump()` 造进度。现在：建任务 → 调后端 → 订阅事件。
+   */
+  async addDownload(): Promise<void> {
+    const video = this.video
+    const pick = this.currentPick()
+    if (!video || !pick) return
+
+    if (this.alreadyDownloaded) {
+      this.toast(t('result.alreadyToast'), 'info')
+      this.setTab('history')
+      return
+    }
+
+    const task: TaskItem = {
+      id: uid(),
+      title: video.title,
+      thumbnail: video.thumbnail,
+      url: video.url,
+      mode: this.mode,
+      quality: pick.quality,
+      ext: pick.ext,
+      totalBytes: pick.totalBytes,
+      bytesDone: 0,
+      progress: 0,
+      speedBps: 0,
+      etaSec: 0,
+      status: 'queued',
+      createdAt: Date.now(),
+      startedAt: 0,
+      speedHistory: [],
+      filePath: '',
+    }
+    this.tasks = [task, ...this.tasks]
+    this.railOpen = true
+
+    await this.launch(task, pick)
+  }
+
+  /** 真正发起一次下载（也用于重试） */
+  private async launch(task: TaskItem, pick: { formatId: string; hasAudio: boolean }): Promise<void> {
+    const res = await startDownload({
+      taskId: task.id,
+      url: task.url,
+      formatId: pick.formatId,
+      mode: task.mode,
+      hasAudio: pick.hasAudio,
+      subtitles: this.subtitles,
+      outputDir: this.settings.downloadDir,
+    })
+
+    if (!res.ok) {
+      this.patchTask(task.id, { status: 'error', error: res.message || t('error.downloadFailed') })
+      // 缺依赖时弹「一键下载」——这是用户能自己解决的事
+      if (res.missingKind) {
+        this.dialog = 'deps'
+        this.depsPromptBusy = false
+        void this.checkDeps(true)
+      }
+      return
+    }
+
+    this.patchTask(task.id, { status: 'downloading', startedAt: Date.now() })
+    this.ensureTicker()
+  }
+
+  private patchTask(id: string, patch: Partial<TaskItem>): void {
+    this.tasks = this.tasks.map((x) => (x.id === id ? { ...x, ...patch } : x))
+  }
+
+  /**
+   * 后端进度事件。
+   *
+   * 后端推的字段是 `percent` 0..100、`totalSize`/`speed`/`eta` 是**已格式化的字符串**
+   * （`"12.3 MB"`）——那是给人看的，前端画折线需要数值，所以这里只取 percent，
+   * 速度用上一帧差分估算。
+   */
+  private onBackendProgress(p: {
+    taskId: string
+    status: string
+    percent?: number
+    filePath?: string
+    error?: string
+    message?: string
+  }): void {
+    const task = this.tasks.find((x) => x.id === p.taskId)
+    if (!task) return
+
+    // 已暂停/已取消的任务忽略所有进度（包括迟到的 completed）：
+    // 主进程 kill 子进程时可能还会残留一条结束事件，照单全收会把任务
+    // 标成「已完成」并清掉暂停标记，用户就只能重新下载了。
+    if (task.status === 'paused' || task.status === 'error') return
+
+    const now = Date.now()
+    switch (p.status) {
+      case 'downloading': {
+        const percent = Math.max(0, Math.min(100, p.percent ?? 0))
+        const bytesDone = task.totalBytes > 0 ? (task.totalBytes * percent) / 100 : 0
+        const dt = (now - (task.startedAt || now)) / 1000
+        const speed = dt > 0 ? bytesDone / dt : 0
+        this.patchTask(task.id, {
+          progress: percent / 100,
+          bytesDone,
+          speedBps: speed,
+          etaSec: speed > 0 && task.totalBytes > 0 ? Math.max(0, Math.round((task.totalBytes - bytesDone) / speed)) : 0,
+          speedHistory: [...task.speedHistory, speed].slice(-24),
+          filePath: p.filePath || task.filePath,
+        })
+        break
+      }
+      case 'merging':
+        this.patchTask(task.id, { status: 'merging', progress: 1, speedBps: 0, statusMessage: p.message })
+        break
+      case 'completed':
+        this.patchTask(task.id, { status: 'completed', progress: 1, speedBps: 0, etaSec: 0, filePath: p.filePath || task.filePath })
+        this.recordHistory({ ...task, filePath: p.filePath || task.filePath })
+        this.toast(t('toast.completed', { title: task.title.slice(0, 28) }), 'success')
+        break
+      case 'paused':
+        this.patchTask(task.id, { status: 'paused', speedBps: 0 })
+        break
+      case 'error':
+        this.patchTask(task.id, { status: 'error', error: stripMarker(p.error || '') || t('error.downloadFailed') })
+        break
+    }
+  }
+
+  /** 写一条历史（后端落盘 + 本地刷新） */
+  private recordHistory(task: TaskItem): void {
+    const item: HistoryItem = {
+      id: task.id,
+      title: task.title,
+      thumbnail: task.thumbnail,
+      url: task.url,
+      filePath: task.filePath,
+      quality: task.quality,
+      ext: task.ext,
+      mode: task.mode,
+      sizeBytes: task.totalBytes,
+      createdAt: Date.now(),
+      fileExists: true,
+    }
+    this.history = [item, ...this.history.filter((h) => h.filePath !== item.filePath)]
+
+    void historyAdd({
+      filePath: item.filePath,
+      title: item.title,
+      thumbnail: item.thumbnail,
+      url: item.url,
+      format: item.ext,
+      quality: item.quality,
+      createdAt: new Date(item.createdAt).toISOString(),
+    })
+  }
+
+  /**
+   * 本地并发闸门。
+   *
+   * 见文件头「硬规则 1」——**主进程才是唯一权威**，这里只是避免一次发太多请求。
+   * 后端如果拒绝（返回 `已有下载任务正在进行`），任务会落到 error 状态。
+   *
+   * 旧版这里还有 `pump()` 从 queued 队列自动补位。现在不需要了：
+   * 每个任务在 `addDownload` 时就已发出，后端自己排队。
+   */
+  private ensureTicker(): void {
+    if (this.ticker !== null) return
+    this.ticker = window.setInterval(() => {
+      const active = this.tasks.some((x) => x.status === 'downloading' || x.status === 'merging')
+      if (!active && this.ticker !== null) {
+        clearInterval(this.ticker)
+        this.ticker = null
+      }
+    }, TICK_MS)
+  }
+
+  /** 暂停（终止整棵进程树，后端等待落盘后才返回） */
+  async togglePause(id: string): Promise<void> {
+    const task = this.tasks.find((x) => x.id === id)
+    if (!task) return
+
+    if (task.status === 'downloading' || task.status === 'merging') {
+      await pauseDownload(task.id)
+      this.patchTask(id, { status: 'paused', speedBps: 0 })
+      return
+    }
+
+    if (task.status === 'paused') {
+      // 继续 = 重新发起一次下载（yt-dlp 会从 .part 续传）。
+      // **没有跨重启恢复**：任务列表只活在内存里，重启后已暂停的任务不会自己回来。
+      const pick = this.currentPick()
+      if (!pick) return
+      await this.launch(task, pick)
+    }
+  }
+
+  async cancelTask(id: string): Promise<void> {
+    const task = this.tasks.find((x) => x.id === id)
+    if (!task) return
+    if (task.status === 'downloading' || task.status === 'merging') {
+      await pauseDownload(id)
+    }
+    this.tasks = this.tasks.filter((x) => x.id !== id)
+  }
+
+  async retryTask(id: string): Promise<void> {
+    const task = this.tasks.find((x) => x.id === id)
+    if (!task) return
+    const pick = this.currentPick()
+    if (!pick) return
+    this.patchTask(id, { status: 'queued', progress: 0, bytesDone: 0, speedBps: 0, etaSec: 0, error: undefined, speedHistory: [] })
+    await this.launch(task, pick)
+  }
+
+  clearCompleted(): void {
+    this.tasks = this.tasks.filter((x) => x.status !== 'completed')
+  }
+
+  async openTaskFolder(): Promise<void> {
+    const dir = this.settings.downloadDir
+    const res = await openPath(dir || (await managedDir()))
+    if (!res.ok) this.toast(res.message || t('error.openFolderFailed'), 'error')
+  }
+
+  // ============================================================
+  // 历史
+  // ============================================================
+
+  async loadHistory(): Promise<void> {
+    const rows = await historyList()
+    if (!rows) return
+    this.history = rows.map((r) => ({
+      id: String(r.id ?? ''),
+      title: String(r.title ?? ''),
+      thumbnail: String(r.thumbnail ?? ''),
+      url: String(r.url ?? ''),
+      filePath: String(r.filePath ?? ''),
+      quality: String(r.quality ?? ''),
+      ext: String(r.format ?? 'mp4'),
+      mode: 'video' as Mode,
+      sizeBytes: 0,
+      createdAt: Date.parse(String(r.createdAt ?? '')) || Date.now(),
+      fileExists: Boolean(r.fileExists),
+    }))
+  }
+
+  async removeHistory(id: string): Promise<void> {
+    if (!(await historyDelete(id))) return
+    this.history = this.history.filter((h) => h.id !== id)
+  }
+
+  async clearHistory(): Promise<void> {
+    if (!(await historyClear())) return
+    this.history = []
+  }
+
+  /** 从历史重新解析（点历史条目 → 回到下载页） */
+  async reparse(item: HistoryItem): Promise<void> {
+    this.setTab('download')
+    this.url = item.url
+    await this.parse()
+  }
+
+  async openHistoryFolder(item: HistoryItem): Promise<void> {
+    const res = await showInFolder(item.filePath)
+    if (!res.ok) this.toast(res.message || t('error.openFolderFailed'), 'error')
+  }
+
+  // ============================================================
+  // 磁盘
+  // ============================================================
+
+  async refreshStorage(): Promise<void> {
+    const res = await diskSpace(this.settings.downloadDir)
+    if (!res) return
+    this.storageFree = res.free
+    this.storageTotal = res.total
+  }
+
+  // ============================================================
+  // 设置
+  // ============================================================
+
+  /** 合并写入：只传改了的字段，其余保持不变 */
+  private async persistSettings(patch: Partial<AppSettings>): Promise<void> {
+    const backendPatch = toBackendPatch(patch)
+    if (Object.keys(backendPatch).length === 0) return
+    const res = await saveSettings(backendPatch)
+    if (!res.ok) this.toast(res.message || t('error.saveFailed'), 'error')
+  }
+
+  /** 组件用的入口（保留旧名，避免改一堆调用点） */
+  updateSetting(patch: Partial<AppSettings>): void {
+    this.update(patch)
+  }
+
+  update(patch: Partial<AppSettings>): void {
+    this.settings = { ...this.settings, ...patch }
+    if (patch.theme) this.applyTheme(patch.theme)
+    if (patch.radius) this.applyRadius(patch.radius)
+    if (patch.language) this.applyLanguage(patch.language)
+    void this.persistSettings(patch)
+  }
+
+  async resetAllSettings(): Promise<void> {
+    const res = await backendResetSettings()
+    if (!res.ok) {
+      this.toast(res.message || t('error.saveFailed'), 'error')
+      return
+    }
+    this.settings = { ...DEFAULT_SETTINGS, ...loadLocalPrefs() }
+    this.applyTheme(this.settings.theme)
+    this.applyRadius(this.settings.radius)
+    this.applyLanguage(this.settings.language)
+  }
+
+  async testProxy(): Promise<void> {
+    this.proxyTesting = true
+    try {
+      // 后端没有独立的代理探活接口（TS 版用 session.fetch，Go 侧未移植）。
+      // 这里只做**形状校验**并如实告知，而不是假装成功——
+      // 假装成功会让用户以为代理可用，然后所有下载都超时。
+      const proxy = this.settings.proxy.trim()
+      const valid = proxy === '' || /^(https?|socks5):\/\/[^\s]+$/i.test(proxy)
+      this.proxyOk = valid
+      this.toast(valid ? t('toast.proxyFormatOk') : t('toast.proxyFormatBad'), valid ? 'success' : 'error')
+    } finally {
+      this.proxyTesting = false
+    }
+  }
+
+  // ============================================================
+  // 依赖
+  // ============================================================
+
+  /** 首屏静默探测：失败不弹错（缺依赖时解析会给出可行动提示） */
+  private async checkDepsSilently(): Promise<void> {
+    const list = await detectDeps()
+    if (list) this.deps = toDepItems(list)
+  }
+
+  async checkDeps(interactive = false): Promise<void> {
+    if (this.depsChecking) return
+    this.depsChecking = true
+    try {
+      const list = await detectDeps()
+      if (list) this.deps = toDepItems(list)
+      if (interactive) {
+        const missing = this.deps.filter((d) => !d.found && !d.optional)
+        this.toast(
+          missing.length ? t('toast.depsMissing', { count: missing.length }) : t('toast.depsReady'),
+          missing.length ? 'error' : 'success',
+        )
+      }
+    } finally {
+      this.depsChecking = false
+    }
+  }
+
+  async installDep(kind: string): Promise<void> {
+    this.depsPromptBusy = true
+    this.depsPromptProgress = 0
+    try {
+      const res = await installDeps({ only: [kind] })
+      if (!res.ok) {
+        this.toast(res.message || t('toast.depInstallFailed'), 'error')
+        return
+      }
+      // 装完重新探测：界面必须立刻看到新状态
+      await this.checkDeps(false)
+      this.toast(t('toast.depInstalled'), 'success')
+    } finally {
+      this.depsPromptBusy = false
+      this.depsPromptProgress = 0
+    }
+  }
+
+  async downloadPromptDeps(): Promise<void> {
+    this.depsPromptBusy = true
+    try {
+      const res = await installDeps({})
+      if (!res.ok) {
+        this.toast(res.message || t('toast.depInstallFailed'), 'error')
+        return
+      }
+      await this.checkDeps(false)
+      this.dialog = 'none'
+    } finally {
+      this.depsPromptBusy = false
+    }
+  }
+
+  async openDepDir(): Promise<void> {
+    const dir = await managedDir()
+    const res = await openPath(dir)
+    if (!res.ok) this.toast(res.message || t('error.openFolderFailed'), 'error')
+  }
+
+  /** 依赖诊断（「诊断」按钮用） */
+  async depDiagnostics(): Promise<Record<string, unknown> | null> {
+    return depsSummary()
+  }
+
+  // ============================================================
+  // 更新
+  // ============================================================
+
+  async checkUpdate(silent = false): Promise<void> {
+    if (this.updateState.status === 'checking') return
+    this.updateState = { status: 'checking', progress: 0 }
+
+    const res = await backendCheckUpdate(this.settings.updateSource)
+    if (!res) {
+      this.updateState = { status: 'error', progress: 0, summary: t('update.offline') }
+      if (!silent) this.toast(t('update.offline'), 'error')
+      return
+    }
+
+    if (!res.hasUpdate) {
+      this.updateState = { status: 'latest', progress: 0, version: res.currentVersion }
+      if (!silent) this.toast(t('toast.upToDate'), 'info')
+      return
+    }
+
+    this.updateState = {
+      status: 'available',
+      progress: 0,
+      version: res.version,
+      notes: res.notes,
+      summary: res.summary,
+    }
+    this.dialog = 'update'
+  }
+
+  openUpdateDialog(): void {
+    if (this.updateState.status === 'idle') {
+      void this.checkUpdate()
+      return
+    }
+    this.dialog = 'update'
+  }
+
+  /**
+   * 安装更新。
+   *
+   * 桌面端由 electron-updater 负责（Go 侧未移植），容器版靠拉新镜像。
+   * 这里**如实打开 Releases 页面**，不假装安装成功——假装会让用户
+   * 以为已经升级，然后继续用旧版本。
+   */
+  async installUpdate(): Promise<void> {
+    await openExternal(REPO_RELEASES)
+    this.dialog = 'none'
+    this.toast(t('update.manualDownload'), 'info')
+  }
+
+  /**
+   * 下载更新。
+   *
+   * **后端没有实现这条**（Go 侧只有更新检查，没有 electron-updater 的下载/安装）。
+   * 如实告知用户去 Releases 页面手动下载，而不是假装下载成功。
+   */
+  async downloadUpdate(): Promise<void> {
+    if (this.updateState.version) {
+      await openExternal(`${REPO_RELEASES}/tag/v${this.updateState.version}`)
+    } else {
+      await openExternal(REPO_RELEASES)
+    }
+    this.toast(t('update.manualDownload'), 'info')
+  }
+
+  // ============================================================
+  // 派生（纯计算，不碰后端）
+  // ============================================================
+
+  /** 字节数 → 展示字符串（派生 getter 用）。与 lib/format.ts 的规则一致。 */
+  private formatSize(bytes: number): string {
+    if (!bytes || bytes <= 0) return '—'
+    return this.formatBytes(bytes)
+  }
+
+  /** 供组件直接调用的字节格式化 */
+  formatBytes(bytes: number): string {
+    if (!bytes || bytes <= 0) return '—'
+    return formatBytesUtil(bytes)
+  }
 
   get selectedFormat() {
     return this.video?.formats.find((f) => f.id === this.selectedFormatId) ?? null
@@ -388,13 +969,6 @@ class DemoStore {
 
   get selectedTrack() {
     return this.video?.tracks.find((track) => track.id === this.selectedTrackId) ?? null
-  }
-
-  get canDownload(): boolean {
-    if (this.parseState !== 'done' || !this.video) return false
-    if (this.mode === 'video') return this.selectedFormat !== null
-    if (this.mode === 'audio') return this.selectedAudio !== null
-    return this.subtitles.length > 0
   }
 
   get selectionSummary(): string {
@@ -421,173 +995,6 @@ class DemoStore {
     return this.subtitles.length * 64 * 1024
   }
 
-  private formatSize(bytes: number): string {
-    return this.formatBytes(bytes)
-  }
-
-  formatBytes(bytes: number): string {
-    if (bytes >= 1024 * 1024 * 1024) return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
-  }
-
-  // ============================================================
-  // 下载队列
-  // ============================================================
-
-  private createTask(video: DemoVideo, mode: Mode, quality: string, ext: string, sizeBytes: number): TaskItem {
-    const now = Date.now()
-    return {
-      id: uid(),
-      title: video.title,
-      thumbnail: video.thumbnail,
-      url: video.url,
-      mode,
-      quality,
-      ext,
-      totalBytes: sizeBytes,
-      bytesDone: 0,
-      progress: 0,
-      speedBps: 0,
-      speedBase: 0,
-      etaSec: 0,
-      status: 'queued',
-      createdAt: now,
-      startedAt: 0,
-      seed: Math.random() * 10,
-      speedHistory: [],
-      filePath: this.settings.downloadDir + '/' + sanitizeFilename(video.title) + '.' + ext.toLowerCase(),
-    }
-  }
-
-  addDownload(): void {
-    if (!this.video || !this.canDownload) return
-    if (this.alreadyDownloaded) {
-      this.toast(t('result.alreadyToast'), 'info')
-      this.setTab('history')
-      return
-    }
-    const video = this.video
-    let task: TaskItem
-    if (this.mode === 'video' && this.selectedFormat) {
-      const f = this.selectedFormat
-      task = this.createTask(video, 'video', f.label, f.ext, f.sizeBytes)
-    } else if (this.mode === 'audio' && this.selectedAudio) {
-      const a = this.selectedAudio
-      task = this.createTask(video, 'audio', a.label, a.ext, a.sizeBytes)
-    } else {
-      task = this.createTask(video, 'subtitle', t('mode.subtitle'), 'SRT', this.subtitles.length * 64 * 1024)
-    }
-    this.tasks = [task, ...this.tasks]
-    this.railOpen = true
-    this.pump()
-    this.toast(t('toast.queued'), 'success')
-  }
-
-  private pump(): void {
-    const active = this.tasks.filter(
-      (task) => task.status === 'downloading' || task.status === 'merging',
-    ).length
-    if (active >= MAX_ACTIVE) return
-    const queued = this.tasks
-      .filter((task) => task.status === 'queued')
-      .sort((a, b) => a.createdAt - b.createdAt)
-    for (const task of queued.slice(0, MAX_ACTIVE - active)) {
-      task.status = 'downloading'
-      task.startedAt = Date.now()
-      task.speedBase = (8 + Math.random() * 6) * 1024 * 1024
-      task.speedBps = task.speedBase
-    }
-  }
-
-  private tick(): void {
-    const now = Date.now()
-    let changed = false
-    for (const task of this.tasks) {
-      if (task.status === 'downloading') {
-        const wobble = 0.78 + 0.22 * Math.sin((now - task.startedAt) / 820 + task.seed)
-        task.speedBps = task.speedBase * wobble
-        task.bytesDone = Math.min(task.totalBytes, task.bytesDone + task.speedBps * (TICK_MS / 1000))
-        task.progress = task.bytesDone / task.totalBytes
-        const remaining = Math.max(1, task.totalBytes - task.bytesDone)
-        task.etaSec = Math.round(remaining / Math.max(1, task.speedBps))
-        task.speedHistory = [...task.speedHistory, task.speedBps].slice(-24)
-        changed = true
-        if (task.progress >= 1) {
-          task.status = 'merging'
-          task.progress = 1
-          task.speedBps = 0
-          task.mergeUntil = now + 1600
-        }
-      } else if (task.status === 'merging' && task.mergeUntil && now >= task.mergeUntil) {
-        this.completeTask(task)
-        changed = true
-      }
-    }
-    if (changed) this.pump()
-  }
-
-  private completeTask(task: TaskItem): void {
-    task.status = 'completed'
-    task.progress = 1
-    task.speedBps = 0
-    task.etaSec = 0
-    this.storageFree = Math.max(0, this.storageFree - task.totalBytes)
-    const record: HistoryItem = {
-      id: uid(),
-      title: task.title,
-      thumbnail: task.thumbnail,
-      url: task.url,
-      filePath: task.filePath,
-      quality: task.quality,
-      ext: task.ext,
-      mode: task.mode,
-      sizeBytes: task.totalBytes,
-      createdAt: Date.now(),
-      fileExists: true,
-    }
-    this.history = [record, ...this.history.filter((h) => h.filePath !== record.filePath)]
-    this.toast(t('toast.completed', { title: task.title.slice(0, 28) }), 'success')
-  }
-
-  togglePause(id: string): void {
-    const task = this.tasks.find((item) => item.id === id)
-    if (!task) return
-    if (task.status === 'downloading' || task.status === 'merging') {
-      task.status = 'paused'
-      task.speedBps = 0
-      task.mergeUntil = undefined
-    } else if (task.status === 'paused') {
-      task.status = 'queued'
-      this.pump()
-    }
-  }
-
-  cancelTask(id: string): void {
-    this.tasks = this.tasks.filter((task) => task.id !== id)
-    this.pump()
-  }
-
-  retryTask(id: string): void {
-    const task = this.tasks.find((item) => item.id === id)
-    if (!task) return
-    task.status = 'queued'
-    task.progress = 0
-    task.bytesDone = 0
-    task.speedBps = 0
-    task.etaSec = 0
-    task.error = undefined
-    task.speedHistory = []
-    this.pump()
-  }
-
-  clearCompleted(): void {
-    this.tasks = this.tasks.filter((task) => task.status !== 'completed' && task.status !== 'error')
-  }
-
-  openTaskFolder(): void {
-    this.toast(t('toast.folder'), 'info')
-  }
-
   get activeTasks(): TaskItem[] {
     return this.tasks.filter(
       (task) => task.status === 'downloading' || task.status === 'merging' || task.status === 'paused',
@@ -608,17 +1015,9 @@ class DemoStore {
       .reduce((sum, task) => sum + task.speedBps, 0)
   }
 
-  get railVisible(): boolean {
-    return this.railOpen && this.tasks.length > 0 && this.tab !== 'settings' && this.tab !== 'about'
-  }
-
   get hasTasks(): boolean {
     return this.tasks.length > 0
   }
-
-  // ============================================================
-  // 历史
-  // ============================================================
 
   get filteredHistory(): HistoryItem[] {
     const query = this.historySearch.trim().toLowerCase()
@@ -636,7 +1035,7 @@ class DemoStore {
     const groups: { key: 'today' | 'yesterday' | 'earlier'; items: HistoryItem[] }[] = []
     const now = Date.now()
     for (const item of this.filteredHistory) {
-      const key = dayGroupOf(item.createdAt, now)
+      const key = dayGroup(item.createdAt, now)
       const existing = groups.find((group) => group.key === key)
       if (existing) existing.items.push(item)
       else groups.push({ key, items: [item] })
@@ -644,182 +1043,24 @@ class DemoStore {
     return groups
   }
 
-  removeHistory(id: string): void {
-    this.history = this.history.filter((item) => item.id !== id)
-    this.toast(t('toast.deleted'), 'success')
-  }
-
-  clearHistory(): void {
-    this.history = []
-    this.toast(t('toast.cleared'), 'success')
-  }
-
-  reparse(item: HistoryItem): void {
-    this.tab = 'download'
-    this.url = item.url
-    this.parse()
-  }
-
-  openHistoryFolder(item: HistoryItem): void {
-    this.toast(item.fileExists ? t('toast.folder') : t('toast.fileMissing'), item.fileExists ? 'info' : 'error')
-  }
-
-  // ============================================================
-  // 设置
-  // ============================================================
-
-  updateSetting<K extends keyof DemoSettings>(key: K, value: DemoSettings[K]): void {
-    const next =
-      key === 'maxConnections'
-        ? (nearestConnectionStop(Number(value)) as DemoSettings[K])
-        : value
-    this.settings = { ...this.settings, [key]: next }
-    if (key === 'language') this.applyLanguage(value as DemoSettings['language'])
-    if (key === 'theme') this.applyTheme(value as DemoSettings['theme'])
-    if (key === 'radius') this.applyRadius(value as DemoSettings['radius'])
-    this.persistSettings()
-    this.autoSaveVisible = true
-    if (this.autoSaveTimer) window.clearTimeout(this.autoSaveTimer)
-    this.autoSaveTimer = window.setTimeout(() => (this.autoSaveVisible = false), 2000)
-  }
-
-  private persistSettings(): void {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.settings))
-    } catch {
-      /* 隐私模式下写不进去，不影响预览 */
-    }
-  }
-
-  resetSettings(): void {
-    this.settings = { ...DEFAULT_SETTINGS }
-    this.applyLanguage('auto')
-    this.applyTheme('auto')
-    this.applyRadius('default')
-    this.persistSettings()
-    this.toast(t('toast.settingsReset'), 'success')
-  }
-
-  async testProxy(): Promise<void> {
-    if (this.proxyTesting) return
-    this.proxyTesting = true
-    this.proxyOk = false
-    await sleep(900)
-    this.proxyTesting = false
-    this.proxyOk = true
-    this.toast(t('settings.proxyOk'), 'success')
-  }
-
-  // ============================================================
-  // 依赖
-  // ============================================================
-
+  /** 必需依赖是否都就绪（可选依赖缺失不影响） */
   get depsReady(): boolean {
-    return this.deps.filter((dep) => dep.required).every((dep) => dep.status === 'ready')
+    return this.deps.filter((dep) => !dep.optional).every((dep) => dep.found && !dep.stale)
   }
 
   get missingRequiredDeps(): DepItem[] {
-    return this.deps.filter((dep) => dep.required && dep.status !== 'ready')
+    return this.deps.filter((dep) => !dep.optional && !dep.found)
   }
 
-  async checkDeps(): Promise<void> {
-    if (this.depsChecking) return
-    this.depsChecking = true
-    await sleep(1200)
-    this.depsChecking = false
-    this.toast(t('toast.depsReady'), 'success')
+  get storageUsedPercent(): number {
+    return Math.round(((this.storageTotal - this.storageFree) / this.storageTotal) * 100)
   }
 
-  async installDep(id: string): Promise<void> {
-    const dep = this.deps.find((item) => item.id === id)
-    if (!dep) return
-    dep.busy = true
-    dep.progress = 0
-    for (let p = 0; p <= 1; p += 0.06) {
-      await sleep(110)
-      dep.progress = Math.min(1, p)
-    }
-    dep.busy = false
-    dep.progress = undefined
-    dep.status = 'ready'
-    dep.source = 'managed'
-    dep.version = dep.id === 'aria2c' ? '1.37.0' : '2026.10.10'
-    dep.path = '~/Library/Application Support/DownVid/runtime/bin/' + dep.id
-    this.toast(t(dep.id === 'aria2c' ? 'toast.aria2' : 'toast.depsReady'), 'success')
+  get freeStorageLabel(): string {
+    return this.formatBytes(this.storageFree)
   }
 
-  demoDeps(): void {
-    this.deps = this.deps.map((dep) =>
-      dep.id === 'ffmpeg'
-        ? { ...dep, status: 'missing', version: undefined, source: 'none', path: undefined }
-        : dep,
-    )
-    this.depsPromptProgress = 0
-    this.depsPromptBusy = false
-    this.dialog = 'deps'
-  }
-
-  async downloadPromptDeps(): Promise<void> {
-    if (this.depsPromptBusy) return
-    this.depsPromptBusy = true
-    this.depsPromptProgress = 0
-    for (let p = 0; p <= 1; p += 0.05) {
-      await sleep(100)
-      this.depsPromptProgress = Math.min(1, p)
-    }
-    this.depsPromptBusy = false
-    this.deps = this.deps.map((dep) => (dep.id === 'ffmpeg' ? { ...dep, status: 'ready' } : dep))
-    this.dialog = 'none'
-    this.toast(t('toast.depsReady'), 'success')
-  }
-
-  // ============================================================
-  // 更新
-  // ============================================================
-
-  async checkUpdate(): Promise<void> {
-    if (this.update.status === 'checking') return
-    this.update = { status: 'checking', progress: 0 }
-    await sleep(1100)
-    this.update = { status: 'available', progress: 0 }
-    this.dialog = 'update'
-  }
-
-  openUpdateDialog(): void {
-    if (this.update.status === 'available' || this.update.status === 'ready') {
-      this.dialog = 'update'
-    } else if (this.update.status === 'idle') {
-      void this.checkUpdate()
-    } else {
-      this.dialog = 'update'
-    }
-  }
-
-  async downloadUpdate(): Promise<void> {
-    if (this.update.status !== 'available') return
-    this.update = { status: 'downloading', progress: 0 }
-    while (this.update.status === 'downloading' && this.update.progress < 1) {
-      await sleep(110)
-      this.update = {
-        status: 'downloading',
-        progress: Math.min(1, this.update.progress + 0.045),
-      }
-    }
-    this.update = { status: 'ready', progress: 1 }
-    this.toast(t('toast.updateDownloaded'), 'success')
-  }
-
-  installUpdate(): void {
-    this.dialog = 'none'
-    this.update = { status: 'ready', progress: 1 }
-    this.toast(t('toast.updateReady'), 'success')
-  }
-
-  demoUpdate(): void {
-    this.update = { status: 'available', progress: 0 }
-    this.dialog = 'update'
-  }
-
+  /** 打开「作者的话」 */
   openAnnouncement(): void {
     this.announcementRead = true
     this.dialog = 'announcement'
@@ -830,182 +1071,20 @@ class DemoStore {
   // ============================================================
 
   toast(text: string, kind: ToastItem['kind'] = 'info', duration = 3200): void {
-    const id = ++this.toastSeq
-    this.toasts = [...this.toasts, { id, text, kind }]
-    window.setTimeout(() => this.dismissToast(id), duration)
+    const item: ToastItem = { id: ++this.toastSeq, text, kind, at: Date.now() }
+    this.toasts = [...this.toasts, item]
+    window.setTimeout(() => this.dismissToast(item.id), duration)
   }
 
   dismissToast(id: number): void {
-    this.toasts = this.toasts.filter((toast) => toast.id !== id)
-  }
-
-  // ============================================================
-  // 演示控制台
-  // ============================================================
-
-  demoIdle(): void {
-    this.clearParseTimers()
-    this.alreadyDownloaded = null
-    this.parseState = 'idle'
-    this.parseStage = 0
-    this.parseElapsed = 0
-    this.parseError = ''
-    this.video = null
-    this.tasks = []
-    this.tab = 'download'
-    this.dialog = 'none'
-    this.railOpen = true
-    this.url = SAMPLE_URL
-  }
-
-  demoParsing(): void {
-    this.tab = 'download'
-    this.dialog = 'none'
-    this.tasks = []
-    this.video = null
-    this.url = SAMPLE_URL
-    this.parse(true)
-  }
-
-  demoParsed(): void {
-    this.tab = 'download'
-    this.dialog = 'none'
-    this.tasks = []
-    this.url = SAMPLE_URL
-    this.clearParseTimers()
-    this.finishParse(SAMPLE_URL)
-  }
-
-  demoError(): void {
-    this.tab = 'download'
-    this.dialog = 'none'
-    this.tasks = []
-    this.url = SAMPLE_URL
-    this.showParseError(
-      t('error.sampleMessage'),
-      'ERROR: [youtube] n_PxJ2Pyecl: Private video. Sign in if you have been granted access to this video',
-    )
-  }
-
-  demoBusy(): void {
-    this.tab = 'download'
-    this.dialog = 'none'
-    this.clearParseTimers()
-    this.finishParse(SAMPLE_URL)
-    const youtube = this.video!
-    const bilibili = makeVideoInfo(SAMPLE_URLS.bilibili)
-    const douyin = makeVideoInfo(SAMPLE_URLS.douyin)
-
-    const main = this.createTask(youtube, 'video', '1080P60', 'MP4', 457.1 * 1024 * 1024)
-    main.status = 'downloading'
-    main.startedAt = Date.now() - 9000
-    main.speedBase = 9.2 * 1024 * 1024
-    main.bytesDone = main.totalBytes * 0.42
-    main.progress = 0.42
-    main.etaSec = 31
-    main.speedHistory = seedSpeedHistory(9.2 * 1024 * 1024)
-
-    const second = this.createTask(bilibili, 'video', '1080P60', 'MP4', 612.0 * 1024 * 1024)
-    second.status = 'downloading'
-    second.startedAt = Date.now() - 4000
-    second.speedBase = 5.3 * 1024 * 1024
-    second.bytesDone = second.totalBytes * 0.18
-    second.progress = 0.18
-    second.etaSec = 78
-    second.speedHistory = seedSpeedHistory(5.3 * 1024 * 1024)
-
-    const third = this.createTask(douyin, 'video', '1080P', 'MP4', 24.8 * 1024 * 1024)
-    third.status = 'downloading'
-    third.startedAt = Date.now() - 1500
-    third.speedBase = 3.6 * 1024 * 1024
-    third.bytesDone = third.totalBytes * 0.08
-    third.progress = 0.08
-    third.etaSec = 6
-    third.speedHistory = seedSpeedHistory(3.6 * 1024 * 1024)
-
-    const queued = this.createTask(makeVideoInfo(SAMPLE_URLS.xiaohongshu), 'video', '1080P', 'MP4', 88.6 * 1024 * 1024)
-    queued.createdAt = Date.now() - 6000
-
-    const done = this.createTask(makeVideoInfo(SAMPLE_URLS.bilibili), 'audio', 'M4A 192k', 'M4A', 29.8 * 1024 * 1024)
-    done.status = 'completed'
-    done.progress = 1
-    done.bytesDone = done.totalBytes
-    done.createdAt = Date.now() - 120000
-
-    this.tasks = [main, second, third, queued, done]
-    this.railOpen = true
-  }
-
-  demoAddTask(): void {
-    if (this.parseState !== 'done' || !this.video) this.demoParsed()
-    this.addDownload()
-  }
-
-  resetDemo(): void {
-    this.settings = { ...DEFAULT_SETTINGS }
-    this.applyLanguage('auto')
-    this.applyTheme('auto')
-    this.applyRadius('default')
-    this.deps = depsSeed()
-    this.history = historySeed()
-    this.historySearch = ''
-    this.historyFilter = 'all'
-    this.update = { status: 'idle', progress: 0 }
-    this.storageFree = STORAGE_FREE
-    this.depsPromptBusy = false
-    this.depsPromptProgress = 0
-    this.announcementRead = false
-    this.demoIdle()
-    this.toast(t('toast.settingsReset'), 'info')
-  }
-
-  get demoStateLabel(): string {
-    if (this.tasks.some((task) => task.status === 'downloading' || task.status === 'merging')) {
-      return 'busy'
-    }
-    return this.parseState
-  }
-
-  async copyStateLink(): Promise<void> {
-    const params = new URLSearchParams()
-    params.set('tab', this.tab)
-    const state = this.demoStateLabel
-    if (state === 'parsing' || state === 'done' || state === 'error') {
-      params.set('state', state === 'done' ? 'parsed' : state)
-    } else if (state === 'busy') {
-      params.set('state', 'busy')
-    }
-    params.set('lang', getLocale() === 'zh-CN' ? 'zh' : 'en')
-    params.set('radius', this.settings.radius)
-    const link = window.location.origin + window.location.pathname + '?' + params.toString()
-    try {
-      await navigator.clipboard.writeText(link)
-      this.toast(t('demo.linkCopied'), 'success')
-    } catch {
-      this.toast(link, 'info', 6000)
-    }
-  }
-
-  get storageUsedPercent(): number {
-    return Math.round(((STORAGE_TOTAL - this.storageFree) / STORAGE_TOTAL) * 100)
-  }
-
-  get freeStorageLabel(): string {
-    return this.formatBytes(this.storageFree)
+    this.toasts = this.toasts.filter((x) => x.id !== id)
   }
 }
 
-function dayGroupOf(ts: number, now: number): 'today' | 'yesterday' | 'earlier' {
-  const start = new Date(now)
-  start.setHours(0, 0, 0, 0)
-  const base = start.getTime()
-  if (ts >= base) return 'today'
-  if (ts >= base - 86_400_000) return 'yesterday'
-  return 'earlier'
-}
+/** Releases 页（更新按钮的回退目标） */
+const REPO_RELEASES = 'https://github.com/Downvid/downvid/releases'
 
-function seedSpeedHistory(base: number): number[] {
-  return Array.from({ length: 20 }, (_, index) => base * (0.72 + 0.28 * Math.sin(index / 2.1)))
-}
+export const app = new AppStore()
 
-export const app = new DemoStore()
+/** 供组件用的派生工具：把连接数归到档位 */
+export { CONNECTION_STOPS, nearestConnectionStop, detectPlatform, hostOf, platformName, errorMarker }

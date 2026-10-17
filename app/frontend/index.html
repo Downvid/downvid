@@ -3,7 +3,32 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 主题色：移动端浏览器地址栏跟随。两套值在 app.css 的 @theme 里有对应 -->
+    <meta name="theme-color" content="#fff8f4" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1a1410" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" type="image/png" href="./src/assets/logo.png" />
     <title>DownVid</title>
+
+    <!--
+      字体**异步**加载：这是本地桌面应用，离线或网络受限时必须立刻可用。
+      用 media="print" + onload 切回 all 是标准的非阻塞写法——
+      直接 <link rel="stylesheet"> 会让首屏等一个可能永远到不了的请求。
+      连不上就退回系统字体栈（app.css 的 --font-* 里有 fallback）。
+    -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&display=swap"
+    />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;600;700&display=swap"
+      />
+    </noscript>
   </head>
   <body>
     <div id="app"></div>

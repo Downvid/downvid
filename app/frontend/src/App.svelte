@@ -8,7 +8,6 @@
   import AboutView from './components/AboutView.svelte'
   import TransferRail from './components/TransferRail.svelte'
   import ToastStack from './components/ToastStack.svelte'
-  import DemoPanel from './components/DemoPanel.svelte'
   import UpdateDialog from './components/UpdateDialog.svelte'
   import DepsDialog from './components/DepsDialog.svelte'
   import AnnouncementDialog from './components/AnnouncementDialog.svelte'
@@ -29,7 +28,6 @@
     function onkeydown(event: KeyboardEvent): void {
       if (event.key === 'Escape') {
         if (app.dialog !== 'none') app.dialog = 'none'
-        else if (app.demoOpen) app.demoOpen = false
         return
       }
 
@@ -55,7 +53,7 @@
 <div class="shell">
   <TopBar />
 
-  <div class="workarea" class:with-rail={app.railVisible}>
+  <div class="workarea" class:with-rail={app.railOpen}>
     <main class="main">
       <div class="main-scroll scroll">
         {#key app.tab}
@@ -74,7 +72,7 @@
       </div>
     </main>
 
-    {#if app.railVisible}
+    {#if app.railOpen}
       <TransferRail />
     {/if}
   </div>
@@ -91,4 +89,3 @@
 {/if}
 
 <ToastStack />
-<DemoPanel />

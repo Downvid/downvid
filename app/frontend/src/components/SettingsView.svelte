@@ -11,8 +11,8 @@
   import { app } from '../lib/store.svelte'
   import type { SettingsSection } from '../lib/store.svelte'
   import { t } from '../lib/i18n.svelte'
-  import { APP_VERSION, NEXT_VERSION } from '../lib/mock'
-  import type { DemoSettings } from '../lib/mock'
+  import { APP_VERSION } from '../lib/constants'
+  import type { AppSettings as DemoSettings } from '../lib/settings'
 
   const navItems: { id: SettingsSection; key: string; icon: string }[] = [
     { id: 'download', key: 'settings.navDownload', icon: 'download' },
@@ -40,11 +40,11 @@
     { value: 'website', key: 'settings.sourceWebsite' },
   ] as const
 
-  // demo 词表没有独立的语言名键，先复用演示控制台的中英文名
+  // 语言名用各自语言书写（中文叫「中文」、英文叫「English」），不翻译
   const languageOptions = [
     { value: 'auto', key: 'settings.languageAuto' },
-    { value: 'zh-CN', key: 'demo.zh' },
-    { value: 'en-US', key: 'demo.en' },
+    { value: 'zh-CN', key: 'lang.zh' },
+    { value: 'en-US', key: 'lang.en' },
   ] as const
 
   const themeOptions = [
@@ -496,7 +496,7 @@
               <span>{t('settings.checking')}</span>
             {:else if app.update.status === 'available'}
               <Icon name="new_releases" size={15} />
-              <span>{t('about.updateAvailable', { version: NEXT_VERSION })}</span>
+              <span>{t('about.updateAvailable', { version: app.updateState.version ?? '' })}</span>
             {:else}
               <Icon name="refresh" size={15} />
               <span>{t('settings.checkNow')}</span>

@@ -70,18 +70,6 @@
       >EN</button>
     </div>
 
-    <button
-      class="demo-trigger"
-      class:is-open={app.demoOpen}
-      aria-expanded={app.demoOpen}
-      aria-controls="demo-panel"
-      title={t('demo.open')}
-      onclick={() => (app.demoOpen = !app.demoOpen)}
-    >
-      <span class="demo-trigger-dot"></span>
-      <span>DEMO</span>
-    </button>
-
   </div>
 </header>
 
@@ -209,40 +197,6 @@
     background: var(--accent);
   }
 
-  .demo-trigger {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: 24px;
-    padding: 0 8px;
-    border-radius: 999px;
-    border: 1px solid var(--rule);
-    background: transparent;
-    color: var(--color-on-surface-variant);
-    font-family: var(--font-code);
-    font-size: 8.5px;
-    font-weight: 700;
-    letter-spacing: 0.13em;
-    transition:
-      border-color var(--dur-base) var(--ease-out),
-      color var(--dur-base) var(--ease-out),
-      background-color var(--dur-base) var(--ease-out);
-  }
-  .demo-trigger:hover {
-    border-color: color-mix(in oklab, var(--accent-deep) 45%, transparent);
-    color: var(--accent-deep);
-  }
-  .demo-trigger.is-open {
-    border-color: color-mix(in oklab, var(--accent-deep) 55%, transparent);
-    background: var(--accent-wash);
-    color: var(--accent-deep);
-  }
-  .demo-trigger-dot {
-    width: 4px;
-    height: 4px;
-    border-radius: 50%;
-    background: var(--accent);
-  }
 
   .mobile-nav {
     display: none;

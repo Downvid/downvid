@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { defineConfig } from 'vite'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import tailwindcss from '@tailwindcss/vite'
@@ -13,8 +14,13 @@ import tailwindcss from '@tailwindcss/vite'
 //
 // 用相对路径后，index.html 与 CSS 里的引用都是 `./assets/...`，
 // 三种加载方式（Wails / file:// / 子路径）都能工作。
+// 版本号从 package.json 注入，前端不再手写一份。
+// 手写的版本号会在发版时忘记改，而「关于页显示旧版本」是最常见的报障信息。
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
+
 export default defineConfig({
   base: './',
+  define: { __APP_VERSION__: JSON.stringify(pkg.version) },
   plugins: [svelte(), tailwindcss()],
   build: { outDir: 'dist', emptyOutDir: true },
 })

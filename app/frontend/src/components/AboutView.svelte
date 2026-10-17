@@ -9,7 +9,7 @@
   import typescriptIcon from '../assets/tech/typescript.svg'
   import { app } from '../lib/store.svelte'
   import { t } from '../lib/i18n.svelte'
-  import { APP_VERSION, NEXT_VERSION, REPO_URL, WEBSITE_URL } from '../lib/mock'
+  import { APP_VERSION, REPO_URL, WEBSITE_URL } from '../lib/constants'
   // 邮箱与 mailto 拼装沿用应用现有的唯一来源，避免在演示里复制一份
   import { CONTACT_EMAIL, contactMailto } from '../../../../shared/app'
 
@@ -28,7 +28,7 @@
     checking
       ? t('settings.checking')
       : available
-        ? t('about.updateAvailable', { version: NEXT_VERSION })
+        ? t('about.updateAvailable', { version: app.updateState.version ?? '' })
         : t('about.update'),
   )
 
@@ -133,7 +133,7 @@
         <img class="identity-logo" src={logo} alt="DownVid" />
         <div class="identity-id">
           <span class="identity-name">DownVid</span>
-          <span class="identity-meta num">{t('about.version')} v{APP_VERSION}</span>
+          <span class="identity-meta num">{t('about.version')} v{app.version || APP_VERSION}</span>
         </div>
       </div>
 

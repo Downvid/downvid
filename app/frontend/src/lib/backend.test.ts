@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { toDemoVideo, errorMarker, stripMarker, type BackendVideoInfo } from './backend'
+import { toVideoInfo, errorMarker, stripMarker, type BackendVideoInfo } from './backend'
 
 /**
- * 后端适配层：把 Go 的 `parse.VideoInfo` 转成 demo store 的形状。
+ * 后端适配层：把 Go 的 `parse.VideoInfo` 转成前端 store 的形状。
  *
  * 这一层的 bug **不会报错**——字段名对不上时前端只是显示空白
  * （`formats` 为空 → 格式选择器一片空），所以必须有测试钉住。
@@ -32,9 +32,9 @@ function sampleInfo(): BackendVideoInfo {
   }
 }
 
-describe('toDemoVideo', () => {
+describe('toVideoInfo', () => {
   it('格式列表按后端顺序保留，首个标为推荐', () => {
-    const v = toDemoVideo(sampleInfo(), 'https://www.youtube.com/watch?v=jNQXAC9IVRw')
+    const v = toVideoInfo(sampleInfo(), 'https://www.youtube.com/watch?v=jNQXAC9IVRw')
     expect(v.formats).toHaveLength(2)
     expect(v.formats[0].id).toBe('18')
     // 后端已按「兼容性优先」排序，前端不再排——两处各排一次必然漂移
@@ -43,18 +43,21 @@ describe('toDemoVideo', () => {
   })
 
   it('平台信息从 URL 推断（后端不该给展示文案）', () => {
-    const v = toDemoVideo(sampleInfo(), 'https://www.youtube.com/watch?v=x')
+    const v = toVideoInfo(sampleInfo(), 'https://www.youtube.com/watch?v=x')
     expect(v.platformId).toBe('youtube')
     expect(v.host).toBe('youtube.com')
 
-    const b = toDemoVideo({ ...sampleInfo(), webpageUrl: 'https://www.bilibili.com/video/BV1' }, '')
+    const b = toVideoInfo({ ...sampleInfo(), webpageUrl: 'https://www.bilibili.com/video/BV1' }, '')
     expect(b.platformId).toBe('bilibili')
   })
 
-  it('未知站点归到 other，且用 hostname 作显示名', () => {
-    const v = toDemoVideo({ ...sampleInfo(), webpageUrl: 'https://example.com/v' }, '')
+  it('未知站点归到 other，显示名是「其他」但 host 仍给真实域名', () => {
+    const v = toVideoInfo({ ...sampleInfo(), webpageUrl: 'https://example.com/v' }, '')
     expect(v.platformId).toBe('other')
-    expect(v.platformName).toBe('example.com')
+    // 显示名走 i18n（「其他」），不是裸 hostname：
+    // 英文界面要能显示 "Other"，而不是永远露出 example.com
+    expect(v.platformName).toBe('其他')
+    expect(v.host).toBe('example.com')
   })
 
   it('缺字段时给安全默认值，不产出 undefined', () => {
@@ -63,7 +66,7 @@ describe('toDemoVideo', () => {
       uploader: '', webpageUrl: '', isYoutube: false, parseNotice: '',
       formats: [],
     }
-    const v = toDemoVideo(minimal, 'https://x/v')
+    const v = toVideoInfo(minimal, 'https://x/v')
     expect(v.title).toBe('未知标题')
     expect(v.formats).toEqual([])
     expect(v.audios).toEqual([])
@@ -76,20 +79,20 @@ describe('toDemoVideo', () => {
   it('音频格式的 kbps 从 abr 取整', () => {
     const info = sampleInfo()
     info.audioFormats = [{ formatId: '140', quality: 'x', ext: 'm4a', filesize: 1, abr: 127.8, acodec: '' }]
-    const v = toDemoVideo(info, 'https://www.youtube.com/watch?v=x')
+    const v = toVideoInfo(info, 'https://www.youtube.com/watch?v=x')
     expect(v.audios[0].kbps).toBe(128)
   })
 
   it('YouTube 标记 needsCookies（决定要不要显示 Cookie 提示）', () => {
-    const yt = toDemoVideo(sampleInfo(), 'https://www.youtube.com/watch?v=x')
+    const yt = toVideoInfo(sampleInfo(), 'https://www.youtube.com/watch?v=x')
     expect(yt.needsCookies).toBe(true)
 
-    const bb = toDemoVideo({ ...sampleInfo(), isYoutube: false }, 'https://www.bilibili.com/video/BV1')
+    const bb = toVideoInfo({ ...sampleInfo(), isYoutube: false }, 'https://www.bilibili.com/video/BV1')
     expect(bb.needsCookies).toBe(false)
   })
 
-  it('字幕转成 demo 的 SubtitleOption（id/lang/name/ext）', () => {
-    const v = toDemoVideo(sampleInfo(), 'https://www.youtube.com/watch?v=x')
+  it('字幕转成前端的 SubtitleOption（id/lang/name/ext）', () => {
+    const v = toVideoInfo(sampleInfo(), 'https://www.youtube.com/watch?v=x')
     expect(v.subtitles[0]).toMatchObject({ id: 'en', lang: 'en', name: 'English', ext: 'srt' })
   })
 })

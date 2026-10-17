@@ -2,7 +2,6 @@
   import Icon from './Icon.svelte'
   import { app } from '../lib/store.svelte'
   import { t } from '../lib/i18n.svelte'
-  import { SAMPLE_URL } from '../lib/mock'
 
   let { compact = false }: { compact?: boolean } = $props()
 
@@ -21,9 +20,9 @@
         app.toast(t('toast.parseFirst'), 'error')
       }
     } catch {
-      // 浏览器没给剪贴板权限时，填一条示例，保证预览能继续
-      app.url = SAMPLE_URL
-      inputEl?.focus()
+      // 浏览器没给剪贴板权限（用户拒绝，或非安全上下文）。
+      // **不要填假数据**——那会让用户以为粘贴成功了，然后解析一个不存在的视频。
+      app.toast(t('toast.pasteFailed'), 'error')
     } finally {
       pasting = false
     }

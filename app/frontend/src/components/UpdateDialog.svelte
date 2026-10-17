@@ -2,8 +2,7 @@
   import Icon from './Icon.svelte'
   import { app } from '../lib/store.svelte'
   import { t } from '../lib/i18n.svelte'
-  import { NEXT_VERSION } from '../lib/mock'
-
+  
   const percent = $derived(
     app.update.status === 'downloading' ? Math.round(app.update.progress * 100) : 0,
   )
@@ -22,7 +21,7 @@
       <div class="dialog-heading">
         <h2 id="update-title">{t('update.title')}</h2>
         <p class="num">
-          {t('update.subtitle', { version: NEXT_VERSION, size: '24.8 MB', date: '2026-10-14' })}
+          {t('update.subtitle', { version: app.updateState.version ?? '', size: '', date: app.updateState.date ?? '' })}
         </p>
       </div>
       <button class="icon-btn" title={t('common.close')} aria-label={t('common.close')} onclick={() => (app.dialog = 'none')}>

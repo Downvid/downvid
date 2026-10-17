@@ -6,7 +6,7 @@
   import { app } from '../lib/store.svelte'
   import { getLocale, t } from '../lib/i18n.svelte'
   import { loadLocalAnnouncement } from '../lib/announcement'
-  import { REPO_URL } from '../lib/mock'
+  import { REPO_URL } from '../lib/constants'
 
   const doc = $derived(loadLocalAnnouncement(getLocale()))
 

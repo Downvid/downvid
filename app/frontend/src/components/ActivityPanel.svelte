@@ -1,9 +1,11 @@
 <script lang="ts">
   import { buildActivity, type ActivityDay } from '../lib/activity'
+  import { app } from '../lib/store.svelte'
   import { formatDate } from '../lib/format'
   import { getLocale, t } from '../lib/i18n.svelte'
 
-  const activity = buildActivity()
+  // 从真实历史聚合；没有历史时整张图是空的，不显示假数据
+  const activity = $derived(buildActivity(app.history))
   let active = $state<ActivityDay>(activity.today)
   let panelEl = $state<HTMLElement | null>(null)
   let tip = $state<{ text: string; x: number; y: number } | null>(null)
