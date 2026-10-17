@@ -122,19 +122,13 @@
                   </label>
                   <input id="download-connections" v-model.number="settings.acceleration.maxConnections" type="range" min="1" max="16" step="1" :disabled="!settings.acceleration.enabled" class="w-full accent-primary" />
                 </div>
-                <div class="flex flex-col gap-2">
-                  <label class="text-sm font-medium text-on-surface">{{ t('accel.aria2Path') }}</label>
-                  <div class="flex gap-2 min-w-0">
-                    <input v-model="settings.acceleration.aria2Path" :placeholder="t('accel.aria2Auto')" class="min-w-0 flex-1 px-3 py-2 bg-surface-container-highest border border-outline-variant/20 rounded-md text-sm text-on-surface" />
-                    <button :title="t('accel.selectAria2')" class="size-9 shrink-0 flex items-center justify-center rounded-md hover:bg-surface-container-highest" @click="selectAria2">
-                      <MaterialIcon name="folder_open" :size="18" />
-                    </button>
-                    <button :title="t('accel.detectAria2')" :disabled="checkingAria2" class="size-9 shrink-0 flex items-center justify-center rounded-md hover:bg-surface-container-highest" @click="checkAria2">
-                      <MaterialIcon name="refresh" :size="18" />
-                    </button>
-                  </div>
-                  <p class="text-xs text-on-surface-variant break-words" role="status">{{ checkingAria2 ? t('deps.checking') : aria2Status }}</p>
-                </div>
+                <!-- aria2 的检测与下载都在「运行依赖」页：它现在是依赖体系的一员
+                     （与 yt-dlp / ffmpeg 同一套探测 + 一键下载），在这里再放一份
+                     检测按钮会让「明明依赖页显示已就绪，加速页又说没找到」成为常态。
+                     这里只留一句指引。 -->
+                <p class="text-[11px] text-on-surface-variant leading-relaxed">
+                  {{ t('accel.aria2MovedHint') }}
+                </p>
               </div>
 
               <!-- Cookies -->
@@ -247,6 +241,21 @@
                   </label>
                 </div>
 
+                <div class="flex flex-col gap-2">
+                  <label class="text-sm font-medium text-on-surface">{{ t('updateSettings.source') }}</label>
+                  <select
+                    v-model="settings.updateSource"
+                    class="px-3 py-2 bg-surface-container-highest border border-outline-variant/20 rounded-md text-sm text-on-surface focus:outline-hidden focus:border-primary/40"
+                  >
+                    <option v-for="opt in updateSourceChoices" :key="opt.id" :value="opt.id">
+                      {{ opt.label }}
+                    </option>
+                  </select>
+                  <p class="text-[11px] text-on-surface-variant leading-relaxed">
+                    {{ t('updateSettings.sourceHint') }}
+                  </p>
+                </div>
+
                 <p class="text-[11px] text-on-surface-variant leading-relaxed">
                   {{ t('updateSettings.manualHint') }}
                 </p>
@@ -284,6 +293,7 @@ import { useErrorModal } from '../composables/useErrorModal'
 import { abbreviatePath, ensureHomeDir } from '../composables/usePathDisplay'
 import { readSettings, updateSettings } from '../stores/settings'
 import { normalizeAcceleration, type AccelerationSettings } from '../../shared/acceleration'
+import { UPDATE_SOURCE_IDS, type UpdateSourceId } from '../../shared/update-sources'
 
 const { showError, showInfo } = useErrorModal()
 
@@ -314,6 +324,7 @@ interface Settings {
   acceleration: AccelerationSettings
   autoCheckUpdate: boolean
   autoDownloadUpdate: boolean
+  updateSource: UpdateSourceId
   language: 'auto' | 'zh-CN' | 'en-US'
 }
 
@@ -327,8 +338,33 @@ const settings = ref<Settings>({
   acceleration: normalizeAcceleration(),
   autoCheckUpdate: true,
   autoDownloadUpdate: false,
+  updateSource: 'auto',
   language: 'auto',
 })
+
+/**
+ * 更新源候选。
+ *
+ * 标签走 `t()`，但**不能在模块顶层调用**（那样切换语言不会重绘），
+ * 所以用 getter —— 与上面的 `qualityOptions` 是同一个写法。
+ *
+ * 每个 id 手写一条字面量词条而不是按 id 拼键名：
+ * `lint:i18n` 只认字面量键，拼出来的键写错不会被任何检查拦住，
+ * 界面上就直接显示 `updateSettings.source.gitee` 这一串。
+ */
+const UPDATE_SOURCE_LABEL_KEYS: Record<UpdateSourceId, () => string> = {
+  auto: () => t('updateSettings.source.auto'),
+  github: () => t('updateSettings.source.github'),
+  jsdelivr: () => t('updateSettings.source.jsdelivr'),
+  ghproxy: () => t('updateSettings.source.ghproxy'),
+  gitee: () => t('updateSettings.source.gitee'),
+  website: () => t('updateSettings.source.website'),
+}
+
+const updateSourceChoices = UPDATE_SOURCE_IDS.map(id => ({
+  id,
+  get label() { return UPDATE_SOURCE_LABEL_KEYS[id]() },
+}))
 
 const qualityOptions = [
   { value: 'best', get label() { return t('settings.qualityBest') } },
@@ -338,23 +374,6 @@ const qualityOptions = [
 ]
 
 const proxyTesting = ref(false)
-const checkingAria2 = ref(false)
-const aria2Status = ref('')
-
-async function checkAria2() {
-  if (checkingAria2.value) return
-  checkingAria2.value = true
-  try {
-    const result = await window.electronAPI.ytdlp.accelerationStatus(settings.value.acceleration.aria2Path)
-    aria2Status.value = result.found ? `aria2 ${result.version} · ${result.path}` : result.reason
-  } catch { aria2Status.value = t('accel.detectFailed') }
-  finally { checkingAria2.value = false }
-}
-
-async function selectAria2() {
-  const file = await window.electronAPI.dialog.selectFile()
-  if (file) { settings.value.acceleration.aria2Path = file; await checkAria2() }
-}
 const proxyTestResult = ref<'success' | 'fail' | ''>('')
 const proxyTestLatency = ref(0)
 
@@ -413,6 +432,7 @@ function saveSettings() {
   window.electronAPI?.setUpdatePrefs?.({
     autoCheck: settings.value.autoCheckUpdate,
     autoDownload: settings.value.autoDownloadUpdate,
+    source: settings.value.updateSource,
   })
   showInfo(t('settings.saved'))
   close()
@@ -431,12 +451,12 @@ async function loadSettings() {
     acceleration: { ...saved.acceleration },
     autoCheckUpdate: saved.autoCheckUpdate,
     autoDownloadUpdate: saved.autoDownloadUpdate,
+    updateSource: saved.updateSource,
     language: saved.language,
   }
   if (!settings.value.downloadDir) {
     settings.value.downloadDir = await window.electronAPI.app.getDefaultDownloadDir()
   }
-  void checkAria2()
 }
 
 onMounted(() => { loadSettings() })

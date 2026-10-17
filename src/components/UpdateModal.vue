@@ -109,6 +109,13 @@
                 {{ t('update.noNotes') }}
               </div>
             </div>
+
+            <!-- 容器版：没有「下载更新 / 重启安装」，只有拉镜像并重建 -->
+            <div v-if="container" class="mt-4 flex flex-col gap-2">
+              <h3 class="text-xs font-bold text-outline uppercase tracking-wider">{{ t('update.containerUpgrade') }}</h3>
+              <pre class="bg-surface rounded-xl p-3 border border-outline-variant/10 text-xs text-on-surface-variant leading-relaxed overflow-x-auto font-mono">{{ container.upgrade.commands.filter(c => !c.startsWith('#')).join('\n') }}</pre>
+              <p class="text-[11px] text-on-surface-variant leading-relaxed">{{ t('update.containerHint') }}</p>
+            </div>
           </div>
 
           <!-- Downloading -->
@@ -161,7 +168,15 @@
               {{ t('update.later') }}
             </button>
             <button
-              v-if="manual"
+              v-if="container"
+              class="flex items-center gap-2 px-5 py-2 rounded-lg bg-primary text-on-primary text-sm font-semibold hover:bg-primary/90 transition-colors shadow-md"
+              @click="copyCommands"
+            >
+              <MaterialIcon :name="copied ? 'check' : 'content_copy'" :size="16" />
+              <span>{{ copied ? t('update.commandsCopied') : t('update.copyCommands') }}</span>
+            </button>
+            <button
+              v-else-if="manual"
               class="flex items-center gap-2 px-5 py-2 rounded-lg bg-primary text-on-primary text-sm font-semibold hover:bg-primary/90 transition-colors shadow-md"
               @click="openReleasePage"
             >
@@ -209,7 +224,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { onMounted, ref } from 'vue'
 import { t } from '../i18n'
 import MaterialIcon from './icons/MaterialIcon.vue'
 import { useUpdater } from '../composables/useUpdater'
@@ -225,10 +240,18 @@ const emit = defineEmits<{
 // 更新流程的状态机见 composables/useUpdater.ts
 const {
   status, currentVersion, newVersion, releaseNotes, errorMsg,
-  downloadPercent, downloadSpeed, manual, manualReason,
-  errorTitle,
+  downloadPercent, downloadSpeed, manual, manualReason, container,
+  errorTitle, copyUpgradeCommands,
   downloadUpdate, installUpdate, openReleasePage, retry, init,
 } = useUpdater({ visible: () => props.visible })
+
+const copied = ref(false)
+async function copyCommands() {
+  if (await copyUpgradeCommands()) {
+    copied.value = true
+    setTimeout(() => { copied.value = false }, 2000)
+  }
+}
 
 function close() {
   emit('close')

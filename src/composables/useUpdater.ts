@@ -18,6 +18,22 @@ import { t } from '../i18n'
 export type UpdateStatus = 'idle' | 'checking' | 'latest' | 'available' | 'downloading' | 'downloaded' | 'error'
 
 /**
+ * 容器版（Docker / WebUI）的更新信息。
+ *
+ * 由 `docker/server/index.ts` 的 `app:checkForUpdates` 附带返回。桌面版没有
+ * 这个字段——容器里进程跑在只读镜像层上，**自更新会在下次 docker run 时消失**，
+ * 所以那边只能展示「拉镜像 + 重建容器」的命令。
+ */
+export interface ContainerUpdateInfo {
+  currentVersion: string
+  latestVersion: string | null
+  imageOutdated?: boolean
+  upgrade: { commands: string[]; compose: boolean }
+  error: string | null
+  source: string | null
+}
+
+/**
  * 从 Release 正文里裁出「只给用户看的更新内容」。
  *
  * Release 正文由 scripts/gen-release-notes.mjs 生成，顶部是"点徽章即下载"的引导区
@@ -88,6 +104,8 @@ export function useUpdater(options: UseUpdaterOptions) {
   const manual = ref(false)
   const manualReason = ref('')
   const errorPhase = ref<UpdateErrorPhase>('check')
+  /** 容器版才有值；桌面版恒为 null，界面据此切换展示形态 */
+  const container = ref<ContainerUpdateInfo | null>(null)
 
   const errorTitle = computed(() => ({
     check: t('update.errCheck'),
@@ -104,12 +122,19 @@ export function useUpdater(options: UseUpdaterOptions) {
   }
 
   /** 应用一次「有新版本」的结果（来自 IPC 返回值或广播事件，字段一致） */
-  function applyAvailable(data: { version?: string; releaseNotes?: string; manual?: boolean; manualReason?: string }) {
+  function applyAvailable(data: {
+    version?: string
+    releaseNotes?: string
+    manual?: boolean
+    manualReason?: string
+    container?: ContainerUpdateInfo | null
+  }) {
     status.value = 'available'
     newVersion.value = data.version || ''
     releaseNotes.value = extractUserNotes(data.releaseNotes || '')
     manual.value = !!data.manual
     manualReason.value = data.manualReason || ''
+    container.value = data.container ?? null
   }
 
   function openReleasePage() {
@@ -210,10 +235,22 @@ export function useUpdater(options: UseUpdaterOptions) {
     unsubscribe = null
   })
 
+  /** 复制升级命令（容器版的主操作） */
+  async function copyUpgradeCommands(): Promise<boolean> {
+    const text = (container.value?.upgrade.commands || []).filter((c) => !c.startsWith('#')).join('\n')
+    if (!text) return false
+    try {
+      await window.electronAPI?.clipboard?.writeText?.(text)
+      return true
+    } catch {
+      return false
+    }
+  }
+
   return {
     status, currentVersion, newVersion, releaseNotes, errorMsg,
-    downloadPercent, downloadSpeed, downloadUrl, manual, manualReason, errorPhase,
-    errorTitle,
+    downloadPercent, downloadSpeed, downloadUrl, manual, manualReason, errorPhase, container,
+    errorTitle, copyUpgradeCommands,
     checkUpdate, downloadUpdate, installUpdate, openReleasePage, retry, init,
   }
 }
