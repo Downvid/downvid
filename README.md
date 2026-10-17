@@ -206,7 +206,8 @@ Per-platform build commands, dependency notes and troubleshooting are in the
 | [Developer guide](./docs/development.md) | Code map, request lifecycle, IPC contract, debugging |
 | [Project structure](./docs/project-structure.md) | Directory guide and where to make changes |
 | [Repository standards](./docs/standards.md) | Branch, commit, issue and PR conventions |
-| [Server mode (design)](./docs/server-mode.md) | Docker / WebUI design — **not implemented yet** |
+| [Server mode](./docs/server-mode.md) | Docker / WebUI design rationale and boundaries |
+| [Architecture governance](./docs/provenance/README.md) | Upstream provenance audit, target architecture, phased migration |
 | [Release process](./docs/release.md) | Versioning and release artifact maintenance |
 | [Contributing](./CONTRIBUTING.md) | How to contribute |
 | [Security policy](./SECURITY.md) | How to report security issues |

@@ -28,6 +28,8 @@ pnpm test:web               # WebUI server regression (runs the *bundled* server
 pnpm lint:icons             # icon names must be valid (a typo renders as literal text)
 pnpm lint:website           # landing page: single file, assets, i18n pairs, theme colors
 pnpm lint:docs              # AGENTS.md ↔ CLAUDE.md parity + referenced paths/numbers exist
+pnpm audit:provenance       # code-provenance audit: verbatim upstream survival + registry coverage
+                            # (see docs/provenance/audit.md)
 pnpm deps:manifest:check    # is the dependency manifest behind upstream?
 pnpm build                  # vue-tsc && vite build && electron-builder (current platform)
 pnpm build:mac:arm64        # also :mac:x64 :win :linux:x64 :linux:arm64
@@ -63,7 +65,7 @@ Tests are split into three per-platform workflows (`.github/workflows/ci-linux.y
 | job | Contents |
 | --- | --- |
 | `backend` | gofmt / vet / `go test -shuffle=on` / cross-compile (all 5 targets on Linux, host only on macOS/Windows) |
-| `frontend` | type check / IPC contract / icon names / landing page / unit tests / updater / settings migration |
+| `frontend` | type check / IPC contract / icon names / landing page / doc parity / **provenance audit** / unit tests / updater / settings migration |
 | `main-process` | Linux only: updater / settings migration / manifest check |
 | `integration` | download integration / acceleration benchmark / parse integration |
 | `native-runtime` | Windows only: native exe runtime-deps regression |
@@ -203,6 +205,23 @@ Names are referenced by older clients' `latest*.yml`. Renaming `DownVid-Setup-*`
 `electron/constants.ts`). `electron-builder.json5`'s `publish` is build-time config that runtime
 can't read — `lint:ipc` cross-checks it. Moving repos means editing `shared/app.ts` + `publish` +
 workflow references, all three.
+
+### 6.5 New or rewritten modules change the upstream ratio — provenance audit
+
+`docs/provenance/` holds the deliverables of [issue #74](https://github.com/yxxbc/downvid/issues/74)
+(provenance audit, target architecture, migration plan, release quality). Its numbers are recomputed
+on the spot by `pnpm audit:provenance`:
+
+- a new file with ≥15% (and ≥8 lines) verbatim from upstream Videdown **must be registered** in
+  `scripts/data/provenance/registry.json`, otherwise CI fails
+- a registered number that no longer matches reality fails too (run
+  `node scripts/audit-provenance.mjs --write` first)
+- numbers in `docs/provenance/audit.md` must match the measurement
+
+The upstream snapshot lives in `scripts/data/provenance/upstream/` — **do not modify it**. Before
+changing architecture boundaries read `docs/provenance/architecture.md`: it defines the seven
+boundary rules and the three ports (`DataDirs` / `EventSink` / `UserPrompt`) that
+`lint:boundaries` enforces once migration step C0 lands.
 
 ### 7. Landing page (`website/`)
 

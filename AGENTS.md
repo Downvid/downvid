@@ -40,6 +40,7 @@ pnpm test:web                                  # WebUI 服务端回归（跑的�
 pnpm lint:icons                                # 图标名是否有效（写错会静默渲染成文字）
 pnpm lint:website                              # 官网单文件 / 引用资源 / 中英词条 / 配色一致性
 pnpm lint:docs                                 # AGENTS.md ↔ CLAUDE.md 一致 + 引用路径与数字真实存在
+pnpm audit:provenance                          # 代码来源审计：上游逐字存活率 + 登记表是否覆盖（见 docs/provenance/audit.md）
 pnpm deps:manifest:check                       # 依赖清单是否落后上游
 cd backend && gofmt -l . && go vet ./... && go test -shuffle=on ./...   # Go 侧车
 pnpm build                                     # 端到端：vue-tsc + vite build + electron-builder
@@ -63,7 +64,7 @@ pnpm build                                     # 端到端：vue-tsc + vite buil
 | job | 内容 |
 | --- | --- |
 | `backend` | gofmt / vet / `go test -shuffle=on` / 交叉编译（Linux 跑全 5 平台，macOS/Windows 跑本平台） |
-| `frontend` | 类型检查 / IPC 契约 / 图标名 / 官网校验 / 纯逻辑单测 / 更新流程回归 / 设置迁移 |
+| `frontend` | 类型检查 / IPC 契约 / 图标名 / 官网校验 / 文档一致性 / **代码来源审计** / 纯逻辑单测 / 更新流程回归 / 设置迁移 |
 | `main-process` | 仅 Linux：更新流程回归 / 设置迁移 / 依赖清单校验 |
 | `integration` | 下载集成回归 / 加速基准 / 解析集成回归 |
 | `native-runtime` | 仅 Windows：原生 exe 运行依赖回归 |
@@ -207,6 +208,20 @@ Linux 用 `amd64`/`x86_64` 而不是 `x64`（与 electron-builder 的 `${arch}` 
 
 **换仓库时**：改 `shared/app.ts` + `electron-builder.json5` 的 `publish` + 各 workflow 里的仓库引用，
 三处必须一致，否则用户收不到更新。
+
+### 6.5 新增/重写模块 → 会改变上游成分，触发来源审计
+
+`docs/provenance/` 是 [issue #74](https://github.com/yxxbc/downvid/issues/74) 的落地文档
+（来源审计 / 目标架构 / 迁移计划 / 发布质量）。它的数字由 `pnpm audit:provenance` 现场重算：
+
+- 新增的文件里有 ≥15%（且 ≥8 行）逐字来自上游 Videdown → **必须登记**在
+  `scripts/data/provenance/registry.json`，否则 CI 红叉
+- 登记表里的数字与实测不一致 → 同样红叉（先 `node scripts/audit-provenance.mjs --write`）
+- `docs/provenance/audit.md` 里的存活行数与实测不一致 → 红叉
+
+上游快照在 `scripts/data/provenance/upstream/`，**不要修改**。改架构边界之前先读
+`docs/provenance/architecture.md`——那里有 7 条边界规则和三条端口接口（`DataDirs` / `EventSink` /
+`UserPrompt`），迁移计划 C0 之后由 `lint:boundaries` 机械校验。
 
 ### 7. 改产品官网（`website/`）
 

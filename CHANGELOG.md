@@ -4,6 +4,33 @@
 
 ## [Unreleased]
 
+### 修复
+
+- **YouTube「页面需要重载」时的回退策略静默退化**：`nextYoutubeRetry` 会**按 yt-dlp 版本**
+  选兼容客户端（`>= 2026.10.10` 用 `default,web_embedded`，更早用 `web_safari`），
+  但上一次为了省掉「为拿版本号多跑一次 `--version`」，传给它的版本号被写死成了空串 ——
+  于是**新版分支永远不可达**，策略悄悄退化成只走旧客户端，没有任何报错，
+  表现只是「有些 YouTube 视频解析不了」。
+  现在版本号从**依赖探测缓存**读（Go 边车的 `detect` 早就执行过 `--version` 并把
+  `version` 一并返回，60 秒缓存），读它是 0 代价，既不牺牲上次那个优化，也没有再起一次进程。
+  新增 `tests/youtube-retry-version.test.ts` 把「版本号从哪来、什么时候读」这条接线钉住
+  （纯逻辑用例看不见它：逻辑本身是对的，错的是传进去的参数）。
+
+### 文档
+
+- **新增架构治理文档（issue #74）**：`docs/provenance/` 下四份文档分别对应 issue 的四个阶段 ——
+  [代码来源审计](docs/provenance/audit.md)（逐文件的上游成分与可复算的存活率）、
+  [目标架构](docs/provenance/architecture.md)（core / 适配层 / 七个端口与七条边界规则）、
+  [分阶段迁移计划](docs/provenance/migration-plan.md)（C0–C9、M1–M3 每个都可独立合并）、
+  [发布质量与署名](docs/provenance/release-quality.md)。**不改变任何运行时行为。**
+- **新增 `pnpm audit:provenance`**：从仓库内的上游快照（`scripts/data/provenance/upstream/`，
+  Videdown `0c620c1`）现场重算「上游代码还剩多少」，并校验登记表
+  `scripts/data/provenance/registry.json` 覆盖了每个上游衍生的文件。实测上游 2707 条有效源码行中
+  1239 行（45.8%）仍逐字保留；`backend/`、`docker/`、`scripts/`、`tests/`、`website/` 全部无上游成分。
+  新增上游衍生文件却不登记、或文档里的数字与实测不一致，CI 会红叉。已挂到三个 `ci-*.yml` 的 frontend job。
+- 修正 `docs/server-mode.md` 的状态（Docker / WebUI 早已实现并发布，文档仍写着「设计稿，尚未实现」），
+  两个 README 的文档索引同步更新。
+
 ### 性能
 
 - **解析元数据从 11.1 秒降到 2.1 秒**（同一台机器、同一个 bilibili 视频实测）。根因不在网络：

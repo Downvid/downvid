@@ -113,6 +113,11 @@ jobs:
       - name: 文档一致性校验（AGENTS.md ↔ CLAUDE.md）
         run: pnpm lint:docs
 
+      # 来源审计：哪些代码来自上游 Videdown、占比多少，由脚本从仓库内快照现场重算。
+      # 新增了上游衍生文件却没登记 / 登记的数字已过期 → 直接红叉（见 docs/provenance/audit.md）
+      - name: 代码来源审计
+        run: pnpm audit:provenance
+
       # 词条漏英文 / 占位符对不上都不会报错，只会静默显示错文案
       - name: i18n 词条校验
         run: pnpm lint:i18n

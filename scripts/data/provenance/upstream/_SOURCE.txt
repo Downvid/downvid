@@ -1,0 +1,8 @@
+上游快照来源：https://github.com/cshuangyy/videdown
+commit: 0c620c1b5b487e2ab735c929dd0127419e5cb963
+commit date: 2026-08-22
+subject: 修复错误 youtube下载
+
+本目录下的文件是分叉基线（DownVid 的 1d7b041^）的逐字副本，只用于
+scripts/audit-provenance.mjs 计算「哪些行仍逐字来自上游」。
+不要修改这些文件；上游更新时整体替换并同步 docs/provenance/audit.md 的数字。

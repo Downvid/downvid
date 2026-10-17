@@ -197,7 +197,8 @@ pnpm build     # 构建当前平台安装包
 | [开发者指南](./docs/development.md) | 代码导读、请求生命周期、IPC 契约、调试手段 |
 | [项目结构](./docs/project-structure.md) | 目录说明与代码维护位置 |
 | [仓库规范](./docs/standards.md) | 分支、提交、Issue 与 PR 规范 |
-| [服务端模式（设计稿）](./docs/server-mode.md) | Docker / WebUI 设计 —— **尚未实现** |
+| [服务端模式](./docs/server-mode.md) | Docker / WebUI 的设计依据与边界 |
+| [架构治理](./docs/provenance/README.md) | 上游代码来源审计、目标架构、分阶段迁移 |
 | [发布流程](./docs/release.md) | 版本与发布产物维护 |
 | [贡献指南](./CONTRIBUTING.md) | 如何参与项目开发 |
 | [安全政策](./SECURITY.md) | 安全问题的报告方式与处理范围 |

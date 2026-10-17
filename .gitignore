@@ -71,7 +71,9 @@ Thumbs.db
 .env*
 
 # Docker 本地运行数据（由 docker-compose 生成）
-data/
+# 锚定到仓库根：不加 `/` 时这条规则会连 `scripts/data/` 一起忽略，
+# 而那里放的是来源审计的上游快照与登记表，**必须入库**（见 docs/provenance/audit.md）
+/data/
 docker/dist-web/
 docker/dist-server/
 docker/node_modules/

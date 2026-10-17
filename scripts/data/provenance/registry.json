@@ -1,0 +1,259 @@
+{
+  "upstream": {
+    "origin": "https://github.com/cshuangyy/videdown",
+    "commit": "0c620c1b5b487e2ab735c929dd0127419e5cb963",
+    "forkPoint": "1d7b041^"
+  },
+  "thresholds": {
+    "derivedPct": 15,
+    "verbatimPct": 90
+  },
+  "totals": {
+    "upstreamSignificantLines": 2707,
+    "retainedVerbatimLines": 1239,
+    "retainedPct": 45.8,
+    "registryFiles": 32
+  },
+  "files": {
+    "electron/electron-env.d.ts": {
+      "origin": "upstream-relocated",
+      "upstreamPath": "electron/electron-env.d.ts",
+      "significantLines": 0,
+      "upstreamLines": 0,
+      "upstreamPct": 0,
+      "retainedElsewhere": 47.1,
+      "homes": [
+        "src/env.d.ts(15)",
+        "src/types/index.ts(2)",
+        "docker/server/electron-process.d.ts(1)"
+      ]
+    },
+    "electron/ipc/download.ts": {
+      "origin": "upstream-derived",
+      "upstreamPath": null,
+      "significantLines": 70,
+      "upstreamLines": 15,
+      "upstreamPct": 21.4
+    },
+    "electron/ipc/history.ts": {
+      "origin": "upstream-derived",
+      "upstreamPath": null,
+      "significantLines": 42,
+      "upstreamLines": 9,
+      "upstreamPct": 21.4
+    },
+    "electron/ipc/system.ts": {
+      "origin": "upstream-derived",
+      "upstreamPath": null,
+      "significantLines": 157,
+      "upstreamLines": 24,
+      "upstreamPct": 15.3
+    },
+    "electron/main.ts": {
+      "origin": "upstream-derived",
+      "upstreamPath": "electron/main.ts",
+      "significantLines": 164,
+      "upstreamLines": 26,
+      "upstreamPct": 15.9
+    },
+    "electron/parsers/douyin.ts": {
+      "origin": "upstream-derived",
+      "upstreamPath": null,
+      "significantLines": 168,
+      "upstreamLines": 90,
+      "upstreamPct": 53.6
+    },
+    "electron/parsers/kuaishou.ts": {
+      "origin": "upstream-derived",
+      "upstreamPath": null,
+      "significantLines": 222,
+      "upstreamLines": 150,
+      "upstreamPct": 67.6
+    },
+    "electron/preload.ts": {
+      "origin": "upstream-verbatim",
+      "upstreamPath": "electron/preload.ts",
+      "significantLines": 137,
+      "upstreamLines": 101,
+      "upstreamPct": 73.7
+    },
+    "electron/utils/browser.ts": {
+      "origin": "upstream-derived",
+      "upstreamPath": null,
+      "significantLines": 100,
+      "upstreamLines": 25,
+      "upstreamPct": 25
+    },
+    "electron/utils/platform.ts": {
+      "origin": "upstream-derived",
+      "upstreamPath": null,
+      "significantLines": 16,
+      "upstreamLines": 8,
+      "upstreamPct": 50
+    },
+    "index.html": {
+      "origin": "upstream-derived",
+      "upstreamPath": "index.html",
+      "significantLines": 20,
+      "upstreamLines": 8,
+      "upstreamPct": 40
+    },
+    "postcss.config.js": {
+      "origin": "upstream-derived",
+      "upstreamPath": "postcss.config.js",
+      "significantLines": 2,
+      "upstreamLines": 1,
+      "upstreamPct": 50
+    },
+    "src/App.vue": {
+      "origin": "upstream-derived",
+      "upstreamPath": "src/App.vue",
+      "significantLines": 89,
+      "upstreamLines": 30,
+      "upstreamPct": 33.7
+    },
+    "src/components/AboutView.vue": {
+      "origin": "upstream-derived",
+      "upstreamPath": "src/components/AboutView.vue",
+      "significantLines": 193,
+      "upstreamLines": 35,
+      "upstreamPct": 18.1
+    },
+    "src/components/DownloadQueue.vue": {
+      "origin": "upstream-derived",
+      "upstreamPath": null,
+      "significantLines": 143,
+      "upstreamLines": 53,
+      "upstreamPct": 37.1
+    },
+    "src/components/DownloadView.vue": {
+      "origin": "upstream-derived",
+      "upstreamPath": "src/components/DownloadView.vue",
+      "significantLines": 143,
+      "upstreamLines": 31,
+      "upstreamPct": 21.7
+    },
+    "src/components/FormatSelector.vue": {
+      "origin": "upstream-derived",
+      "upstreamPath": null,
+      "significantLines": 79,
+      "upstreamLines": 35,
+      "upstreamPct": 44.3
+    },
+    "src/components/Header.vue": {
+      "origin": "upstream-derived",
+      "upstreamPath": "src/components/Header.vue",
+      "significantLines": 59,
+      "upstreamLines": 24,
+      "upstreamPct": 40.7
+    },
+    "src/components/HelloWorld.vue": {
+      "origin": "upstream-relocated",
+      "upstreamPath": "src/components/HelloWorld.vue",
+      "significantLines": 0,
+      "upstreamLines": 0,
+      "upstreamPct": 0,
+      "retainedElsewhere": 23.5,
+      "homes": [
+        "src/components/AboutView.vue(2)",
+        "src/components/CookieGuide.vue(2)",
+        "src/components/DepsPrompt.vue(2)"
+      ]
+    },
+    "src/components/HistoryView.vue": {
+      "origin": "upstream-derived",
+      "upstreamPath": "src/components/HistoryView.vue",
+      "significantLines": 109,
+      "upstreamLines": 69,
+      "upstreamPct": 63.3
+    },
+    "src/components/icons/MaterialIcon.vue": {
+      "origin": "upstream-derived",
+      "upstreamPath": "src/components/icons/MaterialIcon.vue",
+      "significantLines": 24,
+      "upstreamLines": 12,
+      "upstreamPct": 50
+    },
+    "src/components/SettingsView.vue": {
+      "origin": "upstream-derived",
+      "upstreamPath": "src/components/SettingsView.vue",
+      "significantLines": 280,
+      "upstreamLines": 38,
+      "upstreamPct": 13.6
+    },
+    "src/components/UrlInput.vue": {
+      "origin": "upstream-derived",
+      "upstreamPath": null,
+      "significantLines": 111,
+      "upstreamLines": 61,
+      "upstreamPct": 55
+    },
+    "src/components/VideoInfoCard.vue": {
+      "origin": "upstream-derived",
+      "upstreamPath": null,
+      "significantLines": 34,
+      "upstreamLines": 26,
+      "upstreamPct": 76.5
+    },
+    "src/env.d.ts": {
+      "origin": "upstream-verbatim",
+      "upstreamPath": "src/env.d.ts",
+      "significantLines": 110,
+      "upstreamLines": 40,
+      "upstreamPct": 36.4
+    },
+    "src/main.ts": {
+      "origin": "upstream-derived",
+      "upstreamPath": "src/main.ts",
+      "significantLines": 22,
+      "upstreamLines": 3,
+      "upstreamPct": 13.6
+    },
+    "src/stores/download.ts": {
+      "origin": "upstream-derived",
+      "upstreamPath": null,
+      "significantLines": 319,
+      "upstreamLines": 114,
+      "upstreamPct": 35.7
+    },
+    "src/style.css": {
+      "origin": "upstream-verbatim",
+      "upstreamPath": "src/style.css",
+      "significantLines": 182,
+      "upstreamLines": 82,
+      "upstreamPct": 45.1
+    },
+    "src/types/index.ts": {
+      "origin": "upstream-verbatim",
+      "upstreamPath": "src/types/index.ts",
+      "significantLines": 51,
+      "upstreamLines": 48,
+      "upstreamPct": 94.1
+    },
+    "src/vite-env.d.ts": {
+      "origin": "upstream-verbatim",
+      "upstreamPath": "src/vite-env.d.ts",
+      "significantLines": 1,
+      "upstreamLines": 1,
+      "upstreamPct": 100
+    },
+    "tailwind.config.js": {
+      "origin": "upstream-relocated",
+      "upstreamPath": "tailwind.config.js",
+      "significantLines": 0,
+      "upstreamLines": 0,
+      "upstreamPct": 0,
+      "retainedElsewhere": 1.4,
+      "homes": [
+        "postcss.config.js(1)"
+      ]
+    },
+    "vite.config.ts": {
+      "origin": "upstream-verbatim",
+      "upstreamPath": "vite.config.ts",
+      "significantLines": 97,
+      "upstreamLines": 16,
+      "upstreamPct": 16.5
+    }
+  }
+}
