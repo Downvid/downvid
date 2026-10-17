@@ -2,10 +2,44 @@
   import Icon from './Icon.svelte'
   import { app } from '../lib/store.svelte'
   import { t } from '../lib/i18n.svelte'
+  import { parseInline, reflowMarkdown } from '../lib/markdown'
   
   const percent = $derived(
     app.updateInfo.status === 'downloading' ? Math.round(app.updateInfo.progress * 100) : 0,
   )
+
+  /**
+   * 这一版的更新内容。
+   *
+   * 优先用 Release notes（那是**新版本**的内容，本地 CHANGELOG 还没有），
+   * 没有就退回本地 CHANGELOG 里对应版本的记录。
+   */
+  /**
+   * 这一版的更新内容（已 token 化）。
+   *
+   * Release notes 与本地 CHANGELOG **都是 Markdown**，必须解析：
+   * 不解析的话用户看到的是 `**修复**：...` 这种带星号的原文
+   * ——那正是真机上出现的问题。
+   */
+  const notes = $derived.by(() => {
+    const raw: string[] = []
+    const releaseNotes = app.updateInfo.notes?.trim()
+    if (releaseNotes) {
+      // Release notes 是整段 Markdown：按行拆，去掉列表符号
+      for (const line of releaseNotes.split('\n')) {
+        const cleaned = line.replace(/^[-*]\s*/, '').trim()
+        if (cleaned && !cleaned.startsWith('#')) raw.push(cleaned)
+      }
+    } else {
+      const local = app.currentChangelog
+      if (local) {
+        for (const section of local.sections) {
+          for (const item of section.items.slice(0, 3)) raw.push(item)
+        }
+      }
+    }
+    return raw.slice(0, 8).map((line) => parseInline(reflowMarkdown(line)))
+  })
 </script>
 
 <div
@@ -32,11 +66,39 @@
     <div class="dialog-body scroll">
       <section class="notes">
         <span class="sub-label">{t('update.notes')}</span>
-        <ul>
-          <li><span class="note-bullet"></span>{t('update.note1')}</li>
-          <li><span class="note-bullet"></span>{t('update.note2')}</li>
-          <li><span class="note-bullet"></span>{t('update.note3')}</li>
-        </ul>
+        <!--
+          更新内容来自后端：
+            - 有 Release notes（GitHub 给的）就用它——那是**新版本**的内容
+            - 没有（Gitee / 部分镜像不给 body）就退回本地 CHANGELOG 里
+              该版本的记录
+          早先这里固定渲染 `t('update.note1')` 三句占位话，
+          用户点开更新只看到三句与真实发布无关的文案。
+        -->
+        {#if notes.length > 0}
+          <ul>
+            {#each notes as tokens, index (index)}
+              <li>
+                <span class="note-bullet"></span>
+                <!-- 逐 token 渲染，不用 {@html}：Release notes 是外部输入 -->
+                <span>
+                  {#each tokens as token, tIndex (tIndex)}
+                    {#if token.kind === 'strong'}
+                      <strong>{token.text}</strong>
+                    {:else if token.kind === 'code'}
+                      <code>{token.text}</code>
+                    {:else if token.kind === 'link'}
+                      <span class="md-link">{token.text}</span>
+                    {:else}
+                      {token.text}
+                    {/if}
+                  {/each}
+                </span>
+              </li>
+            {/each}
+          </ul>
+        {:else}
+          <p class="notes-empty">{t('update.noNotes')}</p>
+        {/if}
       </section>
 
       {#if app.updateInfo.status === 'downloading'}
@@ -170,6 +232,24 @@
     flex-direction: column;
     gap: 9px;
   }
+  .notes code {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: color-mix(in oklab, var(--accent) 10%, transparent);
+    font-family: var(--font-code);
+    font-size: 0.92em;
+  }
+  .notes strong {
+    font-weight: 650;
+    color: var(--ink-strong);
+  }
+  /* 更新弹窗里的链接不做成可点：那会让用户在「还没更新」时就跳走，
+     而且 Release notes 里的相对路径在应用里点不开 */
+  .md-link {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
   .notes li {
     display: flex;
     gap: 9px;

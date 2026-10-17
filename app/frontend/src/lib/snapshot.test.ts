@@ -75,6 +75,17 @@ describe('snapshotForRun', () => {
     expect(got?.audioTrack?.formatId).toBe('251-3')
   })
 
+  it('续传时用的是任务上的直链，不是解析面板的', () => {
+    // 直链是几分钟后就过期的 CDN 地址。续传时若回去读解析面板，
+    // 用户可能已经解析了别的视频 —— 那时会拿着 A 的地址去下 B，
+    // 或者用一个早就失效的地址反复失败。
+    const t: DownloadSnapshot = {
+      formatId: 'direct', hasAudio: true, subtitles: [],
+      directUrl: 'https://cdn.example-cdn.com/a.mp4?sign=1',
+    }
+    expect(snapshotForRun(t, other)?.directUrl).toBe('https://cdn.example-cdn.com/a.mp4?sign=1')
+  })
+
   it('音轨对象是副本：改界面上的选择不影响已发起的下载', () => {
     const ui = { formatId: '251-1', language: 'en' }
     const got = snapshotForRun(null, { ...other, audioTrack: ui })

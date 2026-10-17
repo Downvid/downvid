@@ -55,6 +55,9 @@ import {
   resetSettings as backendResetSettings,
   saveSettings,
   showInFolder,
+  platform as backendPlatform,
+  changelogHistory as backendChangelogHistory,
+  type ChangelogEntry,
   startDownload,
   stripMarker,
   testProxy as backendTestProxy,
@@ -222,6 +225,23 @@ class AppStore {
   // ===== 应用信息 =====
   version = $state('0.0.0-dev')
 
+  /**
+   * 平台标识（`darwin` / `windows` / `linux`）。
+   *
+   * macOS 上要给窗口红绿灯让出左上角，否则「DownVid」标识被三个圆点压住，
+   * 而且那块区域既是红绿灯又拦住了拖拽。浏览器预览时为空串（按非 mac 处理）。
+   */
+  platform = $state('')
+
+  /**
+   * 更新日志（来自本地内嵌的 CHANGELOG，离线可用）。
+   *
+   * 早先「关于」页的版本列表是**硬编码**的 3 条（v1.5.0 / v1.4.0 / v1.3.4），
+   * 内容还是 `t('about.release140Note1')` 这类占位词条——用户点了「查看更新内容」
+   * 看到的三句话与真实发布毫无关系。现在读真实的 CHANGELOG。
+   */
+  changelog = $state<ChangelogEntry[]>([])
+
   private started = false
   private toastSeq = 0
   private ticker: number | null = null
@@ -249,6 +269,8 @@ class AppStore {
     this.applyLanguage(this.settings.language)
 
     this.version = await appVersion()
+    this.platform = await backendPlatform()
+    void this.loadChangelog()
 
     // 默认下载目录：后端返回空时（浏览器预览）留空
     if (!this.settings.downloadDir) {
@@ -605,6 +627,9 @@ class AppStore {
       formatId: pick.formatId,
       hasAudio: pick.hasAudio,
       audioTrack: this.currentTrackSnapshot(),
+      // 直链要固化在任务上：它是几十分钟后过期的 CDN 地址，
+      // 续传时若回去读解析面板，可能已经指向别的视频了
+      directUrl: video.directUrl,
       subtitles: [...this.subtitles],
       totalBytes: pick.totalBytes,
       bytesDone: 0,
@@ -640,6 +665,8 @@ class AppStore {
       hasAudio: snap.hasAudio,
       subtitles: snap.subtitles,
       audioTrack: snap.audioTrack,
+      directUrl: task.directUrl,
+      title: task.title,
       outputDir: this.settings.downloadDir,
       // 有分辨率才让它进文件名。
       //
@@ -1106,6 +1133,22 @@ class AppStore {
   /** 依赖诊断（「诊断」按钮用） */
   async depDiagnostics(): Promise<Record<string, unknown> | null> {
     return depsSummary()
+  }
+
+  // ============================================================
+  // 更新日志
+  // ============================================================
+
+  /** 读更新日志。失败不弹错：它只是展示内容，缺了不该拦住用户干活。 */
+  async loadChangelog(): Promise<void> {
+    const list = await backendChangelogHistory()
+    if (list) this.changelog = list
+  }
+
+  /** 当前运行版本对应的更新日志（找不到时退回最新一条已发布版本） */
+  get currentChangelog(): ChangelogEntry | null {
+    const exact = this.changelog.find((e) => e.version === this.version.replace(/^v/, ''))
+    return exact ?? this.changelog[0] ?? null
   }
 
   // ============================================================

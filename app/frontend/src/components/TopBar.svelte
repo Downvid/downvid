@@ -14,7 +14,16 @@
 
 </script>
 
-<header class="topbar">
+<!--
+  `is-mac` 是给 macOS 让出窗口红绿灯的区域。
+  `data-tauri-drag-region` 那套是 Tauri 的写法，Wails 不认；这里靠 CSS 的
+  `-webkit-app-region: drag`（WebKit 系）与下面 Go 侧的 `TitleBar` 配置配合。
+-->
+<header
+  class="topbar"
+  class:is-mac={app.platform === 'darwin'}
+  style:--wails-draggable="drag"
+>
   <div class="brand">
     <img class="brand-logo" src={logo} alt="DownVid" />
     <span class="brand-name">DownVid</span>

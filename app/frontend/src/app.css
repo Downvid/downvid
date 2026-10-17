@@ -723,6 +723,47 @@ select.field {
   padding: 0 18px;
   border-bottom: 1px solid var(--rule);
   background: color-mix(in oklab, var(--paper) 86%, transparent);
+
+  /* 顶栏是**窗口拖动区**。
+   *
+   * macOS 用的是 `TitleBarHiddenInset()`（FullSizeContent），也就是没有独立
+   * 标题栏、内容铺到顶部。不把顶栏设成 drag 区域的话，整个窗口**没有任何
+   * 地方能拖动** —— 用户只能靠红绿灯旁边的空隙，而这个应用是全自绘顶栏，
+   * 那条空隙还不存在。
+   *
+   * `-webkit-app-region` 在 Wails 的 WebKit（macOS）与 WebKitGTK（Linux）上
+   * 都生效；Windows 走的是另一套（见 main.go 的 Windows 分支说明）。
+   */
+  -webkit-app-region: drag;
+  app-region: drag;
+  /* 拖拽区不可选中文本：否则拖动时会变成「选中标题」 */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* macOS：给窗口红绿灯让出 78px（三个圆点的实际占用 + 安全间距）。
+ *
+ * 不这么做的话「DownVid」标识正好压在红绿灯下面 —— 既是视觉遮挡，
+ * 又让那块区域同时承担「红绿灯」与「品牌区」两个职责。
+ */
+.topbar.is-mac {
+  padding-left: 84px;
+}
+
+/* 顶栏里的**所有可交互元素**必须退出 drag 区域。
+ *
+ * 这是个很容易漏的地方：`-webkit-app-region: drag` 会让子元素**默认也是**
+ * 拖拽区，于是按钮点不动 —— 而且没有任何报错，只是「点了没反应」。
+ */
+.topbar button,
+.topbar a,
+.topbar input,
+.topbar select,
+.topbar .nav,
+.topbar .nav-item,
+.topbar .topbar-right {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .brand {

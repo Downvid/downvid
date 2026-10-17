@@ -5,6 +5,7 @@ package main
 // 窗口渲染由前端构建产物 + 手动启动验证；这里验证**业务侧**——
 // 绑定方法签名改了或被误改时，编译期就红，比等人工点一遍可靠。
 import (
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -357,4 +358,126 @@ func TestAudioTrackReachesBuildArgs(t *testing.T) {
 	if !strings.Contains(strings.Join(argsM3U8, " "), "hls-audio") {
 		t.Fatalf("m3u8 音轨应直接用自己的 format id：%s", strings.Join(argsM3U8, " "))
 	}
+}
+
+// TestDirectFilename 直链路径的文件名规则。
+//
+// 两条路径（yt-dlp / 直链）必须产出**同样风格**的文件名，否则同一个视频
+// 从不同平台下出来是两种命名，用户会当成两份东西。
+//
+// 这里重点钉住两个安全/正确性细节：
+//   - 模板是用户可编辑的，`../` 不能写到下载目录之外
+//   - 模板里没写扩展名时要补上（与 yt-dlp 路径同一规则）
+func TestDirectFilename(t *testing.T) {
+	cases := []struct {
+		name     string
+		template string
+		opts     DownloadRequest
+		want     string
+	}{
+		{
+			name:     "默认模板",
+			template: "%(title)s.%(ext)s",
+			opts:     DownloadRequest{Title: "猫咪视频", TaskID: "t1"},
+			want:     "猫咪视频.mp4",
+		},
+		{
+			name:     "音频模式用 m4a",
+			template: "%(title)s.%(ext)s",
+			opts:     DownloadRequest{Title: "播客", TaskID: "t1", DownloadMode: "audio"},
+			want:     "播客.m4a",
+		},
+		{
+			name:     "模板没写扩展名时补上",
+			template: "%(title)s",
+			opts:     DownloadRequest{Title: "标题", TaskID: "t1"},
+			want:     "标题.mp4",
+		},
+		{
+			name:     "含 id 的模板",
+			template: "%(title)s-%(id)s.%(ext)s",
+			opts:     DownloadRequest{Title: "标题", TaskID: "abc123"},
+			want:     "标题-abc123.mp4",
+		},
+		{
+			name:     "标题为空时用 taskId 兜底（不能产生空文件名）",
+			template: "%(title)s.%(ext)s",
+			opts:     DownloadRequest{Title: "", TaskID: "fallback"},
+			want:     "fallback.mp4",
+		},
+		{
+			name:     "路径分隔符必须被替换（模板可被用户改成 ../evil）",
+			template: "../%(title)s.%(ext)s",
+			opts:     DownloadRequest{Title: "x", TaskID: "t1"},
+			want:     "..-x.mp4",
+		},
+		{
+			name:     "反斜杠同样要替换（Windows 路径分隔符）",
+			template: "..\\%(title)s.%(ext)s",
+			opts:     DownloadRequest{Title: "x", TaskID: "t1"},
+			want:     "..-x.mp4",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := directFilename(c.template, c.opts)
+			if got != c.want {
+				t.Fatalf("directFilename(%q) = %q，期望 %q", c.template, got, c.want)
+			}
+			// 无论模板怎么写，产物都必须留在下载目录里
+			if strings.ContainsAny(got, `/\`) {
+				t.Fatalf("文件名里还有路径分隔符：%q", got)
+			}
+		})
+	}
+}
+
+// TestStartDownloadDirectDoesNotRequireYtdlp 直链路径不该被 yt-dlp 缺失挡住。
+//
+// 抖音/快手的直链下载完全不经过 yt-dlp。如果这里仍然要求 yt-dlp，
+// 那些「没装 yt-dlp 但只想下个抖音视频」的用户会看到一个莫名其妙的
+// 「未找到 yt-dlp」——而这条路径根本用不上它。
+func TestStartDownloadDirectDoesNotRequireYtdlp(t *testing.T) {
+	app := NewApp()
+	app.dataDir = t.TempDir()
+	app.downloadsDir = t.TempDir()
+
+	// 用一个刚关闭的本地端口作为 CDN 地址：预期是「下载失败」，
+	// 但**不能**是「未找到 yt-dlp」——后者说明判定顺序错了。
+	//
+	// 用真实的临时端口而不是编造的地址：`StartDownload` 会立刻返回
+	// （它在 goroutine 里拉数据），这里只关心**被接受**，
+	// 所以地址本身能连上与否无关紧要，但拿一个真实存在过的端口
+	// 比写死一个魔数更诚实。
+	closed := closedPortURL(t)
+	res := app.StartDownload(DownloadRequest{
+		TaskID:    "direct-1",
+		URL:       "https://www.douyin.com/video/1",
+		DirectURL: closed,
+		Title:     "测试",
+		OutputDir: app.downloadsDir,
+	})
+	if !res.OK {
+		t.Fatalf("直链任务应当被接受（缺 yt-dlp 不该拦住它）：%s", res.Error)
+	}
+	if res.MissingKind == "yt-dlp" {
+		t.Fatal("直链路径不应要求 yt-dlp")
+	}
+}
+
+// closedPortURL 返回一个「刚被关闭」的本地地址。
+//
+// 用途：需要「连接必然失败」的地址时，用一个真实分配过又立刻关闭的端口，
+// 而不是写死 `127.0.0.1:1` 这种魔数——后者在某些环境里可能被别的东西占用，
+// 让用例的失败原因变得不可预测。
+func closedPortURL(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("无法分配临时端口：%v", err)
+	}
+	addr := ln.Addr().String()
+	_ = ln.Close()
+	return "http://" + addr + "/"
 }

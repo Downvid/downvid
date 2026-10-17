@@ -77,6 +77,12 @@ type App struct {
 	// 下载相关（由 bindings_download.go 使用）
 	runner *download.Runner
 
+	// directCancels 是直链下载的暂停句柄（taskId → cancel）。
+	//
+	// 直链走的是 Go 自己的 HTTP 拉取，没有子进程可杀，所以暂停 = 取消 ctx。
+	// yt-dlp 那条路径用的是 runner 里的进程句柄，两者不能混用。
+	directCancels map[string]context.CancelFunc
+
 	// proxy 是**当前生效**的代理。
 	//
 	// 与加速设置不同，它必须缓存在内存里：`Parse` 每次都会带上它，

@@ -127,6 +127,12 @@ jobs:
       - name: 仓库坐标一致性
         run: pnpm sync:repo
 
+      # 应用里的「更新日志」读的是 app/internal/changelog/ 下的**副本**
+      # （`//go:embed` 不能引用包目录之外的文件）。副本会静默过期：
+      # 改了根部 CHANGELOG 忘了同步，界面还停在旧内容，而构建与测试都不报错。
+      - name: 更新日志副本一致
+        run: pnpm sync:changelog
+
       # 文档里的「当前值类」数字（词条数 / 用例数 / settings 字段 / 事件清单）与代码实测一致
       - name: 文档数字同步
         run: pnpm sync:doc-numbers

@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 )
 
@@ -70,16 +69,32 @@ func TestOpenExternalRejectsNonHTTP(t *testing.T) {
 }
 
 func TestOpenExternalAcceptsHTTP(t *testing.T) {
-	// 只验证**协议校验通过**，不真的起浏览器：
-	// 用一个不存在的域名，命令会失败，但那说明它已经走到执行阶段了
-	err := OpenExternal("https://example.invalid/never")
-	if err == nil {
-		// 某些环境里 xdg-open/open 对无效域名也返回 0，视为通过
-		return
+	// 只验证**协议校验通过**，不真的起浏览器。
+	//
+	// 起进程这一步在无头 CI 上不可靠：`xdg-open` 可能不存在、可能返回非 0，
+	// 也不该真的把浏览器拉起来。所以直接测 openExternal 里那一段协议判断
+	// （拆成了 validateExternalURL，见 shell.go）——这是本用例真正关心的东西。
+	for _, ok := range []string{
+		"https://github.com/Downvid/downvid",
+		"http://127.0.0.1:6080/",
+		"HTTPS://Example.COM/x",
+	} {
+		if err := validateExternalURL(ok); err != nil {
+			t.Errorf("%q 应通过协议校验，got %v", ok, err)
+		}
 	}
-	// 关键：**不能**是「只允许 http/https」那个错误
-	if strings.Contains(err.Error(), "只允许打开") {
-		t.Fatalf("https 应通过协议校验，got %v", err)
+
+	// 反向：非 http(s) 必须被拒（这条才是安全边界）
+	for _, bad := range []string{
+		"file:///etc/passwd",
+		"javascript:alert(1)",
+		"data:text/html,x",
+		"  ",
+		"",
+	} {
+		if err := validateExternalURL(bad); err == nil {
+			t.Errorf("%q 不该被允许", bad)
+		}
 	}
 }
 

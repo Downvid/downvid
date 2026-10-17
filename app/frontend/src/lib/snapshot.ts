@@ -20,6 +20,8 @@
 /** 一次下载发起时需要的全部参数（发起时从界面捕获，之后不再变） */
 export interface DownloadSnapshot {
   formatId: string
+  /** 平台 CDN 直链（仅抖音/快手）；续传必须用它，不能回读解析面板 */
+  directUrl?: string
   /** 该格式是否自带音轨（决定后端的格式选择器） */
   hasAudio: boolean
   audioTrack?: { formatId: string; language: string; isM3u8?: boolean }
@@ -29,6 +31,7 @@ export interface DownloadSnapshot {
 /** 界面当前的选择（会随用户操作变化） */
 export interface CurrentSelection {
   formatId: string
+  directUrl?: string
   hasAudio: boolean
   audioTrack?: { formatId: string; language: string; isM3u8?: boolean }
   subtitles: string[]
@@ -51,6 +54,7 @@ export function snapshotForRun(
     // 复制一份数组：调用方之后改界面上的字幕选择不该影响这次下载
     return {
       formatId: task.formatId,
+      directUrl: task.directUrl,
       hasAudio: task.hasAudio,
       audioTrack: task.audioTrack ? { ...task.audioTrack } : undefined,
       subtitles: [...task.subtitles],
@@ -59,6 +63,7 @@ export function snapshotForRun(
   if (!current) return null
   return {
     formatId: current.formatId,
+    directUrl: current.directUrl,
     hasAudio: current.hasAudio,
     audioTrack: current.audioTrack ? { ...current.audioTrack } : undefined,
     subtitles: [...current.subtitles],

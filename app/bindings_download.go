@@ -15,6 +15,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -25,8 +26,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Downvid/downvid/app/internal/changelog"
 	"github.com/Downvid/downvid/app/internal/deps"
 	"github.com/Downvid/downvid/app/internal/download"
+	"github.com/Downvid/downvid/app/internal/fetch"
 	"github.com/Downvid/downvid/app/internal/image"
 	"github.com/Downvid/downvid/app/internal/netx"
 	"github.com/Downvid/downvid/app/internal/parse"
@@ -175,6 +178,186 @@ func (a *App) buildArgs(opts DownloadRequest) []string {
 	})
 }
 
+// startDirectDownload 走直链下载（抖音/快手），不经过 yt-dlp。
+//
+// 与 yt-dlp 路径共用的部分：进度事件名、`activeDownloads` 里的暂停句柄、
+// 历史记录的落盘时机。差异只在「谁来拉字节」。
+func (a *App) startDirectDownload(opts DownloadRequest) StartDownloadResult {
+	client, err := netx.Client(a.currentProxy(), 0)
+	if err != nil {
+		// socks5 这类：如实告诉用户哪些功能用它、哪些不用。
+		// 静默直连是最糟的选择（会暴露真实 IP 而用户不知道）。
+		return StartDownloadResult{OK: false, Error: err.Error()}
+	}
+
+	// 输出文件名：与 yt-dlp 路径同一套模板规则，否则「同一个视频从两条路径下
+	// 出来的文件名不一样」，用户会以为是两份东西。
+	template := opts.FilenameTemplate
+	if template == "" {
+		template = "%(title)s.%(ext)s"
+	}
+	outputDir := opts.OutputDir
+	if outputDir == "" {
+		outputDir = a.downloadsDir
+	}
+	outputPath := filepath.Join(outputDir, directFilename(template, opts))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	a.mu.Lock()
+	if a.directCancels == nil {
+		a.directCancels = map[string]context.CancelFunc{}
+	}
+	a.directCancels[opts.TaskID] = cancel
+	a.mu.Unlock()
+
+	// 进度节流：fetch 包已经节流到 200ms，这里可以直接转发
+	onProgress := func(p fetch.DirectProgress) {
+		a.emitProgress(DownloadProgress{
+			TaskID:    opts.TaskID,
+			URL:       opts.URL,
+			Status:    "downloading",
+			Percent:   p.Percent,
+			TotalSize: humanBytes(p.Total),
+			Speed:     humanSpeed(p.SpeedBps),
+			ETA:       humanETA(p.ETASec),
+			FilePath:  outputPath,
+		})
+	}
+
+	go func() {
+		defer func() {
+			a.mu.Lock()
+			delete(a.directCancels, opts.TaskID)
+			a.mu.Unlock()
+			cancel()
+		}()
+
+		res, err := (fetch.Direct{}).Download(ctx, fetch.DirectOptions{
+			CDNURL:      opts.DirectURL,
+			PageURL:     opts.URL,
+			OutputPath:  outputPath,
+			Connections: download.AccelerationConnections(a.acceleration()),
+			Client:      client,
+			OnProgress:  onProgress,
+		})
+
+		if errors.Is(err, context.Canceled) {
+			// 用户暂停：.part 与检查点都还在，恢复时只请求未写入的范围
+			a.emitProgress(DownloadProgress{
+				TaskID: opts.TaskID, URL: opts.URL, Status: "paused", FilePath: outputPath,
+			})
+			return
+		}
+		if err != nil {
+			a.emitProgress(DownloadProgress{
+				TaskID: opts.TaskID, URL: opts.URL, Status: "error",
+				Error: describeDirectError(err),
+			})
+			return
+		}
+		a.emitProgress(DownloadProgress{
+			TaskID: opts.TaskID, URL: opts.URL, Status: "completed",
+			Percent: 100, FilePath: res.Path,
+		})
+	}()
+
+	return StartDownloadResult{OK: true}
+}
+
+// directFilename 按模板算文件名。
+//
+// 只实现模板里**真正常用**的几个占位符（title / id / ext / uploader / height）。
+// 不追求与 yt-dlp 完全等价：直链这条路径拿不到 info JSON，能填的字段本来就少。
+// 认不出来的占位符原样保留——那是用户自己写的，删掉会让文件名变得莫名。
+func directFilename(template string, opts DownloadRequest) string {
+	name := template
+
+	ext := "mp4"
+	if opts.DownloadMode == "audio" {
+		ext = "m4a"
+	}
+
+	// title 用任务 id 兜底：拿不到标题时至少不会产生一个空文件名
+	title := opts.Title
+	if title == "" {
+		title = opts.TaskID
+	}
+
+	replacements := []struct{ from, to string }{
+		{"%(title)s", title},
+		{"%(id)s", opts.TaskID},
+		{"%(ext)s", ext},
+		{"%(uploader)s", ""},
+	}
+	for _, r := range replacements {
+		name = strings.ReplaceAll(name, r.from, r.to)
+	}
+
+	// 模板里没写扩展名时补上（与 yt-dlp 路径同一规则）
+	if !strings.HasSuffix(strings.ToLower(name), "."+ext) {
+		name += "." + ext
+	}
+
+	// 去掉路径分隔符：模板是用户可编辑的，`../` 之类会写到下载目录之外
+	name = strings.Map(func(r rune) rune {
+		switch r {
+		case '/', '\\', 0:
+			return '-'
+		}
+		return r
+	}, name)
+	return strings.TrimSpace(name)
+}
+
+// describeDirectError 把直链下载的错误翻译成人话。
+func describeDirectError(err error) string {
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "403"):
+		return "平台拒绝了这次下载（403）：直链已过期，请重新解析后再试"
+	case strings.Contains(msg, "404"):
+		return "直链已失效（404）：请重新解析后再试"
+	case strings.Contains(msg, "超时"):
+		return "下载连接超时：网络不稳定或直链已失效，请重试"
+	}
+	return msg
+}
+
+// humanBytes / humanSpeed / humanETA 只用于事件里的展示字段。
+//
+// 前端的进度条用的是 `Percent`，这三个只是给日志与兜底界面用的，
+// 因此保持简单实现即可（不做 i18n，单位是通用的）。
+func humanBytes(n int64) string {
+	if n <= 0 {
+		return ""
+	}
+	units := []string{"B", "KB", "MB", "GB"}
+	v := float64(n)
+	i := 0
+	for v >= 1024 && i < len(units)-1 {
+		v /= 1024
+		i++
+	}
+	return fmt.Sprintf("%.1f %s", v, units[i])
+}
+
+func humanSpeed(bps float64) string {
+	if bps <= 0 {
+		return ""
+	}
+	return humanBytes(int64(bps)) + "/s"
+}
+
+func humanETA(sec int64) string {
+	if sec <= 0 {
+		return ""
+	}
+	if sec < 60 {
+		return fmt.Sprintf("%ds", sec)
+	}
+	return fmt.Sprintf("%dm%02ds", sec/60, sec%60)
+}
+
 // StartDownload 启动一次下载（异步：立即返回，进度走 download:progress 事件）。
 //
 // 参数用一个结构体而不是长参数列表：Wails 会把结构体生成 TS 类型，
@@ -182,6 +365,11 @@ func (a *App) buildArgs(opts DownloadRequest) []string {
 func (a *App) StartDownload(opts DownloadRequest) StartDownloadResult {
 	if opts.TaskID == "" || opts.URL == "" {
 		return StartDownloadResult{OK: false, Error: "缺少 taskId 或 url"}
+	}
+
+	// 直链下载不需要 yt-dlp：只有走 yt-dlp 的路径才要求它存在。
+	if opts.DirectURL != "" {
+		return a.startDirectDownload(opts)
 	}
 
 	ytdlp := a.ResolveYtdlp()
@@ -232,6 +420,14 @@ func (a *App) StartDownload(opts DownloadRequest) StartDownloadResult {
 
 // PauseDownload 暂停（终止整棵进程树）。
 func (a *App) PauseDownload(taskID string) bool {
+	// 先试直链：那条路径没有子进程，靠取消 ctx 停下
+	a.mu.Lock()
+	cancel, isDirect := a.directCancels[taskID]
+	a.mu.Unlock()
+	if isDirect {
+		cancel()
+		return true
+	}
 	return a.runner.Pause(taskID)
 }
 
@@ -261,6 +457,13 @@ type DownloadRequest struct {
 	Subtitles        []string `json:"subtitles"`
 	OutputDir        string   `json:"outputDir"`
 	FilenameTemplate string   `json:"filenameTemplate"`
+	// DirectURL 非空时走**直链下载**（抖音/快手），不经过 yt-dlp。
+	//
+	// 这两家的解析器给的是平台 CDN 直链，有效期只有几分钟；交给 yt-dlp
+	// 会二次请求平台接口，拿不到同一份地址。所以解析器给了直链就必须直连。
+	DirectURL string `json:"directUrl,omitempty"`
+	// Title 用于直链路径的文件名（拿不到 info JSON，标题只能由前端带过来）
+	Title string `json:"title,omitempty"`
 	// AudioTrack 是选中的音轨（仅 YouTube 多音轨）。
 	//
 	// 早先这个字段根本不存在，于是界面上的「音轨」选择器**完全不起作用**：
@@ -687,6 +890,51 @@ func (a *App) GetDiskSpace(dir string) DiskSpaceResult {
 		return DiskSpaceResult{Error: err.Error()}
 	}
 	return DiskSpaceResult{Free: free, Total: total}
+}
+
+// ChangelogList 返回全部更新日志条目（本地内嵌，离线可用）。
+//
+// 分了两个用途：
+//   - 「关于」页展示历史版本
+//   - 更新弹窗里，若 Release 没带 body（Gitee / 部分镜像不给），退回本地记录
+func (a *App) ChangelogList() []changelog.Entry {
+	entries, err := changelog.Local()
+	if err != nil {
+		log.Printf("[downvid] 读取更新日志失败：%v", err)
+		return nil
+	}
+	return entries
+}
+
+// ChangelogCurrent 返回**当前运行版本**对应的更新日志。
+//
+// 找不到精确匹配时退回最新一条已发布版本 —— 开发构建（版本号为
+// `0.0.0-dev`）在 CHANGELOG 里没有对应段落，直接返回空会让「关于」页
+// 一片空白，用户会以为功能坏了。
+func (a *App) ChangelogCurrent() *changelog.Entry {
+	entries, err := changelog.Local()
+	if err != nil {
+		log.Printf("[downvid] 读取更新日志失败：%v", err)
+		return nil
+	}
+	if e, ok := changelog.Find(entries, version); ok {
+		return &e
+	}
+	for _, e := range entries {
+		if !e.Unreleased && e.Version != "" {
+			return &e
+		}
+	}
+	return nil
+}
+
+// ChangelogHistory 返回历史版本（从新到旧，不含 Unreleased）。
+func (a *App) ChangelogHistory() []changelog.Entry {
+	entries, err := changelog.Local()
+	if err != nil {
+		return nil
+	}
+	return changelog.History(entries, version)
 }
 
 // TestProxy 实际测一次代理连通性。

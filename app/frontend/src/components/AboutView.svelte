@@ -8,6 +8,7 @@
   import svelteIcon from '../assets/tech/svelte.svg'
   import typescriptIcon from '../assets/tech/typescript.svg'
   import { app } from '../lib/store.svelte'
+  import { parseInline, reflowMarkdown } from '../lib/markdown'
   import { t } from '../lib/i18n.svelte'
   import { APP_VERSION, REPO_URL, WEBSITE_URL } from '../lib/constants'
   // 邮箱与 mailto 拼装沿用应用现有的唯一来源，避免在演示里复制一份
@@ -52,26 +53,44 @@
     { name: 'yt-dlp', icon: '', material: 'download' },
   ]
 
-  const releases = $derived([
-    {
-      version: 'v1.5.0',
-      date: '2026-10-17',
-      notes: [t('update.note1'), t('update.note2'), t('update.note3')],
-    },
-    {
-      version: 'v1.4.0',
-      date: '2026-10-16',
-      notes: [t('about.release140Note1'), t('about.release140Note2'), t('about.release140Note3')],
-    },
-    {
-      version: 'v1.3.4',
-      date: '2026-10-14',
-      notes: [t('about.release134Note1'), t('about.release134Note2'), t('about.release134Note3')],
-    },
-  ])
-  let selectedVersion = $state('v1.5.0')
+  /**
+   * 版本列表来自**真实 CHANGELOG**（后端内嵌，离线可用）。
+   *
+   * 早先这里是硬编码的三条，notes 还是 `t('about.release140Note1')` 这类占位词条。
+   * 「关于」页的「更新内容」因此与真实发布毫无关系——而这恰恰是用户
+   * 想确认「我这版修了什么」时唯一的入口。
+   */
+  const releases = $derived(
+    app.changelog.map((entry) => ({
+      version: `v${entry.version}`,
+      date: entry.date,
+      // 每条小标题下的条目拍平成一行，并解析行内 Markdown。
+      //
+      // 两步都不能省：
+      //   1. `reflowMarkdown` —— CHANGELOG 按 80 列硬换行，直接渲染会在句中
+      //      断开、中文之间多出空格（真机上就是这样）
+      //   2. `parseInline` —— 不解析的话 `**粗体**` 的星号会原样显示
+      notes: entry.sections
+        .filter((section) => section.items.length > 0)
+        .flatMap((section) =>
+          section.items.map((item) => ({
+            section: section.title,
+            tokens: parseInline(reflowMarkdown(item)),
+          })),
+        ),
+    })),
+  )
+
+  let selectedVersion = $state('')
+  // 默认选中**当前运行版本**（列表为空时退回第一条）
+  $effect(() => {
+    if (!selectedVersion && releases.length > 0) {
+      selectedVersion = `v${app.version.replace(/^v/, '')}`
+    }
+  })
+
   const selectedRelease = $derived(
-    releases.find((release) => release.version === selectedVersion) ?? releases[0],
+    releases.find((release) => release.version === selectedVersion) ?? releases[0] ?? null,
   )
 
   function onVersionChange(event: Event): void {
@@ -178,14 +197,42 @@
           {/each}
         </select>
       </div>
-      <ol class="notes">
-        {#each selectedRelease.notes as note, index (index)}
-          <li class="note">
-            <span class="note-index num">{String(index + 1).padStart(2, '0')}</span>
-            <span class="note-text">{note}</span>
-          </li>
-        {/each}
-      </ol>
+      {#if selectedRelease}
+        <ol class="notes">
+          {#each selectedRelease.notes as note, index (index)}
+            <li class="note">
+              <span class="note-index num">{String(index + 1).padStart(2, '0')}</span>
+              <span class="note-text">
+                <!--
+                  逐 token 渲染而不是 `{@html}`：CHANGELOG 是可编辑的文本，
+                  直接注入 HTML 会让 `<script>` / `<img onerror>` 变成执行入口。
+                  走 Svelte 的普通插值，文本会自动转义。
+                -->
+                {#each note.tokens as token, tIndex (tIndex)}
+                  {#if token.kind === 'strong'}
+                    <strong>{token.text}</strong>
+                  {:else if token.kind === 'code'}
+                    <code>{token.text}</code>
+                  {:else if token.kind === 'link'}
+                    <button type="button" class="inline-link" onclick={() => openExternal(token.href)}>
+                      {token.text}
+                    </button>
+                  {:else}
+                    {token.text}
+                  {/if}
+                {/each}
+              </span>
+            </li>
+          {/each}
+        </ol>
+      {:else}
+        <!--
+          没有更新日志时如实说明，而不是显示空列表或占位文案。
+          真机上这只会在「内嵌 CHANGELOG 漏了」时出现——那是个构建问题，
+          用户看到一句说明比看到一片空白更容易反馈。
+        -->
+        <p class="notes-empty">{t('about.changelogEmpty')}</p>
+      {/if}
     </section>
   </div>
 
@@ -450,6 +497,39 @@
   .version-select:focus-visible {
     border-color: var(--accent-deep);
   }
+  /* 行内 Markdown 的样式。
+   *
+   * 三个都不能省：
+   *   - `code` 不加底色时会和正文混在一起，`shared/app.ts` 这类路径很难读
+   *   - `strong` 用 `ink-strong`（正文用 ink），保证粗体真的**看起来更重**
+   *   - 内联链接用按钮而不是 <a>：点击要走系统浏览器（openExternal），
+   *     用 <a href> 会在 WebView 里直接导航走，整个应用界面就没了
+   */
+  .note-text code {
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: color-mix(in oklab, var(--accent) 10%, transparent);
+    font-family: var(--font-code);
+    font-size: 0.92em;
+  }
+  .note-text strong {
+    font-weight: 650;
+    color: var(--ink-strong);
+  }
+  .inline-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--accent-deep);
+    font: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+  }
+  .inline-link:hover {
+    color: var(--accent);
+  }
+
   .notes {
     list-style: none;
     margin: 0;

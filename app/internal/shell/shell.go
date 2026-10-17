@@ -100,18 +100,31 @@ func ShowInFolder(path string) error {
 	return nil
 }
 
+// validateExternalURL 是 OpenExternal 的协议校验（纯函数，可单测）。
+func validateExternalURL(raw string) error {
+	if strings.TrimSpace(raw) == "" {
+		return ErrEmpty
+	}
+	// 大小写不敏感：`HTTPS://` 也该通过
+	lower := strings.ToLower(raw)
+	if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
+		return errors.New("只允许打开 http/https 链接")
+	}
+	return nil
+}
+
 // OpenExternal 用系统浏览器打开 URL。
 //
 // **只接受 http(s)**：历史记录里存着网页 URL，但那些数据可被手工编辑，
 // 而 `shell:openExternal` 若能打开任意 scheme（`file:`、自定义协议），
 // 就等于给了一个「执行系统命令」的入口。
+//
+// 协议校验拆在 validateExternalURL 里，以便直接测试——`OpenExternal`
+// 会真的起系统命令，在无头 CI 上不可靠（`xdg-open` 可能不存在，
+// 也不该真的把浏览器拉起来）。
 func OpenExternal(url string) error {
-	if strings.TrimSpace(url) == "" {
-		return ErrEmpty
-	}
-	lower := strings.ToLower(url)
-	if !strings.HasPrefix(lower, "http://") && !strings.HasPrefix(lower, "https://") {
-		return errors.New("只允许打开 http/https 链接")
+	if err := validateExternalURL(url); err != nil {
+		return err
 	}
 
 	var cmd *exec.Cmd

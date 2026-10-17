@@ -72,6 +72,8 @@ export interface BackendVideoInfo {
   isYoutube: boolean
   parseNotice: string
   cacheFile?: string
+  /** 平台 CDN 直链（仅抖音/快手；有它时后端不走 yt-dlp） */
+  directUrl?: string
 }
 
 /** 后端发出的下载进度事件（Go 侧 `DownloadProgress`） */
@@ -141,6 +143,9 @@ type Bindings = {
   IsInstallingDeps(): Promise<boolean>
   OpenManagedDir(): Promise<string>
   TestProxy(proxy: string): Promise<{ ok: boolean; latencyMs?: number; status?: number; error?: string; kind?: string }>
+  ChangelogList(): Promise<ChangelogEntry[]>
+  ChangelogCurrent(): Promise<ChangelogEntry | null>
+  ChangelogHistory(): Promise<ChangelogEntry[]>
   ClassifyError(raw: string): Promise<string>
   Diagnostic(raw: string, ytdlp: string, runtime: string): Promise<string>
 }
@@ -238,6 +243,9 @@ export function toVideoInfo(info: BackendVideoInfo, url: string): VideoInfo {
     subtitles,
     needsCookies: Boolean(info.isYoutube),
     notice: info.parseNotice || undefined,
+    cacheFile: info.cacheFile,
+    // 直链原样带过去：后端据此决定走 yt-dlp 还是直连
+    directUrl: info.directUrl,
   }
 }
 
@@ -294,6 +302,12 @@ export interface StartDownloadParams {
   outputDir: string
   /** 选中的音轨（仅 YouTube 多音轨） */
   audioTrack?: { formatId: string; language: string; isM3u8?: boolean }
+  /**
+   * 平台 CDN 直链（仅抖音/快手）。有它时后端走直链下载器，不经过 yt-dlp。
+   */
+  directUrl?: string
+  /** 标题：直链路径拿不到 info JSON，文件名只能由前端带过来 */
+  title?: string
 }
 
 /**
@@ -318,6 +332,8 @@ export async function startDownload(
       subtitles: p.subtitles,
       outputDir: p.outputDir,
       audioTrack: p.audioTrack,
+      directUrl: p.directUrl,
+      title: p.title,
       // 用**用户设置**里的模板。早先这里写死 `'%(title)s.%(ext)s'`,
       // 于是设置页改了文件名模板对下载毫无影响——用户改完再下载，
       // 文件名还是老样子。
@@ -604,6 +620,65 @@ export async function checkUpdate(source = 'auto'): Promise<UpdateCheckResult | 
       notes: release?.releaseNotes,
       date: release?.releaseDate,
     }
+  } catch {
+    return null
+  }
+}
+
+/** 平台标识（Go 风格：windows / darwin / linux）。 */
+export async function platform(): Promise<string> {
+  const b = await backend()
+  if (!b) return ''
+  try {
+    return await b.GetPlatform()
+  } catch {
+    return ''
+  }
+}
+
+/** 一条更新日志（对应后端 `changelog.Entry`） */
+export interface ChangelogEntry {
+  /** 版本号；Unreleased 段为空串 */
+  version: string
+  /** 发布日期；Unreleased 段为空 */
+  date: string
+  unreleased?: boolean
+  sections: Array<{ title: string; items: string[] }>
+  /** 完整 Markdown 正文（含小标题，不含版本标题行） */
+  body: string
+}
+
+/**
+ * 读更新日志（本地内嵌，离线可用）。
+ *
+ * 返回 null 表示没有后端（浏览器预览）。**不要**在那种情况下退回硬编码文案：
+ * 那正是之前的做法，界面上的「更新内容」与真实发布内容毫无关系。
+ */
+export async function changelogList(): Promise<ChangelogEntry[] | null> {
+  const b = await backend()
+  if (!b) return null
+  try {
+    return await b.ChangelogList()
+  } catch {
+    return null
+  }
+}
+
+export async function changelogCurrent(): Promise<ChangelogEntry | null> {
+  const b = await backend()
+  if (!b) return null
+  try {
+    return await b.ChangelogCurrent()
+  } catch {
+    return null
+  }
+}
+
+export async function changelogHistory(): Promise<ChangelogEntry[] | null> {
+  const b = await backend()
+  if (!b) return null
+  try {
+    return await b.ChangelogHistory()
   } catch {
     return null
   }

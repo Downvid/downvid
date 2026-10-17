@@ -81,7 +81,8 @@
     "website:version": "node scripts/sync-website-version.mjs",
     "lint:workflows": "node scripts/lint-workflows.mjs",
     "check:frontend": "pnpm --dir app/frontend check",
-    "lint:i18n:app": "node scripts/lint-frontend-i18n.mjs"
+    "lint:i18n:app": "node scripts/lint-frontend-i18n.mjs",
+    "sync:changelog": "node scripts/sync-changelog.mjs --check"
   },
   "dependencies": {
     "@material-symbols/font-400": "^0.48.0",

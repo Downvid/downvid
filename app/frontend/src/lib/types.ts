@@ -95,6 +95,13 @@ export interface VideoInfo {
   notice?: string
   /** 后端缓存的原始 info JSON（下载时 --load-info-json 用） */
   cacheFile?: string
+  /**
+   * 平台 CDN 直链（仅抖音/快手）。
+   *
+   * 有它时下载**不经过 yt-dlp**：这两家的直链有效期只有几分钟，
+   * 交给 yt-dlp 会二次请求平台接口、拿不到同一份地址。
+   */
+  directUrl?: string
 }
 
 /** 一条下载历史（对应后端 `history.Record`） */
@@ -156,6 +163,13 @@ export interface TaskItem {
    * 用户换成别的视频了。
    */
   audioTrack?: { formatId: string; language: string; isM3u8?: boolean }
+  /**
+   * 平台 CDN 直链（仅抖音/快手）。
+   *
+   * 固化在任务上：它是几十分钟后过期的地址，续传时若回去读解析面板，
+   * 可能已经指向另一个视频了。
+   */
+  directUrl?: string
   subtitles: string[]
   /** 最近 24 次采样的速度（画迷你折线用） */
   speedHistory: number[]
