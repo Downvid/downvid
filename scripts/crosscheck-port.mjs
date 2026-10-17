@@ -405,6 +405,88 @@ const MODULES = {
       throw new Error('unknown kind ' + testCase.kind)
     },
   },
+  /**
+   * 更新源：候选生成 / 响应归一化 / 版本比较 / 状态分类 / 设置清洗。
+   *
+   * 链路执行部分（LookupLatestRelease）不在这里对拍：它依赖注入的 fetch，
+   * 两边注入形态不同，对拍价值低于「用同一批假响应跑各自实现」的 Go 单测。
+   * 这里覆盖的是**纯函数**——它们一旦不一致，表现是「更新永远失败但没提示」。
+   */
+  'update-sources': {
+    tsFile: 'shared/update-sources.ts',
+    goDir: 'app/internal/update',
+    goTest: 'TestCrossCheckUpdateSources',
+    mocks: {
+      './app': {
+        APP: { name: 'DownVid', owner: 'Downvid', repo: 'downvid' },
+        REPO_SLUG: 'Downvid/downvid',
+        GITHUB_API: 'https://api.github.com',
+        WEBSITE_URL: 'https://example.test',
+      },
+    },
+    buildCases() {
+      const cases = []
+
+      // 候选生成
+      for (const source of ['auto', 'github', 'jsdelivr', 'ghproxy', 'gitee', 'website']) {
+        cases.push({ kind: 'candidates', source })
+      }
+
+      // 响应归一化
+      const payloads = [
+        { tag_name: 'v1.5.0', body: '说明', published_at: '2026-10-17' },
+        { tag_name: '1.5.0', body: '', created_at: '2026-10-16' },
+        { name: 'v2.0.0' },
+        [{ tag_name: 'v1.5.0', body: '数组形态', created_at: '2026-10-17' }],
+        [{ tag_name: 'v1.9.0' }, { tag_name: 'v1.8.0' }],
+        { versions: [{ version: '1.3.0' }, { version: '1.5.0' }, { version: '1.4.0' }, { version: '2.0.0-beta.1' }] },
+        { versions: [{ version: '2.0.0-beta.1' }] },
+        { versions: 'nope' },
+        'v1.5.0\n',
+        'not a version',
+        '1.5.0',
+        null,
+        {},
+        [],
+        { tag_name: 'latest' },
+      ]
+      for (const src of ['github', 'jsdelivr', 'gitee', 'website']) {
+        for (const p of payloads) cases.push({ kind: 'parse', source: src, payload: p })
+      }
+
+      // HTTP 状态分类
+      for (const status of [200, 302, 400, 403, 404, 410, 418, 429, 451, 500, 502, 503]) {
+        cases.push({ kind: 'status', status })
+      }
+
+      // 版本比较
+      const versions = ['1.4.0', '1.5.0', '1.5', 'v1.5.0', '2.0.0', '2026.10.10', '2026.09.01', '1.4.0-beta.1']
+      for (const a of versions) for (const b of versions) cases.push({ kind: 'compare', a, b })
+
+      // 设置清洗
+      for (const value of [...['auto', 'github', 'jsdelivr', 'ghproxy', 'gitee', 'website'], 'AUTO', '', 'github ', 42, null, {}, [], 'jsdelivr ']) {
+        cases.push({ kind: 'normalize', value })
+      }
+
+      return cases
+    },
+    tsCall(mod, testCase) {
+      switch (testCase.kind) {
+        case 'candidates':
+          return mod.latestCandidates(testCase.source).map((c) => ({ source: c.source, url: c.url, kind: c.kind }))
+        case 'parse':
+          return mod.parseLatestPayload(testCase.source, testCase.payload)
+        case 'status':
+          return mod.classifyHttpStatus(testCase.status)
+        case 'compare':
+          // 只比符号：TS 返回原始差值，Go 也返回差值，但数值可能因实现细节不同
+          return Math.sign(mod.compareVersions(testCase.a, testCase.b))
+        case 'normalize':
+          return mod.normalizeUpdateSource(testCase.value)
+      }
+      throw new Error('unknown kind ' + testCase.kind)
+    },
+  },
 }
 
 const selected = onlyModule ? { [onlyModule]: MODULES[onlyModule] } : MODULES
