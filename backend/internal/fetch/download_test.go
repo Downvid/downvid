@@ -1,6 +1,7 @@
 package fetch
 
 import (
+	"archive/tar"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -226,5 +227,93 @@ func TestNetworkHint(t *testing.T) {
 		if !strings.Contains(got, c.want) {
 			t.Errorf("%q 的提示应含 %q，实际 %q", c.msg, c.want, got)
 		}
+	}
+}
+
+func tarGzBytes(t *testing.T, name string, payload []byte) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	if err := tw.WriteHeader(&tar.Header{Name: name, Mode: 0o755, Size: int64(len(payload))}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tw.Write(payload); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// macOS 的 aria2 静态构建是 .tar.gz（不是 zip / 不是裸 gzip）。
+// 这条用例钉住「三种归档格式都要能装」——用错格式时错误只是「解压失败」，
+// 看不出是格式判断的问题。
+func TestInstallTarGzMember(t *testing.T) {
+	payload := []byte("\x7fELF fake aria2c\n")
+	archive := tarGzBytes(t, "aria2c-macos-arm64", payload)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(archive)
+	}))
+	defer srv.Close()
+
+	target := filepath.Join(t.TempDir(), "aria2c")
+	err := Install(context.Background(), []Task{{
+		Tool: "aria2", URL: srv.URL, SHA256: sha256Hex(archive),
+		TarInner: "aria2c-macos-arm64", Target: target,
+	}}, Options{Timeout: 30 * time.Second})
+	if err != nil {
+		t.Fatalf("tar.gz 安装失败：%v", err)
+	}
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(payload) {
+		t.Fatalf("解包内容不一致：%q", got)
+	}
+}
+
+// 包内找不到指定文件时必须报错，而不是装一个空文件。
+func TestInstallTarGzMissingMember(t *testing.T) {
+	archive := tarGzBytes(t, "something-else", []byte("x"))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(archive)
+	}))
+	defer srv.Close()
+
+	err := Install(context.Background(), []Task{{
+		Tool: "aria2", URL: srv.URL, SHA256: sha256Hex(archive),
+		TarInner: "aria2c", Target: filepath.Join(t.TempDir(), "aria2c"),
+	}}, Options{Timeout: 30 * time.Second, Retries: 1})
+	if err == nil {
+		t.Fatal("缺少指定文件时应报错")
+	}
+	if !strings.Contains(err.Error(), "缺少") {
+		t.Errorf("错误信息应说明缺文件，实际：%v", err)
+	}
+}
+
+// 目录穿越必须被拒绝：包内名字带 .. 时不能写到安装目录之外。
+func TestInstallTarGzRejectsTraversal(t *testing.T) {
+	archive := tarGzBytes(t, "../../evil", []byte("x"))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write(archive)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	err := Install(context.Background(), []Task{{
+		Tool: "aria2", URL: srv.URL, SHA256: sha256Hex(archive),
+		// Base(name) == "evil" 才可能命中，这里用 .. 路径验证拒绝分支
+		TarInner: "evil", Target: filepath.Join(dir, "aria2c"),
+	}}, Options{Timeout: 30 * time.Second, Retries: 1})
+	if err == nil {
+		t.Fatal("目录穿越应被拒绝")
 	}
 }

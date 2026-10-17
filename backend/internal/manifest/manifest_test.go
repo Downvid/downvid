@@ -58,12 +58,37 @@ func TestTasksForCurrentPlatform(t *testing.T) {
 		if !reSHA256.MatchString(task.SHA256) {
 			t.Errorf("%s 缺少有效校验值：%q", task.Tool, task.SHA256)
 		}
-		// ffmpeg / ffprobe 走 gzip 单文件，yt-dlp 是裸二进制
-		if task.Tool == "yt-dlp" && task.Gzip {
-			t.Error("yt-dlp 不应标记为 gzip")
+		// 归档形态按依赖种类区分，且每个任务必须恰好命中一种：
+		//   yt-dlp        → 裸二进制（zipapp / 自包含 exe）
+		//   ffmpeg/probe  → gzip 单文件
+		//   aria2         → zip / tar.gz / 裸文件，**三端不同**（见 aria2Assets 注释）
+		archives := 0
+		if task.Gzip {
+			archives++
 		}
-		if task.Tool != "yt-dlp" && !task.Gzip {
-			t.Errorf("%s 应标记为 gzip", task.Tool)
+		if task.ZipInner != "" {
+			archives++
+		}
+		if task.TarInner != "" {
+			archives++
+		}
+		if archives > 1 {
+			t.Errorf("%s 同时声明了多种归档格式：%+v", task.Tool, task)
+		}
+		switch task.Tool {
+		case "yt-dlp":
+			if archives != 0 {
+				t.Errorf("yt-dlp 应是裸二进制，不应带归档标记：%+v", task)
+			}
+		case "ffmpeg", "ffprobe":
+			if !task.Gzip {
+				t.Errorf("%s 应标记为 gzip", task.Tool)
+			}
+		case "aria2":
+			// 三种都合法，只要 URL 与形态对得上即可
+			if task.URL == "" {
+				t.Error("aria2 任务缺少 URL")
+			}
 		}
 		seen[task.Tool] = true
 	}

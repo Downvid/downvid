@@ -10,6 +10,7 @@ package runtime
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -28,20 +29,35 @@ const (
 	KindYtDlp   Kind = "yt-dlp"
 	KindFFmpeg  Kind = "ffmpeg"
 	KindFFprobe Kind = "ffprobe"
+	// KindAria2 是可选的下载加速器。放进同一套探测体系（而不是像以前那样
+	// 在 electron/download/aria2.ts 里自己再写一遍候选表）有三个好处：
+	//   1. 跨端一致：Windows 的 Scoop/WinGet/Chocolatey、macOS 的 Homebrew、
+	//      Linux 的 snap/nix 等路径只在这里维护一份；
+	//   2. 能复用同一套下载与 SHA-256 校验（Windows/Linux 有官方静态构建）；
+	//   3. 界面只需要一个来源，不用在两个页面各显示一半状态。
+	KindAria2 Kind = "aria2"
 )
 
 // Kinds 全部依赖，顺序即界面展示顺序
-var Kinds = []Kind{KindYtDlp, KindFFmpeg, KindFFprobe}
+var Kinds = []Kind{KindYtDlp, KindFFmpeg, KindFFprobe, KindAria2}
 
-// Optional 标记非必需依赖：ffprobe 只在部分后处理场景用到
-var Optional = map[Kind]bool{KindFFprobe: true}
+// Optional 标记非必需依赖：ffprobe 只在部分后处理场景用到；
+// aria2 只影响加速开关（没有它就用内置分块下载器，功能不缺失）
+var Optional = map[Kind]bool{KindFFprobe: true, KindAria2: true}
 
 // BinaryName 工具在磁盘上的文件名
+//
+// 只有 aria2 的二进制叫 aria2c（其余与 Kind 同名）。写错的表现是
+// 「明明装了却永远显示未找到」，所以单独列出而不是靠命名约定。
 func BinaryName(kind Kind) string {
-	if runtime.GOOS == "windows" {
-		return string(kind) + ".exe"
+	name := string(kind)
+	if kind == KindAria2 {
+		name = "aria2c"
 	}
-	return string(kind)
+	if runtime.GOOS == "windows" {
+		return name + ".exe"
+	}
+	return name
 }
 
 // Source 依赖来源，用于界面标识与排查
@@ -77,6 +93,13 @@ type Result struct {
 	// Stale 表示「找到了可用副本，但版本落后于清单」。Found=false + Stale=true
 	// 时界面才应该主动引导更新。
 	Stale bool `json:"stale,omitempty"`
+	// Form 是二进制的**形态**：`zipapp` / `native`。仅 yt-dlp 有意义。
+	//
+	// 为什么需要它：yt-dlp 的 Python zipapp 启动 0.4s，PyInstaller 独立包启动
+	// 9~10s（每次都要解压 72MB），而两者的 `--version` **完全相同**。
+	// 只看版本号的话，「装的是慢的那个」永远显示「已是最新」——
+	// 用户明明被升级了清单却仍要等十几秒，而且没有任何提示说明为什么。
+	Form string `json:"form,omitempty"`
 }
 
 // FindAll 依次探测全部依赖
@@ -96,11 +119,35 @@ func FindAll(opts Options) []Result {
 // 70 秒把它覆盖掉，让「文档写 80、实际跑 70」静默对不上）。
 const DetectTimeout = 80 * time.Second
 
+// FindAllContext 并行探测全部依赖。
+//
+// ## 为什么必须并行
+//
+// 每个候选都要**真的执行一次**工具来读版本号，而 yt-dlp 的 PyInstaller 构建
+// 单次启动实测 8~10 秒（每次都要把 72MB 解压到临时目录）。串行探测时，
+// 总耗时是三者之和：设置面板打开后要等十几秒才显示状态，而用户看到的
+// 只是一个转圈的图标 —— 很容易被理解成「应用卡死了」。
+//
+// 并行之后总耗时≈最慢的那一个（yt-dlp），ffmpeg / ffprobe / aria2 的探测
+// 全都藏进它的阴影里。
+//
+// ## 为什么安全
+//
+//   - 各依赖的候选表、扫描预算都是**按 kind 独立**的（`findOneContext` 内部
+//     会重置预算），互不共享可变状态；
+//   - 唯一的共享是 `ctx`（总时限）与只读的 `MinVersions`；
+//   - 结果按 `Kinds` 的顺序写回固定下标，因此输出顺序稳定（界面按它展示）。
 func FindAllContext(ctx context.Context, opts Options) []Result {
-	results := make([]Result, 0, len(Kinds))
-	for _, kind := range Kinds {
-		results = append(results, findOneContext(ctx, kind, opts))
+	results := make([]Result, len(Kinds))
+	var wg sync.WaitGroup
+	for i, kind := range Kinds {
+		wg.Add(1)
+		go func(i int, kind Kind) {
+			defer wg.Done()
+			results[i] = findOneContext(ctx, kind, opts)
+		}(i, kind)
 	}
+	wg.Wait()
 	return results
 }
 
@@ -156,6 +203,7 @@ func findOneContext(parent context.Context, kind Kind, opts Options) Result {
 		res.Source = string(c.Source)
 		res.Managed = c.Source == SourceManaged
 		res.RequiredVersion = requiredVersion(kind)
+		res.Form = binaryForm(kind, info.Path)
 		return res
 	}
 
@@ -178,6 +226,7 @@ func findOneContext(parent context.Context, kind Kind, opts Options) Result {
 		res.Version = fallback.Version
 		res.Source = string(SourceScanned)
 		res.Managed = false
+		res.Form = binaryForm(kind, fallback.Path)
 		return res
 	}
 
@@ -198,6 +247,32 @@ func findOneContext(parent context.Context, kind Kind, opts Options) Result {
 		res.Reason = "未在托管目录、PATH、常见安装目录中找到（已尝试扫描常见位置）"
 	}
 	return res
+}
+
+// binaryForm 判断可执行文件的形态，目前只对 yt-dlp 有意义。
+//
+// 判定方式是**读首字节**而不是「大小」或「文件名」：
+//   - `#!`      → 脚本（zipapp 的 shebang）
+//   - 其他      → 原生二进制（PyInstaller 独立包 / 官方 exe）
+//
+// 只看前两字节就够，因此这个探测几乎零成本（相比执行一次 `--version` 的 0.4~10 秒）。
+func binaryForm(kind Kind, path string) string {
+	if kind != KindYtDlp || path == "" {
+		return ""
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	var head [2]byte
+	if _, err := io.ReadFull(f, head[:]); err != nil {
+		return ""
+	}
+	if head[0] == '#' && head[1] == '!' {
+		return "zipapp"
+	}
+	return "native"
 }
 
 // requiredVersion 返回该依赖当前要求的最低版本；未注入时为 ""。
@@ -448,14 +523,29 @@ func isAcceptableVersion(kind Kind, info probe.Info) bool {
 		return !probe.IsOlder(info.Version, min)
 	}
 	// 未注入门槛时退回粗判（按主版本号）
+	// aria2 的门槛是 1.36.0，比不了主版本号（主版本永远是 1）
+	if kind == KindAria2 {
+		return !probe.IsOlder(info.Version, Aria2MinVersion)
+	}
 	if min, ok := probe.MinimumMajor[string(kind)]; ok {
 		return info.Major >= min
 	}
 	return true
 }
 
+// Aria2MinVersion aria2 的最低可用版本。
+//
+// 1.36 起修复了若干分段续传问题；更早的版本在 `--max-connection-per-server`
+// 下会出现「暂停后再恢复从头下」——正是我们这次要修的类问题，
+// 让老版本通过检测等于把同一个故障留给用户。
+const Aria2MinVersion = "1.36.0"
+
 // staleReason 生成「版本过旧」的提示，带上当前版本与要求版本，便于用户判断
 func staleReason(kind Kind, info probe.Info) error {
+	if kind == KindAria2 {
+		return errors.New("aria2 版本过旧（当前 " + info.Version + "，需要 " + Aria2MinVersion +
+			" 或更新），请在「设置 → 运行依赖」中下载")
+	}
 	if min, ok := MinVersions[kind]; ok && min != "" {
 		return errors.New("版本过旧（当前 " + info.Version + "，需要 " + min +
 			" 或更新），建议在「设置 → 运行依赖」中重新下载")
@@ -618,6 +708,11 @@ func commonInstallDirs() []string {
 			"/var/lib/flatpak/exports/bin",
 			"/usr/lib/yt-dlp/bin", "/usr/local/lib/yt-dlp/bin",
 			"/app/bin", // Flatpak 沙箱内
+			// Nix / NixOS：declarative 安装把二进制放在 profile 的 bin 下
+			"/nix/var/nix/profiles/default/bin",
+			"/run/current-system/sw/bin",
+			// Homebrew on Linux
+			"/home/linuxbrew/.linuxbrew/bin",
 		}
 	case "windows":
 		dirs = windowsInstallDirs(home)
@@ -662,9 +757,13 @@ func windowsInstallDirs(home string) []string {
 		filepath.Join(scoop, "shims"),
 		filepath.Join(scoop, "apps", "yt-dlp", "current"),
 		filepath.Join(scoop, "apps", "ffmpeg", "current", "bin"),
+		// aria2 的 Scoop 包：`scoop install aria2` → apps\aria2\current\aria2c.exe
+		// （不在 bin 子目录里，与 ffmpeg 不同）
+		filepath.Join(scoop, "apps", "aria2", "current"),
 		filepath.Join(scoopGlobal, "shims"),
 		filepath.Join(scoopGlobal, "apps", "yt-dlp", "current"),
 		filepath.Join(scoopGlobal, "apps", "ffmpeg", "current", "bin"),
+		filepath.Join(scoopGlobal, "apps", "aria2", "current"),
 		// 用户级 winget
 		filepath.Join(wingetBase, "Links"),
 		// 机器级 winget（--scope machine）
@@ -703,6 +802,8 @@ var WindowsPackagePatterns = []string{
 	// 用户直接装 Gyan.FFmpeg 的情况
 	filepath.Join("Packages", "Gyan.FFmpeg_*"),
 	filepath.Join("Packages", "Gyan.FFmpeg_*", "*", "bin"),
+	// aria2：`winget install aria2.aria2` 是 portable 包，exe 直接在包目录下
+	filepath.Join("Packages", "aria2.aria2_*"),
 }
 
 // extraDirs 跨平台都适用的用户级目录

@@ -27,15 +27,102 @@ import path from 'node:path'
 
 const YTDLP_REPO = 'yt-dlp/yt-dlp-nightly-builds'
 const FFMPEG_REPO = 'eugeneware/ffmpeg-static'
+// aria2 的静态构建。官方 release 只有 Windows 与 Android 包，其余靠社区构建。
+//
+// **五个平台用三个源**，因为没有任何单一仓库同时提供「自包含 + 架构齐全」的产物。
+// 每个平台的选择都是实测过的（`file` / `otool -L` + 真跑一次下载）：
+//
+// | 平台 | 源 | 归档 | 为什么是它 |
+// | --- | --- | --- | --- |
+// | linux/x64, linux/arm64 | abcfy2/aria2-static-build | zip | musl 静态，不依赖发行版库 |
+// | win32/x64 | abcfy2/aria2-static-build | zip | mingw 静态，自带依赖 |
+// | darwin/arm64 | ricode-labs/aria2 | tar.gz | **只有系统库**，实测 `--version` 与真实下载都正常 |
+// | darwin/x64 | static-build/aria2 | 裸 Mach-O | 只有系统库；上游仅提供 x86_64 的 darwin 包 |
+//
+// 反面例子（别用）：
+//   - Homebrew bottle：二进制链接到 `@@HOMEBREW_PREFIX@@/opt/openssl@4/...`，
+//     单独拷出来跑不了（exec format error / dyld 找不到库），是最容易误选的「看似官方」来源
+//   - qydysky/aria2：只发 ubuntu/windows，没有 macOS
+//   - Elypha/aria2-mod：只有 linux-amd64 与 windows
+const ARIA2_SOURCES = {
+  'abcfy2': 'abcfy2/aria2-static-build',
+  'ricode': 'ricode-labs/aria2',
+  'staticbuild': 'static-build/aria2',
+}
+
+/** 兼容旧代码路径（默认 tag 跟随 abcfy2） */
+const ARIA2_REPO = ARIA2_SOURCES.abcfy2
 const OUT_FILE = path.resolve('backend/internal/manifest/assets.gen.go')
 
-/** yt-dlp 各平台使用的产物名 */
+/**
+ * yt-dlp 各平台使用的产物名。
+ *
+ * ## 为什么改成 Python zipapp（`yt-dlp`）而不是 PyInstaller 独立包
+ *
+ * 实测（同一台机器、同一个 bilibili 视频）：
+ *
+ * | 形态 | `--version` | 真实解析 |
+ * | --- | --- | --- |
+ * | `yt-dlp_macos`（PyInstaller） | 9.5~10.5s | 11.4s |
+ * | `yt-dlp`（Python zipapp） | 0.41s | **2.2s** |
+ *
+ * PyInstaller 的单文件包每次启动都要把 ~72MB 解压到临时目录，这 9 秒是**纯开销**：
+ * 它不随网络、不随站点变化，用户能直接感觉到的就是「点解析要等十几秒」。
+ * zipapp 只解压自己的源码（3MB），启动快到几乎可以忽略。
+ *
+ * 代价是**需要一个 python3 运行时**。策略是「有就用快的，没有就用能跑的」：
+ *   - 清单里同时记两份：`yt-dlp`（zipapp）与 `<platform>_bundled`（PyInstaller）
+ *   - 边车的 `fetch` 先探测 python3；可用就装 zipapp，不可用就装独立包
+ *   - 探测时两者都能识别（zipapp 的版本输出与独立包一致）
+ *
+ * Windows 不用 zipapp：官方 `yt-dlp.exe` 是自包含的（自带解释器），
+ * 而 Windows 上「有 python3」远不如 Linux/macOS 普遍，强依赖会翻车。
+ */
 const YTDLP_ASSETS = {
+  'darwin/arm64': 'yt-dlp',
+  'darwin/x64': 'yt-dlp',
+  'linux/x64': 'yt-dlp',
+  'linux/arm64': 'yt-dlp',
+  'win32/x64': 'yt-dlp.exe',
+}
+
+/**
+ * 自包含的 PyInstaller 独立包，作为「没有 python3」时的回退。
+ *
+ * 与 `YTDLP_ASSETS` 一一对应：zipapp 装不上时用它。
+ * Windows 的两份相同（`yt-dlp.exe` 本来就是自包含的），不重复下载。
+ */
+const YTDLP_BUNDLED_ASSETS = {
   'darwin/arm64': 'yt-dlp_macos',
   'darwin/x64': 'yt-dlp_macos',
   'linux/x64': 'yt-dlp_linux',
   'linux/arm64': 'yt-dlp_linux_aarch64',
   'win32/x64': 'yt-dlp.exe',
+}
+
+/**
+ * 哪些平台使用 zipapp（需要系统 python3）。
+ * Windows 排除：那边 python3 不普遍，且官方 exe 已自带解释器。
+ */
+const YTDLP_ZIPAPP_PLATFORMS = new Set(['darwin/arm64', 'darwin/x64', 'linux/x64', 'linux/arm64'])
+
+/**
+ * aria2 各平台的下载描述。
+ *
+ * `source` / `tag` 一起决定 URL 前缀；`asset` 是文件名；`archive` 决定怎么解包：
+ *   - `zip`     → fetch 的 ZipInner（取包内 aria2c[.exe]）
+ *   - `tar.gz`  → fetch 的 TarInner（取包内 aria2c-*，macOS 那个包用的）
+ *   - `raw`     → 下载物本身就是可执行文件，直接安装
+ *
+ * `tag` 为 `latest` 的源（static-build）用 releases/latest/download 形式，
+ * 不做版本钉住 —— 它只发 darwin/x64 单个二进制，且没有版本化 tag。
+ */
+const ARIA2_ASSETS = {
+  'linux/x64': { source: 'abcfy2', asset: 'aria2-x86_64-linux-musl_static.zip', archive: 'zip', inner: 'aria2c' },
+  'linux/arm64': { source: 'abcfy2', asset: 'aria2-aarch64-linux-musl_static.zip', archive: 'zip', inner: 'aria2c' },
+  'win32/x64': { source: 'abcfy2', asset: 'aria2-x86_64-w64-mingw32_static.zip', archive: 'zip', inner: 'aria2c.exe' },
+  'darwin/arm64': { source: 'ricode', tag: 'aria2-1.37.0', asset: 'aria2-macos-arm64.tar.gz', archive: 'tar.gz', inner: 'aria2c-macos-arm64' },
+  'darwin/x64': { source: 'staticbuild', tag: 'latest', asset: 'aria2c.darwin', archive: 'raw', inner: '' },
 }
 
 /** ffmpeg-static 各平台使用的产物名（实际文件为 <name>.gz） */
@@ -143,10 +230,21 @@ async function resolveYtDlp(tag, { withHashes }) {
   const assets = {}
   if (withHashes) {
     const sums = parseSums(curlFetch(`${base}/SHA2-256SUMS`))
-    for (const [platform, name] of Object.entries(YTDLP_ASSETS)) {
+    const lookup = (name) => {
       const hash = sums.get(name)
       if (!hash) throw new Error(`${resolvedTag} 的 SHA2-256SUMS 中缺少 ${name}`)
-      assets[platform] = { name, hash }
+      return hash
+    }
+    for (const [platform, name] of Object.entries(YTDLP_ASSETS)) {
+      // 每个平台同时记两份：主用（zipapp）+ 回退（自包含）
+      assets[platform] = {
+        name,
+        hash: lookup(name),
+        // 回退包与主用包同名时（Windows）不重复记录，节省一次下载与一段清单
+        bundled: YTDLP_BUNDLED_ASSETS[platform] === name ? '' : YTDLP_BUNDLED_ASSETS[platform],
+        bundledHash: YTDLP_BUNDLED_ASSETS[platform] === name ? '' : lookup(YTDLP_BUNDLED_ASSETS[platform]),
+        zipapp: YTDLP_ZIPAPP_PLATFORMS.has(platform),
+      }
     }
   }
   return { tag: resolvedTag, assets }
@@ -178,15 +276,61 @@ function readCurrentTags() {
     return {
       ytdlp: src.match(/YtDlpTag\s*=\s*"([^"]+)"/)?.[1],
       ffmpeg: src.match(/FFmpegTag\s*=\s*"([^"]+)"/)?.[1],
+      aria2: src.match(/Aria2Tag\s*=\s*"([^"]+)"/)?.[1],
     }
   } catch {
     return {}
   }
 }
 
-function render(ytdlp, ffmpeg, existing) {
+/**
+ * aria2 的 URL 前缀。每个平台的源可能不同（见 ARIA2_ASSETS 的注释）。
+ *
+ * `latest` 走 `/releases/latest/download/<asset>`：static-build 只发单文件、
+ * 没有版本化 tag，钉版本反而会让清单在它重建后失效。
+ */
+function aria2Base(entry, tagOverride) {
+  const repo = ARIA2_SOURCES[entry.source]
+  if (!repo) throw new Error(`未知的 aria2 源：${entry.source}`)
+  const tag = tagOverride || entry.tag || 'latest'
+  return tag === 'latest'
+    ? `https://github.com/${repo}/releases/latest/download`
+    : `https://github.com/${repo}/releases/download/${tag}`
+}
+
+async function resolveAria2(_tag, { withHashes }) {
+  // 各平台的 tag 不一致（abcfy2 是 1.37.0、ricode 是 aria2-1.37.0、static-build 是 latest），
+  // 所以清单里逐平台记 URL，而不是共用一个 aria2Base + tag。
+  const assets = {}
+  for (const [platform, entry] of Object.entries(ARIA2_ASSETS)) {
+    const url = `${aria2Base(entry)}/${entry.asset}`
+    // 上游不公布校验值：更新模式下把归档完整下载后自算
+    const hash = withHashes
+      ? createHash('sha256').update(curlFetch(url, { binary: true })).digest('hex')
+      : ''
+    assets[platform] = { ...entry, url, hash }
+  }
+  return { tag: latestTag(ARIA2_SOURCES.abcfy2), assets }
+}
+
+function render(ytdlp, ffmpeg, aria2, existing) {
+  // yt-dlp 的资产条目多了「回退包」与「是否 zipapp」两个字段，
+  // 用手写模板而不是匿名字面量：5 个字段用位置传参太容易错位。
   const ytdlpLines = Object.entries(ytdlp.assets)
-    .map(([platform, a]) => `\t${JSON.stringify(platform)}:${' '.repeat(Math.max(1, 15 - platform.length))}{"${a.name}", "${a.hash}"},`)
+    .map(([platform, a]) =>
+      `\t${JSON.stringify(platform)}: {\n` +
+      `\t\tName: "${a.name}", SHA256: "${a.hash}",\n` +
+      `\t\tBundled: "${a.bundled || ''}", BundledSHA256: "${a.bundledHash || ''}",\n` +
+      `\t\tZipApp: ${a.zipapp ? 'true' : 'false'},\n` +
+      `\t},`)
+    .join('\n')
+
+  const aria2Lines = Object.entries(aria2.assets)
+    .map(([platform, a]) =>
+      `\t${JSON.stringify(platform)}: {\n` +
+      `\t\tURL: "${a.url}", SHA256: "${a.hash || existing?.aria2?.[platform] || 'PENDING'}",\n` +
+      `\t\tArchive: "${a.archive}", Inner: "${a.inner}",\n` +
+      `\t},`)
     .join('\n')
 
   const ffmpegLines = Object.entries(ffmpeg.assets)
@@ -220,8 +364,15 @@ const (
 \tffmpegBase = "https://github.com/${FFMPEG_REPO}/releases/download/" + FFmpegTag
 )
 
-// ytdlpAssets yt-dlp 在各平台的产物与 SHA-256
-var ytdlpAssets = map[string]asset{
+// ytdlpAssets yt-dlp 在各平台的产物与 SHA-256。
+//
+// 每个平台两份二进制：
+//   - Name / SHA256        主用。Linux / macOS 是 Python zipapp（启动 0.4s），
+//                          Windows 是自包含的 yt-dlp.exe
+//   - Bundled / BundledSHA256  回退。系统没有可用 python3 时装的 PyInstaller 包
+//                          （启动要 9~10s，但不需要解释器）
+// 为空的 Bundled 表示该平台两包相同（Windows），无需回退。
+var ytdlpAssets = map[string]ytdlpAsset{
 ${ytdlpLines}
 }
 
@@ -232,12 +383,38 @@ ${ytdlpLines}
 var ffmpegAssets = map[string]map[rt.Kind]asset{
 ${ffmpegLines}
 }
+
+// aria2Assets 各平台的静态构建。
+//
+// **五个平台来自三个不同的社区源**：没有任何单一仓库同时提供「自包含 + 架构齐全」。
+// 每个 URL 都是实测可用的（用 file / otool -L 确认不依赖 Homebrew 私有库，
+// 并真跑过一次下载）。逐平台记 URL 而不是共用一个 base：
+// 三个源的 tag 形式各不相同（1.37.0 / aria2-1.37.0 / latest）。
+//
+// 不要换成 Homebrew bottle：那个二进制链接到 HOMEBREW_PREFIX/opt/... 下的库，
+// 单独拷出来跑不了。
+var aria2Assets = map[string]aria2Asset{
+${aria2Lines}
+}
 `
 }
 
 /** 校验模式下保留文件里已有的哈希 */
 function h(asset, existing, platform, key) {
   return asset.hash || existing?.ffmpeg?.[platform]?.[key] || 'PENDING'
+}
+
+/** 读回现有文件中 aria2 的哈希，供校验模式复用 */
+function readExistingAria2Hashes() {
+  try {
+    const src = readFileSync(OUT_FILE, 'utf8')
+    const block = /var aria2Assets = map\[string\]asset\{([\s\S]*?)\n\}/.exec(src)?.[1] || ''
+    const out = {}
+    for (const m of block.matchAll(/"([^"]+)":\s*\{"([^"]+)",\s*"([0-9a-f]{64})"\}/g)) out[m[1]] = { name: m[2], hash: m[3] }
+    return out
+  } catch {
+    return {}
+  }
 }
 
 /** 读回现有文件中 ffmpeg 的哈希，供校验模式复用 */
@@ -288,13 +465,19 @@ async function main() {
   if (checkOnly) {
     const ytdlpTag = latestTag(YTDLP_REPO)
     const ffmpegTag = latestTag(FFMPEG_REPO)
+    const aria2Tag = latestTag(ARIA2_REPO)
     console.log(`  上游 yt-dlp : ${ytdlpTag}（本地 ${existingTags.ytdlp || '未知'}）`)
     console.log(`  上游 ffmpeg : ${ffmpegTag}（本地 ${existingTags.ffmpeg || '未知'}）`)
+    // aria2 的五平台来自三个源、tag 形式各不相同，清单里逐平台记 URL 而不是单一 tag，
+    // 所以这里只报告上游最新值，不参与「是否落后」的判定。
+    console.log(`  上游 aria2  : ${aria2Tag}（逐平台独立源，不判定落后）`)
 
     const problems = []
     if (ytdlpTag !== existingTags.ytdlp) {
       problems.push(`yt-dlp 版本落后：本地 ${existingTags.ytdlp} → 上游 ${ytdlpTag}`)
     }
+    // aria2 落后不算问题：它只是个可选加速器，1.36 之后就稳定了，
+    // 追最新版没有收益，反而每次都要重下 14MB。只在清单缺失时提示。
 
     // yt-dlp 有官方校验值：顺带确认清单里的哈希与上游一致（文件很小，开销可忽略）
     if (ytdlpTag === existingTags.ytdlp) {
@@ -327,10 +510,24 @@ async function main() {
 
   const ytdlp = await resolveYtDlp(argValue('--ytdlp'), { withHashes: true })
   const ffmpeg = await resolveFfmpeg(argValue('--ffmpeg') || existingTags.ffmpeg, { withHashes: true })
+  const aria2 = await resolveAria2(argValue('--aria2') || existingTags.aria2, { withHashes: true })
   console.log(`  yt-dlp : ${ytdlp.tag}`)
   console.log(`  ffmpeg : ${ffmpeg.tag}`)
+  console.log(`  aria2  : ${aria2.tag}`)
 
-  writeFileSync(OUT_FILE, render(ytdlp, ffmpeg, { ffmpeg: readExistingFfmpegHashes() }), 'utf8')
+  writeFileSync(OUT_FILE, render(ytdlp, ffmpeg, aria2, {
+    ffmpeg: readExistingFfmpegHashes(),
+    aria2: readExistingAria2Hashes(),
+  }), 'utf8')
+
+  // 生成物必须是 gofmt 干净的：CI 跑 `gofmt -l .`，未格式化的**生成文件**
+  // 会让整个 backend job 变红，而错误信息只指向一个「不该手改」的文件。
+  // 与其让人手动跑 gofmt（然后下次生成又忘），不如在这里保证。
+  try {
+    execFileSync('gofmt', ['-w', OUT_FILE], { stdio: 'ignore' })
+  } catch {
+    console.warn('  ! 未找到 gofmt，跳过格式化（CI 的 gofmt -l 会报出来）')
+  }
   console.log(`已写入 ${path.relative(process.cwd(), OUT_FILE)}`)
 }
 

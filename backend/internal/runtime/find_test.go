@@ -324,3 +324,40 @@ func TestProbeTimeoutDetection(t *testing.T) {
 		t.Error("nil 不应判为超时")
 	}
 }
+
+// binaryForm 判断 yt-dlp 的形态。
+//
+// 这是「明明版本一样却慢 20 倍」的判定依据：zipapp 启动 0.4s，
+// PyInstaller 独立包 9~10s，而两者的 --version 输出完全一致。
+// 只看版本号时，存量用户永远停在慢的那个上，且界面上没有任何异常。
+func TestBinaryForm(t *testing.T) {
+	dir := t.TempDir()
+
+	// zipapp：shebang 开头
+	zipapp := filepath.Join(dir, "yt-dlp")
+	if err := os.WriteFile(zipapp, []byte("#!/usr/bin/env python3\nPK\x03\x04..."), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := binaryForm(KindYtDlp, zipapp); got != "zipapp" {
+		t.Errorf("shebang 开头应判为 zipapp，实际 %q", got)
+	}
+
+	// 原生二进制（Mach-O magic，任意平台都按「非 shebang」处理）
+	native := filepath.Join(dir, "yt-dlp-native")
+	if err := os.WriteFile(native, []byte{0xcf, 0xfa, 0xed, 0xfe, 0x07, 0x00}, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := binaryForm(KindYtDlp, native); got != "native" {
+		t.Errorf("Mach-O 应判为 native，实际 %q", got)
+	}
+
+	// 非 yt-dlp 不报形态（其余依赖没有这个差异）
+	if got := binaryForm(KindFFmpeg, zipapp); got != "" {
+		t.Errorf("ffmpeg 不应有 form，实际 %q", got)
+	}
+
+	// 文件不存在时返回空而不是 panic
+	if got := binaryForm(KindYtDlp, filepath.Join(dir, "nope")); got != "" {
+		t.Errorf("不存在的文件应返回空，实际 %q", got)
+	}
+}

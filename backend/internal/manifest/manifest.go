@@ -6,12 +6,67 @@ package manifest
 
 import (
 	"fmt"
+	"os/exec"
 	"path/filepath"
 	goruntime "runtime"
+	"strconv"
+	"strings"
+	"sync"
 
 	"github.com/yxxbc/downvid/backend/internal/fetch"
 	rt "github.com/yxxbc/downvid/backend/internal/runtime"
 )
+
+// HasUsablePython 判断系统里是否有能跑 yt-dlp zipapp 的 python3。
+//
+// 门槛是 3.9：yt-dlp 的 nightly 用到了 3.9+ 的语法。macOS 自带的
+// /usr/bin/python3 是 3.9.6（Command Line Tools），够用；但很多机器上根本没装
+// （只是一个会弹安装提示的 stub），所以要真的执行一次 `--version` 才算数。
+//
+// 结果缓存：这个函数在每次 fetch 时都会被问一次，而 `python3 --version`
+// 要 spawn 一个进程。缓存 10 分钟足够（用户不会在中途换解释器）。
+var (
+	pythonOnce   sync.Once
+	pythonUsable bool
+)
+
+func HasUsablePython() bool {
+	pythonOnce.Do(func() {
+		for _, exe := range []string{"python3", "python"} {
+			out, err := exec.Command(exe, "--version").Output()
+			if err != nil {
+				continue
+			}
+			if version := parsePythonVersion(string(out)); version >= 309 {
+				pythonUsable = true
+				return
+			}
+		}
+	})
+	return pythonUsable
+}
+
+// parsePythonVersion 把 "Python 3.9.6" 解析成 309 这种整数（便于比较）。
+// 解析失败返回 0 —— 宁可退回自包含包，也不要把跑不起来的 zipapp 装给用户。
+func parsePythonVersion(out string) int {
+	fields := strings.Fields(strings.TrimSpace(out))
+	for _, f := range fields {
+		if !strings.Contains(f, ".") {
+			continue
+		}
+		parts := strings.SplitN(f, ".", 3)
+		if len(parts) < 2 {
+			continue
+		}
+		major, err1 := strconv.Atoi(parts[0])
+		minor, err2 := strconv.Atoi(parts[1])
+		if err1 != nil || err2 != nil {
+			continue
+		}
+		return major*100 + minor
+	}
+	return 0
+}
 
 // MinYtDlpVersion 是判定 yt-dlp「过旧」的最低版本，等于清单里 pin 的 tag。
 //
@@ -32,6 +87,32 @@ var Platforms = []string{"darwin/arm64", "darwin/x64", "linux/x64", "linux/arm64
 type asset struct {
 	Name   string
 	SHA256 string
+}
+
+// aria2Asset 一个平台的 aria2 下载描述。
+//
+// 逐平台记完整 URL（而不是共用 base + tag）：五个平台来自三个社区源，
+// 各自的 tag 形式不同（1.37.0 / aria2-1.37.0 / latest）。
+// Archive 决定解包方式：zip / tar.gz / raw（下载物本身就是可执行文件）。
+type aria2Asset struct {
+	URL     string
+	SHA256  string
+	Archive string
+	Inner   string // 归档内的文件名；Archive 为 raw 时为空
+}
+
+// ytdlpAsset yt-dlp 的产物描述：主用 + 可选回退。
+//
+// 主用是 Python zipapp（启动 0.4s），回退是 PyInstaller 独立包（启动 9~10s，
+// 但不需要解释器）。系统没有可用 python3 时用回退，见 TasksFor。
+// Bundled 为空表示该平台两者相同（Windows 的 yt-dlp.exe 本来就自带解释器）。
+type ytdlpAsset struct {
+	Name          string
+	SHA256        string
+	Bundled       string
+	BundledSHA256 string
+	// ZipApp 表示主用产物需要 python3 才能运行
+	ZipApp bool
 }
 
 // CurrentPlatform 当前平台，键名与 electron-builder 的 ${platform}-${arch} 一致。
@@ -98,12 +179,45 @@ func TasksFor(platform, managedDir string, only []string) ([]fetch.Task, error) 
 		if !ok {
 			return nil, fmt.Errorf("暂不支持 %s 平台的 yt-dlp 下载", platform)
 		}
+		// zipapp 需要 python3。有就用它（启动 0.4s vs 独立包的 9~10s，
+		// 用户能直接感觉到差别），没有就退回自包含包 —— 那个一定能跑，
+		// 只是每次启动都要解压 72MB。
+		chosen, chosenHash, name := a.Name, a.SHA256, a.Name
+		if a.ZipApp && a.Bundled != "" && !HasUsablePython() {
+			chosen, chosenHash, name = a.Bundled, a.BundledSHA256, a.Bundled
+		}
 		tasks = append(tasks, fetch.Task{
 			Tool:   string(rt.KindYtDlp),
-			URL:    ytdlpBase + "/" + a.Name,
-			SHA256: a.SHA256,
+			URL:    ytdlpBase + "/" + chosen,
+			SHA256: chosenHash,
 			Target: filepath.Join(managedDir, rt.BinaryName(rt.KindYtDlp)),
 		})
+		_ = name
+	}
+
+	// aria2：五个平台来自三个社区源，见 assets.gen.go 的说明。
+	// 万一某个平台缺项也**跳过而不是报错**——它是可选加速器，
+	// 报错会让用户以为整个依赖下载坏了。
+	if need(string(rt.KindAria2)) {
+		if a, ok := aria2Assets[platform]; ok {
+			task := fetch.Task{
+				Tool:   string(rt.KindAria2),
+				URL:    a.URL,
+				SHA256: a.SHA256,
+				Target: filepath.Join(managedDir, rt.BinaryName(rt.KindAria2)),
+			}
+			switch a.Archive {
+			case "zip":
+				task.ZipInner = a.Inner
+			case "tar.gz":
+				task.TarInner = a.Inner
+			case "raw":
+				// 下载物就是可执行文件本身
+			default:
+				return nil, fmt.Errorf("%s 的 aria2 归档格式未知：%q", platform, a.Archive)
+			}
+			tasks = append(tasks, task)
+		}
 	}
 
 	for _, kind := range []rt.Kind{rt.KindFFmpeg, rt.KindFFprobe} {

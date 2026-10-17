@@ -18,18 +18,46 @@ const (
 	ffmpegBase = "https://github.com/eugeneware/ffmpeg-static/releases/download/" + FFmpegTag
 )
 
-// ytdlpAssets yt-dlp 在各平台的产物与 SHA-256
-var ytdlpAssets = map[string]asset{
-	"darwin/arm64": {"yt-dlp_macos", "c8ee97b3f6aa0fb5cbc3f56d772c0d79dc2c5d3d60f3bf0b240d5dd0d461fd25"},
-	"darwin/x64":   {"yt-dlp_macos", "c8ee97b3f6aa0fb5cbc3f56d772c0d79dc2c5d3d60f3bf0b240d5dd0d461fd25"},
-	"linux/x64":    {"yt-dlp_linux", "60606cef1a65d70f6639a85b45ebb7acf08dbb81831e134dd93939e23ca2b792"},
-	"linux/arm64":  {"yt-dlp_linux_aarch64", "ce8f929bbdbfb09f51563bf96f3add7cc975e1dfc91b2b9492f82a062d58d62f"},
-	"win32/x64":    {"yt-dlp.exe", "e7cafc44db8aa433da8dd78303b9157f2c1dd509c4cbfcd8418081b7e1d26a7a"},
+// ytdlpAssets yt-dlp 在各平台的产物与 SHA-256。
+//
+// 每个平台两份二进制：
+//   - Name / SHA256        主用。Linux / macOS 是 Python zipapp（启动 0.4s），
+//     Windows 是自包含的 yt-dlp.exe
+//   - Bundled / BundledSHA256  回退。系统没有可用 python3 时装的 PyInstaller 包
+//     （启动要 9~10s，但不需要解释器）
+//
+// 为空的 Bundled 表示该平台两包相同（Windows），无需回退。
+var ytdlpAssets = map[string]ytdlpAsset{
+	"darwin/arm64": {
+		Name: "yt-dlp", SHA256: "f40b6a9e4c5786360953911cab5d2f87507626b8fb7bfee3f8f1c2e5cf341fae",
+		Bundled: "yt-dlp_macos", BundledSHA256: "c8ee97b3f6aa0fb5cbc3f56d772c0d79dc2c5d3d60f3bf0b240d5dd0d461fd25",
+		ZipApp: true,
+	},
+	"darwin/x64": {
+		Name: "yt-dlp", SHA256: "f40b6a9e4c5786360953911cab5d2f87507626b8fb7bfee3f8f1c2e5cf341fae",
+		Bundled: "yt-dlp_macos", BundledSHA256: "c8ee97b3f6aa0fb5cbc3f56d772c0d79dc2c5d3d60f3bf0b240d5dd0d461fd25",
+		ZipApp: true,
+	},
+	"linux/x64": {
+		Name: "yt-dlp", SHA256: "f40b6a9e4c5786360953911cab5d2f87507626b8fb7bfee3f8f1c2e5cf341fae",
+		Bundled: "yt-dlp_linux", BundledSHA256: "60606cef1a65d70f6639a85b45ebb7acf08dbb81831e134dd93939e23ca2b792",
+		ZipApp: true,
+	},
+	"linux/arm64": {
+		Name: "yt-dlp", SHA256: "f40b6a9e4c5786360953911cab5d2f87507626b8fb7bfee3f8f1c2e5cf341fae",
+		Bundled: "yt-dlp_linux_aarch64", BundledSHA256: "ce8f929bbdbfb09f51563bf96f3add7cc975e1dfc91b2b9492f82a062d58d62f",
+		ZipApp: true,
+	},
+	"win32/x64": {
+		Name: "yt-dlp.exe", SHA256: "e7cafc44db8aa433da8dd78303b9157f2c1dd509c4cbfcd8418081b7e1d26a7a",
+		Bundled: "", BundledSHA256: "",
+		ZipApp: false,
+	},
 }
 
 // ffmpegAssets ffmpeg / ffprobe 在各平台的产物与 SHA-256。
 //
-// 选用 ffmpeg-static（ffmpeg 6.0 静态构建）而非 BtbN：体积更小、gzip 单文件便于校验，
+// 选用 ffmpeg-static（静态构建）而非 BtbN：体积更小、gzip 单文件便于校验，
 // 且带 libmp3lame / aac / libx264，覆盖音频转换与音视频合并两种用途。
 var ffmpegAssets = map[string]map[rt.Kind]asset{
 	"darwin/arm64": {
@@ -51,5 +79,37 @@ var ffmpegAssets = map[string]map[rt.Kind]asset{
 	"win32/x64": {
 		rt.KindFFmpeg:  {"ffmpeg-win32-x64", "8883a3dffbd0a16cf4ef95206ea05283f78908dbfb118f73c83f4951dcc06d77"},
 		rt.KindFFprobe: {"ffprobe-win32-x64", "f309e6223ad89d2fe54bccd420a7709b66fd27540674e92309578ed491a43c8d"},
+	},
+}
+
+// aria2Assets 各平台的静态构建。
+//
+// **五个平台来自三个不同的社区源**：没有任何单一仓库同时提供「自包含 + 架构齐全」。
+// 每个 URL 都是实测可用的（用 file / otool -L 确认不依赖 Homebrew 私有库，
+// 并真跑过一次下载）。逐平台记 URL 而不是共用一个 base：
+// 三个源的 tag 形式各不相同（1.37.0 / aria2-1.37.0 / latest）。
+//
+// 不要换成 Homebrew bottle：那个二进制链接到 HOMEBREW_PREFIX/opt/... 下的库，
+// 单独拷出来跑不了。
+var aria2Assets = map[string]aria2Asset{
+	"linux/x64": {
+		URL: "https://github.com/abcfy2/aria2-static-build/releases/latest/download/aria2-x86_64-linux-musl_static.zip", SHA256: "e0a09b12ef67f35f8a8e4fdddbec851d235b7c31da549d0578bff459032b499a",
+		Archive: "zip", Inner: "aria2c",
+	},
+	"linux/arm64": {
+		URL: "https://github.com/abcfy2/aria2-static-build/releases/latest/download/aria2-aarch64-linux-musl_static.zip", SHA256: "0c681a89a40e0f82d1f5137608e86257eb0af201459c002941ea098f2b8c26b6",
+		Archive: "zip", Inner: "aria2c",
+	},
+	"win32/x64": {
+		URL: "https://github.com/abcfy2/aria2-static-build/releases/latest/download/aria2-x86_64-w64-mingw32_static.zip", SHA256: "6b855b19b79c2d78c4d5fd68fca0fdcbe6ef7e8a78e087605fb9de0003fbab31",
+		Archive: "zip", Inner: "aria2c.exe",
+	},
+	"darwin/arm64": {
+		URL: "https://github.com/ricode-labs/aria2/releases/download/aria2-1.37.0/aria2-macos-arm64.tar.gz", SHA256: "698bb6f433b96c1995c3a1c0634c54bb7edbaedf3bec8f3f988eb6a289ba316a",
+		Archive: "tar.gz", Inner: "aria2c-macos-arm64",
+	},
+	"darwin/x64": {
+		URL: "https://github.com/static-build/aria2/releases/latest/download/aria2c.darwin", SHA256: "9bc930fb71d460fa779018c262f950e9bff03cb15dd9ff517a3c2cbff7dac302",
+		Archive: "raw", Inner: "",
 	},
 }

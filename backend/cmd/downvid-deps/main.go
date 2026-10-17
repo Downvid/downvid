@@ -75,6 +75,7 @@ fetch 参数：
   --managed-dir <dir>     托管目录（必填）
   --only <a,b>            只下载指定依赖，默认全部
   --proxy <url>           下载使用的代理
+  --mirror <id>           下载源：auto（默认，GitHub → 公共镜像依次降级）或钉死某个镜像
   --force                 即使已存在也重新下载
   --timeout <秒>          单次请求超时，默认 1800
 `)
@@ -142,6 +143,7 @@ func runFetch(args []string) {
 	only := fs.String("only", "", "只下载指定依赖，逗号分隔")
 	proxy := fs.String("proxy", "", "下载代理")
 	force := fs.Bool("force", false, "已存在时也重新下载")
+	mirror := fs.String("mirror", "auto", "下载源：auto（GitHub → 公共镜像依次降级）或钉死某个镜像 ID")
 	timeout := fs.Int("timeout", 1800, "单次请求超时（秒）")
 	_ = fs.Parse(args)
 
@@ -190,6 +192,7 @@ func runFetch(args []string) {
 	err = fetch.Install(ctx, tasks, fetch.Options{
 		Proxy:   *proxy,
 		Timeout: time.Duration(*timeout) * time.Second,
+		Mirror:  *mirror,
 		Emit:    emit,
 	})
 	if err != nil {

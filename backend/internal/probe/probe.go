@@ -38,6 +38,9 @@ var Args = map[string][]string{
 	"yt-dlp":  {"--version"},
 	"ffmpeg":  {"-version"},
 	"ffprobe": {"-version"},
+	// aria2c 的首行是本地化的（`aria2 version 1.37.0` / `aria2 版本 1.37.0`），
+	// 解析由 ParseVersion 的 aria2 分支处理，见下方注释。
+	"aria2": {"--version"},
 }
 
 // MinimumMajor 判断工具是否可用的最低主版本号。
@@ -47,6 +50,10 @@ var MinimumMajor = map[string]int{
 	"yt-dlp":  2024,
 	"ffmpeg":  4,
 	"ffprobe": 4,
+	// aria2 从 1.36 起才支持我们依赖的部分行为（--max-connection-per-server 等
+	// 早已有，但 1.36 修了若干分段续传问题）。按主版本比会全部通过，
+	// 因此 aria2 用专门的 isSupportedAria2 判断，见 runtime 包。
+	"aria2": 1,
 }
 
 // Info 一次成功的版本探测结果
@@ -61,6 +68,8 @@ var (
 	reYtDlpVersion  = regexp.MustCompile(`^\d{4}\.\d{2}\.\d{2}(?:\.\d+)?$`)
 	reDigits        = regexp.MustCompile(`\d+`)
 	reKilled        = regexp.MustCompile(`(?i)killed|signal: 9`)
+	// x.y.z（aria2 的版本号永远是三段；ffmpeg 允许 "6.0" 这种两段，故不复用）
+	reSemver = regexp.MustCompile(`\b(\d+\.\d+\.\d+)\b`)
 )
 
 // Run 执行工具并解析版本号；失败时返回的错误信息可直接展示给用户
@@ -114,6 +123,34 @@ func ParseVersion(tool, out string) string {
 	// yt-dlp：直接输出版本号
 	if tool == "yt-dlp" && reYtDlpVersion.MatchString(line) {
 		return line
+	}
+	// aria2：首行是**本地化**的，随 LANG 变化
+	//   LC_ALL=C          → `aria2 version 1.37.0`
+	//   LANG=zh_CN.UTF-8  → `aria2 版本 1.37.0`
+	// 只匹配英文会让中文/日文/德文系统上永远检测不到 aria2
+	// （加速开关开着却一直单线程，且没有任何报错）。
+	if tool == "aria2" {
+		return parseAria2Version(out)
+	}
+	return ""
+}
+
+// parseAria2Version 从 aria2c --version 的输出里取 x.y.z。
+//
+// 与 electron/download/aria2.ts 的 parseAria2Version 是同一套规则的两种语言实现
+// （边车负责探测、渲染进程负责设置页里的手动检测），
+// `tests/acceleration.test.ts` 用同一批输入把两边钉住。
+func parseAria2Version(out string) string {
+	line := firstNonEmptyLine(out)
+	if !strings.HasPrefix(strings.ToLower(line), "aria2") {
+		// 首行不是 aria2 时（发行版在前面加了告警）退而取全文第一个 x.y.z，
+		// 但仅当文本里确实提到 aria2，避免把别的工具版本当成它的
+		if !strings.Contains(strings.ToLower(out), "aria2") {
+			return ""
+		}
+	}
+	if m := reSemver.FindStringSubmatch(out); m != nil {
+		return m[1]
 	}
 	return ""
 }
@@ -181,6 +218,10 @@ func run(parent context.Context, path string, args []string, timeout time.Durati
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 
+	// Python zipapp（yt-dlp 的首选形态）在 macOS / Linux 上带 shebang，
+	// 直接执行即可；但如果文件丢了可执行位（从 zip 解出、跨文件系统复制），
+	// 直接 exec 会得到 EACCES，而我们本来可以用 python3 解释它。
+	// 这里不额外处理：可执行位由 fetch.promote 统一设置（0755）。
 	cmd := exec.CommandContext(ctx, path, args...)
 	hideWindow(cmd)
 	sink := &limitedBuffer{limit: 64 << 10}
