@@ -89,6 +89,7 @@ describe('killProcessTree', () => {
   })
 
   it('进程组信号失败时退回杀直接子进程（不要静默放弃）', async () => {
+    if (!POSIX) return // Windows 走 taskkill 分支，不存在「进程组信号失败」这条路
     const fallbackKill = vi.fn()
     const groupKill = vi.spyOn(process, 'kill').mockImplementation((() => {
       throw Object.assign(new Error('ESRCH'), { code: 'ESRCH' })
