@@ -144,6 +144,19 @@ ${rows.join('\n')}
 > 运行依赖 **yt-dlp / ffmpeg 不随安装包分发**：启动后会自动识别机器上已安装的版本并复用，
 > 识别不到时在「设置 → 运行依赖」里一键下载即可，无需提前手动安装。
 
+### 🐳 Docker / NAS 用户
+
+容器镜像发布在 GHCR（amd64 + arm64 多架构），不需要下载上面的安装包：
+
+\`\`\`bash
+docker pull ghcr.io/${OWNER}/${REPO}:latest
+# 或升级已有的容器
+docker compose pull downvid && docker compose up -d downvid
+\`\`\`
+
+容器版**不能自更新**（进程跑在只读镜像层上），升级方式就是上面这两条命令；
+界面里检测到新版本时也会给出它们。详见 [docs/docker.md](https://github.com/${OWNER}/${REPO}/blob/main/docs/docker.md)。
+
 ### ⚠️ 各平台注意事项
 
 ${platformNote}

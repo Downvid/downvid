@@ -23,6 +23,8 @@ pnpm test:updater           # updater state machine, cache, fallback, install mo
 pnpm test:settings:migration # settings defaults/merge and the "no bypass" static scan
 pnpm test:package           # unpacked-artifact contents (needs a prior --dir build)
 pnpm lint:ipc               # static check of the hand-maintained IPC wiring
+pnpm lint:docker            # container image definition (versions from manifest / no tsx / update check intact)
+pnpm test:web               # WebUI server regression (runs the *bundled* server, same file as in the image)
 pnpm lint:icons             # icon names must be valid (a typo renders as literal text)
 pnpm lint:website           # landing page: single file, assets, i18n pairs, theme colors
 pnpm lint:docs              # AGENTS.md ↔ CLAUDE.md parity + referenced paths/numbers exist
@@ -151,8 +153,10 @@ A broadcast event must **not** double as an `ipcMain.handle` channel (`lint:ipc`
 Settings live in `localStorage['settings']` (**not** Pinia). Fields: `downloadDir`,
 `filenameTemplate`, `preferredQuality`, `cookieMode`, `cookiesFile`, `proxy`, `depPaths`,
 `acceleration` (enabled/concurrency/optional aria2c path), `autoCheckUpdate` (default on),
-`autoDownloadUpdate` (default off), `language` (UI language: `'auto'` follows the system,
-`'zh-CN'` or `'en-US'`; default `'auto'`).
+`depMirror` (dependency download source: `'auto'` walks the mirror chain, or pin one; default
+`'auto'`), `autoDownloadUpdate` (default off), `updateSource` (update source: `'auto'` falls back through the
+chain, or pin one; see "Update sources" above; default `'auto'`), `language` (UI language: `'auto'`
+follows the system, `'zh-CN'` or `'en-US'`; default `'auto'`).
 
 **The only entry points are `readSettings()` / `updateSettings()` in `src/stores/settings.ts`:**
 
@@ -173,6 +177,19 @@ Settings live in `localStorage['settings']` (**not** Pinia). Fields: `downloadDi
 - Source or version change → only edit the asset table in `scripts/gen-deps-manifest.mjs`, then
   `pnpm deps:manifest`. **Never hand-edit** `assets.gen.go` (generated)
 - New platform → manifest asset table + `electron-builder.json5` + `release.yml` matrix
+- Dependency downloads have a **mirror fallback** (`backend/internal/fetch/mirror.go`): assets live
+  under `github.com/.../releases/download/...`, so an unreachable GitHub means **no dependencies and
+  therefore an unusable app**. Chain: direct → gh-proxy.com → ghproxy.net → ghfast.top, first success
+  wins. Switching emits a `mirror` event so the UI can say "switching source" — keep it distinct from
+  `retry` (one changes route, the other repeats it). Only URLs actually hosted on a GitHub release are
+  rewritten (`isUpstreamGitHub`): prepending a mirror to anything else yields 403 and breaks downloads
+  that used to work (the httptest fixtures caught exactly that). A mirror may only be added after
+  verifying it serves **release assets** (jsDelivr and Gitee cannot, hence they are not in this chain).
+  `mirror.go` holds the chain, `mirror_test.go` verifies the flow, and `tests/deps-mirror.test.ts`
+  cross-checks the mirror ids on both sides.
+- **Non-network errors are not retried** (`retryable`): retrying a 4xx or a checksum mismatch replays
+  the same outcome, and a 37MB file that can never connect would otherwise burn three attempts
+  (plus 2s/4s backoff) before showing the same error.
 - The `[[deps-missing:<kind>]]` marker is a contract between `electron/utils/binary.ts` (produces)
   and `readMissingKinds` in `src/stores/deps.ts` (parses) — covered by `tests/deps-error.test.ts`
 
@@ -310,6 +327,30 @@ A Go sidecar resolves them at startup, "prefer the machine's own, download only 
   user machines, hence `deps:manifest:check` in CI. ffmpeg-static has no published checksums, so the
   script downloads each gzip to hash it (~130 MB of traffic).
 
+### Parse performance (read before changing this)
+
+**The yt-dlp build choice dominates parse time.** Measured on one machine, same bilibili video:
+
+| Form | `--version` | Real parse |
+| --- | --- | --- |
+| `yt-dlp_macos` (PyInstaller onefile) | 9.5–10.5s | 11.4s |
+| `yt-dlp` (Python zipapp) | 0.41s | **2.2s** |
+
+The PyInstaller onefile unpacks ~72MB to a temp dir on every launch — 9 seconds of pure overhead that does
+not vary with network or site, and users read it as "this app is slow". Therefore:
+
+- Linux / macOS prefer **zipapp** (`YTDLP_ASSETS`) and also record the self-contained PyInstaller build as a
+  fallback (`YTDLP_BUNDLED_ASSETS`); `manifest.HasUsablePython()` picks. **Windows does not use zipapp** —
+  python3 is not commonly present there and the official `.exe` bundles its interpreter.
+- The container **must** use the self-contained build (the image deliberately has no python3), which is why
+  `scripts/deps-asset.mjs` selects `Bundled`.
+- **Never spawn `--version` on the success path.** `readYtdlpVersion()` in `electron/parsers/ytdlp.ts` is
+  failure-path only and caches 5 minutes; a second launch doubles parse time for a string that only matters
+  in error diagnostics.
+- Dependency probing runs **in parallel** (`FindAllContext`): every candidate is really executed, so serial
+  probing costs the sum. With zipapp the whole probe is 0.47s, but the parallelism still matters on machines
+  that fell back to PyInstaller (12s vs 22s).
+
 ### Parse dispatch (`ytdlp:parse`)
 
 Douyin and Kuaishou have bespoke parsers: platform API first, headless `puppeteer-core` (launched via
@@ -337,19 +378,51 @@ Implementation lives in `electron/download/`; `electron/ipc/download.ts` only di
 `buildYtdlpArgs` is a **pure function**: paths and JS runtime arrive via `BuildArgsContext`, so arg
 lists can be asserted without spawning anything (`tests/ytdlp-args.test.ts`).
 
-Optional aria2c (>=1.36) is detected by `electron/download/aria2.ts` via manual path, PATH,
-Scoop/WinGet and common install paths. It is neither auto-installed nor a required runtime dependency.
+Optional aria2c (>=1.36) is now a `DepKind` (`DEP_KINDS` in `shared/acceleration.ts`) and is probed by
+the Go sidecar — **do not add a second candidate table to `electron/download/aria2.ts`**, that duplication is
+exactly what made the dependencies page and the acceleration page disagree. `aria2.ts` keeps only version
+parsing and "pull the aria2 entry out of the probe result". **Its detect/download UI lives on the Runtime
+dependencies page**; the acceleration page keeps only the toggle and concurrency. **All five platforms can
+one-click download**, but from **three different sources**: Linux/Windows from `abcfy2/aria2-static-build`
+(zip, musl/mingw static), macOS arm64 from `ricode-labs/aria2` (tar.gz), macOS x64 from `static-build/aria2`
+(raw Mach-O). `aria2Assets` therefore stores a **full URL per platform** instead of a shared base + tag — the
+three sources use incompatible tag shapes (`1.37.0` / `aria2-1.37.0` / `latest`), and sharing one would build
+404s. Do not switch to the Homebrew bottle: its binary links against `HOMEBREW_PREFIX/opt/openssl@4/...` and
+cannot be copied out (dyld fails immediately) — that bottle is the origin of the **wrong conclusion** that
+"macOS is system-package only".
 Only HTTP transfers use it; HLS/DASH stay native. Temporary pieces live under `.downvid-aria2`
 and a paused task keeps its selected engine, preventing sparse pieces from being treated as sequential data.
 The `acceleration` settings field contains enabled/maxConnections/aria2Path.
 
-Formats are built by the pure `electron/parsers/formats.ts`. Three regressions it guards (all
-tested): keep formats without `vcodec` (X/Twitter mp4 has none), keep m3u8 only for heights with no
-direct link, and offer a `bv*+ba/b` fallback when nothing reports a height.
+**Version parsing must accept localised output.** The first line of `aria2c --version` follows
+`LANG`: `aria2 version 1.37.0`, `aria2 版本 1.37.0`, Japanese likewise. The original regex only
+matched the English form, so on Chinese/Japanese/German systems aria2 was **never detected** — the
+acceleration toggle was on, transfers silently stayed single-threaded, and "detect" just said
+"aria2c not found" with no error. `parseAria2Version()` now handles all forms (the Go side has the same rule in `probe.parseAria2Version`)
+and execution pins `LC_ALL=C`; `tests/acceleration.test.ts` keeps a case per language.
 
-Pause = `child.kill()` (plus `taskkill /T /F` on Windows), task dropped from the main process's
-`electron/store.ts` `activeDownloads`.
-Resume re-spawns and continues from the `.part` file. **No cross-restart resume.**
+Formats are built by the pure `electron/parsers/formats.ts`. Four regressions it guards (all tested):
+keep formats without `vcodec` (X/Twitter mp4 has none), keep m3u8 only for heights with no direct link,
+offer a `bv*+ba/b` fallback when nothing reports a height, and **keep exactly one entry per resolution**.
+
+That last one was a real bug: bilibili serves three codecs per resolution (HEVC / AV1 / AVC) and fps is a
+float where 29.969 and 29.97 are the same 30fps tier — a dedupe key using raw fps keeps both, so the UI showed
+**two 1080P entries**. `normalizeFps()` now buckets fps, the key is `height + normalised fps`, and ties are
+broken by **codec compatibility** (AVC > HEVC > AV1). Breaking ties by bitrate is wrong: AVC happens to have
+the highest bitrate on bilibili so it "worked by luck", but on another site it would hand users the least
+compatible codec.
+
+Pause = **kill the whole process tree** (`killProcessTree` in `electron/download/process-tree.ts`), task
+dropped from the main process's `electron/store.ts` `activeDownloads`. Resume re-spawns and continues from the
+`.part` file. **No cross-restart resume.**
+
+`child.kill()` only signals the direct child, and with aria2 the tree is three deep
+(Electron → yt-dlp → aria2c). Killing just yt-dlp orphans aria2c, which keeps writing `.part`: the size grows
+after "pause", bandwidth stays saturated, and the corrupted `.aria2` control file makes resume **restart the
+whole file** (16MB sample re-transferred 16.8MB). Hence `detached: true` at spawn (new process group),
+`-pid` signalling on pause, `taskkill /T /F` *before* killing the parent on Windows, and `SIGTERM` first with
+a grace period so aria2c can flush its control file. `tests/process-tree.test.ts` pins all of this — **dropping
+`detached` silently reintroduces the bug**.
 
 ### Task-level concurrency gate (`src/stores/download-rules.ts`)
 
@@ -490,15 +563,76 @@ Vue 3 components and Pinia stores remain 100% isomorphic.
 reused headlessly via `docker/server/electron-shim.ts`, leaving desktop codebase (`electron/` and `src/`) completely untouched.
 Progress and events broadcast over WebSocket in container mode.
 
-**Runtime dependencies preinstalled, never committed.** yt-dlp and ffmpeg are preinstalled into `/usr/local/bin`
-and `/usr/bin`; both are in the Go sidecar's (`backend/internal/runtime`) candidate paths, detected as "system".
-Upgrade by rebuilding the image; do not add entries to `backend/internal/manifest/assets.gen.go`.
+**Runtime dependencies preinstalled, versions from the manifest.** yt-dlp / ffmpeg / ffprobe static binaries go
+into `/usr/local/bin` (inside the Go sidecar's system candidate paths, so they resolve as "system"). All three
+**versions and SHA-256 come from `backend/internal/manifest/assets.gen.go`** via `scripts/deps-asset.mjs`, and are
+verified at build time:
+
+- the ffmpeg in the image is the **same byte stream** a desktop user gets by clicking "download", so encoders and
+  merge behaviour match;
+- `pnpm deps:manifest` bumps the image too, with no Dockerfile edit;
+- **never** hard-code a version or hash in the Dockerfile (`pnpm lint:docker` rejects it).
+
+Two choices look odd but were measured: yt-dlp is the `yt-dlp_linux` PyInstaller build (**no python3 needed**),
+not the `yt-dlp` zipapp which needs an interpreter; ffmpeg is ffmpeg-static's static binary, not `apt install ffmpeg`
+(apt drags in libllvm15 109MB, libgl1-mesa-dri 23MB, libicu72 36MB — 290MB of image for one binary).
+
+**The server is bundled at build time.** `docker/server/vite.config.ts` compiles `docker/server/index.ts` plus the
+`electron/` business code into `docker/dist-server/index.js`; runtime is just `node` — **no tsx, no node_modules**
+(37MB saved, and startup no longer transpiles hundreds of modules). Vite's SSR build externalises every dependency
+by default, hence the explicit `ssr.noExternal`; without it the image builds fine and the container dies with
+`Cannot find package`.
+
+**Container update check (`docker/server/update.ts`).** Inside a container the process runs on a read-only image
+layer, so **any self-update disappears on the next `docker run`**. `app:checkForUpdates` therefore only reports
+"is there a newer version" and returns the `docker compose pull` commands, with `manual` always `true`; the UI shows
+those commands instead of "Download / Restart and install". Pulling the image is the only upgrade path. **Do not**
+turn it back into a `{ hasUpdate: false }` constant: self-hosters keep an install for months, and a stale yt-dlp
+degrades as sites change — silently, so users conclude "the downloader is broken".
+
+**Images are published to GHCR (`ghcr.io/<owner>/downvid`).** Push to main tags `:latest`; a `v1.2.3` tag yields
+`:1.2.3` and `:1.2`. GHCR packages default to **private** — flip it to public after the first publish, otherwise
+pulls fail with a confusing denied / not-found mix. The workflow inspects the pushed manifest for both platforms and
+actually runs `yt-dlp --version`: "push succeeded" is not the same as "users can pull it".
+
+**Update sources (`shared/update-sources.ts`).** Update checks no longer ask only the GitHub API; they walk an
+ordered chain `github → jsdelivr → ghproxy → gitee → website` and stop at the first success. Behind restrictive
+networks `api.github.com` often fails, and **a failed check looks exactly like "you're up to date"** — the one class
+of bug that cannot be fixed by shipping a new version, because the delivery channel itself is broken.
+`shared/update-sources.ts` is pure data + pure functions (URLs, response normalisation, version comparison);
+`shared/update-check.ts` only adds the request loop, with `fetch` injected (main process passes electron-updater's
+session so the user's proxy applies; the container passes Node's fetch; tests pass a fake). The `updateSource`
+setting accepts `'auto'` or a pinned source, and illegal values fall back to `'auto'` — a value that matches no
+source would silently disable updates forever. Switching sources clears the check cache. `compareVersions` exists
+exactly once, in `shared/update-sources.ts`: two copies would make the settings page and the update modal disagree
+about whether an update exists. Adding a source means touching `UPDATE_SOURCE_IDS`, both i18n locales
+(`updateSettings.source.<id>` plus the literal-key table in `SettingsView.vue`), and
+`tests/update-sources.test.ts`. Gitee and jsDelivr additionally need the maintainer to mirror the repo there;
+until then that source 404s, the chain skips it silently, and the other sources still work.
+
+### Docker tests
+
+`scripts/deps-asset.mjs` has its own unit tests inside `tests/update-sources.test.ts` (asset names, gzip-vs-raw,
+TARGETARCH mapping). `scripts/test-web-server.mjs` always rebuilds `docker/dist-server` before running — an earlier
+"reuse the existing bundle" shortcut meant local edits were tested against a stale build, which is a green that is
+worse than a red.
 
 **Data persistence.** Paths are driven by environment variables: `DOWNVID_DATA_DIR` points to `/data/userdata`,
 `DOWNVID_DOWNLOADS` points to `/data/downloads`. Download records and media files persist via mounted volumes.
 
 **Build conventions.** POSIX paths and LF endings (`.gitattributes`) are required; `docker/entrypoint.sh` must
 stay LF. Build artifacts and local data directories are isolated via `.dockerignore`.
+
+The `backend/build` entry in `.dockerignore` **must stay**: sidecar binaries built on the host belong to the host
+platform (`darwin-*` on macOS) and would otherwise be copied into the Linux image (34MB measured). The Dockerfile
+copies only `/out/<target-arch>`.
+
+`/data` is a host bind mount whose owner is decided by the NAS / router. **Do not switch the image to a fixed uid** —
+that makes "download directory not writable" the default outcome, and the error is yt-dlp's EACCES, which users will
+not trace back to their mount's ownership. Deployments wanting least privilege set `user:` in compose.
+
+After touching the Dockerfile / compose / entrypoint, run `pnpm lint:docker` and `pnpm test:web` locally. The latter
+runs the **bundled** server (the same file the image runs): source that works is not the same as a bundle that works.
 
 ---
 
