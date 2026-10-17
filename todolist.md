@@ -105,6 +105,31 @@
 - 「已下载」分支保留下载按钮（原来只有一个「打开历史」）
 - 文件名补清晰度后缀：否则不同清晰度算出同名文件，yt-dlp 静默跳过并报成功
 
+### CI 已全绿（2026-10-18）
+
+五个工作流全部通过：`CI · Linux` / `CI · macOS` / `CI · Windows` / `Docker image` / `CodeQL`。
+
+之前长期红叉的是七处**互相独立**的问题，都不是「代码写得不对」：
+
+| # | 现象 | 真因 |
+| --- | --- | --- |
+| 1 | 三个平台的前端 job 都红 | 来源审计数字没跟代码同步（1241 行 / 45.8%） |
+| 2 | Windows `scan-broken` 始终失败、单跑必过 | `runtime` 包级扫描预算被并行探测互相 reset（`go test -race` 当场抓到） |
+| 3 | Docker 冒烟报「依赖不在 PATH」 | `docker exec <容器> command` —— `command` 是 shell 内建，没有可执行文件，必然 exit 127 |
+| 4 | Docker publish 报 invalid tag | GHCR 的 repository 名必须全小写，而 owner 是 `Downvid` |
+| 5 | 前端 job 报找不到 `wailsjs` | 那是 `wails generate module` 生成的、被 gitignore 忽略，CI 从没生成过 |
+| 6 | `wails generate module` 报 embed 失败 | 鸡生蛋：generate 要编译 Go → 要 `frontend/dist` → 要构建前端 → 要 wailsjs |
+| 7 | Windows 集成回归三连红 | Go 侧 `syscall.Kill` 在 Windows 不存在；vm 沙箱缺 `setTimeout`；用例断言了 POSIX 信号语义 |
+
+第 7 条里的 **Go 编译失败是发布级问题**：`process_tree.go` 用了
+`syscall.Kill` 与 `SysProcAttr.Setpgid`，这两个在 Windows 上根本不存在，
+意味着 `app` 在 Windows 上完全无法构建。本机是 macOS，`go build ./...`
+永远看不到它——已拆成 `process_tree.go` / `process_tree_posix.go` /
+`process_tree_windows.go` 三个文件，五个目标全部交叉编译通过。
+
+第 3 条也补了机械校验：`lint:workflows` 现在会拒绝
+`docker exec <容器> command|test` 这种写法，防止同样的错再犯。
+
 ### 新增的两条 CI 检查
 | 检查 | 拦什么 |
 |---|---|
