@@ -147,7 +147,7 @@ declared-but-not-exposed, API-group coverage both ways).
 3. the type in `src/env.d.ts`
 4. subscribers **must call unsubscribe on unmount** (otherwise hot reload accumulates listeners)
 
-Existing: `download:progress`, `history:updated`, `update:status`, `menu:showAbout`, `deps:progress`.
+Existing: `deps:progress`, `download:progress`, `history:updated`, `update:status`, `menu:openSettings`, `menu:showAbout`.
 A broadcast event must **not** double as an `ipcMain.handle` channel (`lint:ipc` enforces this).
 
 **3. Changing user settings shape → silently breaks existing users.**

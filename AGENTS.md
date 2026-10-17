@@ -156,7 +156,7 @@ Go 边车由同文件的 `goBackend()` 插件构建。`vitest.config.ts` 与 `vi
 3. `src/env.d.ts` 补类型
 4. 订阅方**必须在组件卸载时调用 unsubscribe**（否则热重载会累积监听）
 
-现有事件：`download:progress`、`history:updated`、`update:status`、`menu:showAbout`、`deps:progress`。
+现有事件：`deps:progress`、`download:progress`、`history:updated`、`update:status`、`menu:openSettings`、`menu:showAbout`。
 广播事件**不得**同时用作 `ipcMain.handle` 通道（`lint:ipc` 会报）。
 
 ### 3. 改用户设置形状 → 会让老用户设置静默失效

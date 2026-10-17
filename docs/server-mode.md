@@ -72,7 +72,7 @@
 - `electron/parsers/*`（douyin / kuaishou / ytdlp / formats）—— 平台解析
 - `backend/`（Go 边车）—— **零第三方依赖**，`CGO_ENABLED=0` 编出来是静态二进制
 - `shared/parse-error.ts` —— 错误分类与脱敏诊断
-- `src/i18n/` —— 254 条词条 × 2 语言
+- `src/i18n/` —— 286 条词条 × 2 语言
 - `src/stores/download-rules.ts` —— 并发闸门 / FIFO / 重试（纯函数，已有 16 条用例）
 
 ## 必须重写的部分
@@ -136,7 +136,7 @@ export const api = isServerMode
 
 63 个调用点里大部分能一对一映射（`ytdlp.download` → `POST /api/download`）。
 这样 `src/components/*` 与 `src/stores/*` 几乎不用改，
-`src/i18n` 的 254 条词条也直接复用。
+`src/i18n` 的 286 条词条也直接复用。
 
 ## 文件落盘：挂载宿主目录
 

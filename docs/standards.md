@@ -131,7 +131,7 @@ refactor(download): 拆分直链与 yt-dlp 两条路径
 3. `src/env.d.ts` 补类型
 4. 订阅方必须在组件卸载时调用 unsubscribe
 
-现有事件：`download:progress`、`history:updated`、`update:status`、`menu:showAbout`、`deps:progress`
+现有事件：`deps:progress`、`download:progress`、`history:updated`、`update:status`、`menu:openSettings`、`menu:showAbout`
 
 ### 改用户设置形状
 
@@ -142,7 +142,7 @@ refactor(download): 拆分直链与 yt-dlp 两条路径
 3. 删除或重命名字段属于 **MAJOR** 变更（见 [发布流程](./release.md)）
 4. 同步更新 `src/components/SettingsView.vue` 与相关文档
 
-当前字段：`downloadDir`、`filenameTemplate`、`preferredQuality`、`cookieMode`、`cookiesFile`、`proxy`、`depPaths`
+当前字段：`downloadDir`、`filenameTemplate`、`preferredQuality`、`cookieMode`、`cookiesFile`、`proxy`、`acceleration`、`depPaths`、`autoCheckUpdate`、`autoDownloadUpdate`、`updateSource`、`depMirror`、`language`
 
 ### 改运行依赖（yt-dlp / ffmpeg / ffprobe）
 

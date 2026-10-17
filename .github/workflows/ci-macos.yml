@@ -118,6 +118,10 @@ jobs:
       - name: 仓库坐标一致性
         run: pnpm sync:repo
 
+      # 文档里的「当前值类」数字（词条数 / 用例数 / settings 字段 / 事件清单）与代码实测一致
+      - name: 文档数字同步
+        run: pnpm sync:doc-numbers
+
       # 词条漏英文 / 占位符对不上都不会报错，只会静默显示错文案
       - name: i18n 词条校验
         run: pnpm lint:i18n
