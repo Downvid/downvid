@@ -24,6 +24,7 @@
   <a href="https://github.com/yxxbc/downvid/actions/workflows/ci-windows.yml"><img src="https://img.shields.io/github/actions/workflow/status/yxxbc/downvid/ci-windows.yml?branch=main&label=CI%20Windows&logo=github-actions&logoColor=white&color=16a34a" alt="CI Windows" /></a>
   <a href="https://github.com/yxxbc/downvid/actions/workflows/codeql.yml"><img src="https://img.shields.io/github/actions/workflow/status/yxxbc/downvid/codeql.yml?branch=main&label=CodeQL&logo=github-actions&logoColor=white&color=16a34a" alt="CodeQL" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-7c3aed?style=flat&logo=open-source-initiative&logoColor=white" alt="MIT License" /></a>
+  <a href="https://trendshift.io/repositories/180707?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-180707" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/180707/daily?language=TypeScript" alt="yxxbc%2Fdownvid | Trendshift" width="250" height="55"/></a>
 </p>
 
 <p>
@@ -134,18 +135,29 @@ DownVid 通过 yt-dlp 支持 **1000+ 个**视频和音频网站。以下是常�
 
 ### 用 Docker 运行
 
-DownVid 是桌面应用，容器镜像内置虚拟显示，并把界面通过 noVNC 暴露到浏览器——
-打开网页就是完整应用：
+容器镜像跑的是**原生 WebUI**（没有 X11、没有 VNC）——浏览器打开就是完整应用，
+电脑、平板、手机都能用：
 
 ```bash
-git clone https://github.com/yxxbc/downvid.git
-cd downvid
-docker compose up -d
-# 然后打开 http://127.0.0.1:6080/vnc.html
+# 拉官方多架构镜像（amd64 + arm64）
+docker run -d --name downvid -p 6080:6080 \
+  -v "$PWD/data/downloads:/data/downloads" \
+  -v "$PWD/data/userdata:/data/userdata" \
+  ghcr.io/yxxbc/downvid:latest
+# 然后打开 http://127.0.0.1:6080/
 ```
 
-镜像内已预装 yt-dlp 与 FFmpeg，下载文件落在宿主机的 `./data/downloads` 目录。
-端口、SSH/SFTP、分辨率与排错的完整说明见 [Docker 指南](./docs/docker.md)。
+或者用 compose（推荐，升级只要一条命令）：
+
+```bash
+curl -O https://raw.githubusercontent.com/yxxbc/downvid/main/docker-compose.yml
+docker compose up -d
+# 以后升级：docker compose pull && docker compose up -d
+```
+
+yt-dlp / FFmpeg / ffprobe 已在镜像内预装，且**版本与哈希和桌面版下载到的完全一致**。
+下载文件落在宿主机的 `./data/downloads`。配置项、反向代理、升级与排错的完整说明见
+[Docker 指南](./docs/docker.md)。
 
 ## 从源码构建
 

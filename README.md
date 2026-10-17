@@ -24,6 +24,7 @@
   <a href="https://github.com/yxxbc/downvid/actions/workflows/ci-windows.yml"><img src="https://img.shields.io/github/actions/workflow/status/yxxbc/downvid/ci-windows.yml?branch=main&label=CI%20Windows&logo=github-actions&logoColor=white&color=16a34a" alt="CI Windows" /></a>
   <a href="https://github.com/yxxbc/downvid/actions/workflows/codeql.yml"><img src="https://img.shields.io/github/actions/workflow/status/yxxbc/downvid/codeql.yml?branch=main&label=CodeQL&logo=github-actions&logoColor=white&color=16a34a" alt="CodeQL" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-7c3aed?style=flat&logo=open-source-initiative&logoColor=white" alt="MIT License" /></a>
+  <a href="https://trendshift.io/repositories/180707?utm_source=trendshift-badge&amp;utm_medium=badge&amp;utm_campaign=badge-trendshift-180707" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/180707/daily?language=TypeScript" alt="yxxbc%2Fdownvid | Trendshift" width="250" height="55"/></a>
 </p>
 
 <p>
@@ -41,6 +42,7 @@
 <p>
   <a href="./README.zh-CN.md">简体中文</a> | <strong>English</strong>
 </p>
+
 <a href="https://www.producthunt.com/products/github-460eee39-2e5c-447d-b207-531e944feebd?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-downvid" target="_blank" rel="noopener noreferrer"><img alt="Downvid - Downvid | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1280091&amp;theme=light&amp;t=1792127974682"></a>
 </div>
 
@@ -141,19 +143,29 @@ Step-by-step instructions and common issues are in the [installation guide](./do
 
 ### Run it in Docker
 
-DownVid is a desktop app, so the container image ships a virtual display and exposes the
-UI through noVNC — open a browser and you have the full app:
+The container image runs a native WebUI (no X11, no VNC) — open a browser and you have the
+full app, on desktop, tablet or phone:
 
 ```bash
-git clone https://github.com/yxxbc/downvid.git
-cd downvid
-docker compose up -d
-# then open http://127.0.0.1:6080/vnc.html
+# pull the official multi-arch image (amd64 + arm64)
+docker run -d --name downvid -p 6080:6080 \
+  -v "$PWD/data/downloads:/data/downloads" \
+  -v "$PWD/data/userdata:/data/userdata" \
+  ghcr.io/yxxbc/downvid:latest
+# then open http://127.0.0.1:6080/
 ```
 
-yt-dlp and FFmpeg come preinstalled in the image. Downloads land in `./data/downloads`
-on the host. Full details — ports, SSH/SFTP, resolution, troubleshooting — are in the
-[Docker guide](./docs/docker.md).
+Or, with compose (recommended — upgrades become one command):
+
+```bash
+curl -O https://raw.githubusercontent.com/yxxbc/downvid/main/docker-compose.yml
+docker compose up -d
+# upgrade later: docker compose pull && docker compose up -d
+```
+
+yt-dlp / FFmpeg / ffprobe are preinstalled with **the same versions and hashes the desktop app
+downloads**. Downloads land in `./data/downloads` on the host. Full details — configuration,
+reverse proxy, upgrading, troubleshooting — are in the [Docker guide](./docs/docker.md).
 
 ## Build from source
 
