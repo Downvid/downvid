@@ -13,8 +13,12 @@ it('清单检查在网络重试时使用 Node 等待和本平台空设备', asyn
   const require = createRequire(import.meta.url)
   const hash = 'a'.repeat(64)
   const manifest = `const YtDlpTag = "2026.10.14"\nconst FFmpegTag = "b6.1.1"\n${hash}`
-  const sums = ['yt-dlp_macos', 'yt-dlp_linux', 'yt-dlp_linux_aarch64', 'yt-dlp.exe']
-    .map(name => `${hash}  ${name}`).join('\n')
+  // 清单现在同时记录 zipapp 主用包与自包含回退包，校验会逐个查它们的哈希，
+  // 所以 SHA2-256SUMS 里两份都要有（漏了会报「缺少 yt-dlp」）。
+  const sums = [
+    'yt-dlp', 'yt-dlp.exe',
+    'yt-dlp_macos', 'yt-dlp_linux', 'yt-dlp_linux_aarch64',
+  ].map(name => `${hash}  ${name}`).join('\n')
   let calls = 0
   let waits = 0
   let assetRetry = false

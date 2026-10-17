@@ -13,6 +13,12 @@
  *      - 未知通道如实返回错误
  *   4. 广播通道：bus.emit('download:progress') 实时推送至全部 WS 客户端
  *
+ * 服务端在 CI 里是以**打包产物**形态运行的（`docker/dist-server/index.js`），
+ * 与镜像里跑的是同一份东西。这一点很重要：源码能跑不等于打包后能跑
+ * （externals、`import.meta.url` 推出来的路径、动态 import 都会在打包后变形），
+ * 而镜像构建一次要几分钟，把这个错误留到那边发现代价太高。
+ * 没有产物时（例如刚 clone 下来）会先跑一次 `vite build`，而不是静默跳过。
+ *
  * 用法：node scripts/test-web-server.mjs
  */
 
@@ -40,10 +46,27 @@ if (dummyCreated) {
   fs.writeFileSync(path.join(staticDir, 'index.html'), '<div id="app">test</div>')
 }
 
-const tsxBin = path.join(ROOT, 'node_modules', '.bin', process.platform === 'win32' ? 'tsx.cmd' : 'tsx')
-const serverProcess = spawn(tsxBin, ['--tsconfig', 'docker/server/tsconfig.json', 'docker/server/index.ts'], {
+// 服务端产物：与镜像里运行的是同一份文件。
+//
+// **每次都重新构建**，不看产物是否存在。踩过的坑：改成「产物存在就复用」后，
+// 本地刚改完源码跑测试仍然全绿——测的是上一次的旧构建。那种绿比红更危险。
+// 构建本身约 0.2 秒（服务端 350 个模块，无压缩），不值得为它冒这个险。
+const serverEntry = path.join(ROOT, 'docker', 'dist-server', 'index.js')
+console.log('[test:web-server] 构建服务端打包产物...')
+// 走 `node <本仓库的 vite bin>` 而不是 `npx vite`：Windows 上 npx 会走 PowerShell
+// 解析，且可能命中全局安装的另一个 vite 版本（产物与镜像里的不一致）
+execSync(`"${process.execPath}" "${path.join(ROOT, 'node_modules', 'vite', 'bin', 'vite.js')}" build --config docker/server/vite.config.ts`, {
   cwd: ROOT,
-  shell: process.platform === 'win32',
+  stdio: 'inherit',
+})
+if (!fs.existsSync(serverEntry)) {
+  console.error('[test:web-server] 服务端打包失败：缺少 docker/dist-server/index.js')
+  process.exit(1)
+}
+
+const serverProcess = spawn(process.execPath, [serverEntry], {
+  cwd: ROOT,
+  shell: false,
   env: {
     ...process.env,
     DOWNVID_WEB_PORT: String(PORT),
@@ -158,6 +181,25 @@ try {
 
   await assert.rejects(invoke('unknown:channel'), /未知通道/)
   console.log('  ✓ WS 未知通道如实返回错误')
+
+  // 容器版更新检查：不执行任何写操作，只回答「有没有新版本 + 怎么升级」。
+  // 桌面版那条路径（下载安装包静默替换）在容器里**根本不成立**——
+  // 重建容器就丢了，所以这里必须是 manual 且带升级命令。
+  const update = await invoke('app:checkForUpdates', 'websit-never-matches')
+  assert.equal(update.manual, true, '容器版不允许自更新，必须标 manual')
+  assert.ok(Array.isArray(update.container?.upgrade?.commands) && update.container.upgrade.commands.length > 0,
+    '容器版必须给出拉镜像的升级命令（否则用户不知道怎么升级）')
+  assert.ok(
+    update.container.upgrade.commands.some(c => c.includes('docker compose pull')),
+    'compose 场景的升级命令必须包含 docker compose pull',
+  )
+  assert.equal(update.currentVersion, health.version, '当前版本应与 /healthz 一致')
+  console.log('  ✓ WS app:checkForUpdates 返回容器升级命令（不执行写操作）')
+
+  // 健康探针要带上镜像与版本信息：用户排障时贴这一行就够了
+  assert.equal(health.repo, 'yxxbc/downvid', '/healthz 应带仓库坐标')
+  assert.ok(typeof health.version === 'string' && health.version.length > 0, '/healthz 应带版本号')
+  console.log('  ✓ /healthz 带镜像坐标与版本')
 
   ws.close()
 

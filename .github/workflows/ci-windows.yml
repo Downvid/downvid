@@ -154,6 +154,11 @@ jobs:
       - name: 工作流健全性校验
         run: pnpm lint:workflows
 
+      # 镜像里的问题几乎都是不报错的那种（依赖版本漂移 / 退回 tsx / 更新检查退化），
+      # 读文件就能判定。三平台都查一遍，与其它 lint 保持一致。
+      - name: 容器镜像定义校验
+        run: pnpm lint:docker
+
       - name: 纯逻辑单测（Vitest）
         run: pnpm test
 

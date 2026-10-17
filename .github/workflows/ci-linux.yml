@@ -122,6 +122,11 @@ jobs:
       - name: 工作流健全性校验
         run: pnpm lint:workflows
 
+      # 镜像里的问题几乎都是**不报错**的那种：依赖版本与清单漂移、退回 tsx、
+      # 更新检查退化。这些读文件就能判定，不必等一次几分钟的镜像构建。
+      - name: 容器镜像定义校验
+        run: pnpm lint:docker
+
       - name: 纯逻辑单测（Vitest）
         run: pnpm test
 
@@ -160,6 +165,11 @@ jobs:
       # 依赖清单落后或哈希失配会在用户端变成「下载即校验失败」
       - name: 依赖清单与上游一致
         run: pnpm deps:manifest:check
+
+      # WebUI 服务端（容器版唯一的对外形态）。用的是打包后的产物，
+      # 与镜像里跑的是同一份文件 —— 源码能跑不等于打包能跑。
+      - name: Web 服务集成回归
+        run: pnpm test:web
 
   # ===== 集成回归：起真实进程、真实文件 IO =====
   integration:

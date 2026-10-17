@@ -1,8 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import path from 'node:path'
+import fs from 'node:fs'
 import { accelerationConnections, normalizeAcceleration } from '../shared/acceleration'
-import { aria2Candidates, isSupportedAria2Version } from '../electron/download/aria2'
+import { isSupportedAria2Version, parseAria2Version } from '../electron/download/aria2'
 import { createDirectSegments, canResumeDirect } from '../electron/download/direct-state'
+
+const readFileSync = fs.readFileSync
 
 describe('下载加速配置', () => {
   it('老用户默认开启八路，关闭后只使用一路', () => {
@@ -17,25 +20,45 @@ describe('下载加速配置', () => {
   })
 })
 
-describe('aria2 探测候选', () => {
-  it('手动路径优先且不替换为其他安装', () => {
-    expect(aria2Candidates('E:\\tools\\aria2c.exe', 'win32', {})).toEqual(['E:\\tools\\aria2c.exe'])
+/**
+ * aria2 的探测候选表已经并入 Go 边车（`backend/internal/runtime`），
+ * 与 yt-dlp / ffmpeg 共用同一份路径表——这样 Windows 的 Scoop/WinGet/Chocolatey、
+ * macOS 的 Homebrew、Linux 的 snap/nix 只维护一处。
+ *
+ * 这里保留的是「路径表确实覆盖了常见安装位置」的**契约检查**：
+ * 原先渲染进程自己维护过一份候选，与边车那份不一致时表现为
+ * 「依赖页说装了、加速页说没装」——两边都不报错，用户无所适从。
+ */
+describe('aria2 探测覆盖常见安装位置', () => {
+  const goSource = readFileSync(path.resolve(import.meta.dirname, '../backend/internal/runtime/find.go'), 'utf8')
+
+  it('Go 侧为 Windows 覆盖 Scoop / WinGet / Chocolatey', () => {
+    expect(goSource).toContain('"scoop"')
+    expect(goSource).toContain('WinGet')
+    expect(goSource).toContain('ChocolateyInstall')
   })
-  it('非 Windows 主机也能验证搬迁后的 Windows PATH/Scoop/WinGet', () => {
-    const candidates = aria2Candidates('', 'win32', { PATH: 'E:\\bin;F:\\bin', SCOOP: 'F:\\scoop', LOCALAPPDATA: 'E:\\local', ProgramFiles: 'E:\\programs' }, 'E:\\home')
-    expect(candidates).toContain(path.win32.join('F:\\bin', 'aria2c.exe'))
-    expect(candidates).toContain(path.win32.join('F:\\scoop', 'apps', 'aria2', 'current', 'aria2c.exe'))
-    expect(candidates).toContain(path.win32.join('E:\\local', 'Microsoft', 'WinGet', 'Links', 'aria2c.exe'))
+
+  it('Go 侧覆盖 aria2 在 Scoop 与 WinGet 的实际落点', () => {
+    // Scoop: apps\aria2\current\aria2c.exe；WinGet portable: Packages\aria2.aria2_*\aria2c.exe
+    expect(goSource).toContain('filepath.Join(scoop, "apps", "aria2", "current")')
+    expect(goSource).toContain('"aria2.aria2_*"')
   })
-  it('macOS/Linux 搜索常见安装位置，不生成 exe 后缀', () => {
-    expect(aria2Candidates('', 'darwin', { PATH: '/custom/bin:/usr/bin' }, '/home/me')).toContain('/opt/homebrew/bin/aria2c')
-    expect(aria2Candidates('', 'linux', {}, '/home/me')).toContain('/usr/bin/aria2c')
+
+  it('Go 侧为 macOS / Linux 覆盖 Homebrew 与 snap', () => {
+    expect(goSource).toContain('/opt/homebrew/bin')
+    expect(goSource).toContain('/usr/local/bin')
+    expect(goSource).toContain('/snap/bin')
+    expect(goSource).toContain('/nix/var/nix/profiles/default/bin')
   })
-  it('不接受过旧或非版本字符串', () => {
-    expect(isSupportedAria2Version('1.37.0')).toBe(true)
-    expect(isSupportedAria2Version('1.36.0')).toBe(true)
-    expect(isSupportedAria2Version('1.23.0')).toBe(false)
-    expect(isSupportedAria2Version('unknown')).toBe(false)
+
+  it('aria2 的二进制名是 aria2c 而不是 Kind 名', () => {
+    // 写错的表现是「装了却永远显示未找到」
+    expect(goSource).toContain('name = "aria2c"')
+  })
+
+  it('渲染进程不再自己维护候选表（避免两份不一致）', () => {
+    const aria2Source = readFileSync(path.resolve(import.meta.dirname, '../electron/download/aria2.ts'), 'utf8')
+    expect(aria2Source).not.toContain('export function aria2Candidates')
   })
 })
 

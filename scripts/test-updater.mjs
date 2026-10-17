@@ -182,7 +182,7 @@ suite.case('错误分类：每种失败都要给出可行动的文案', async (t
   t.ok(!unknown.includes('\n'), '未知错误不应包含换行（界面会被撑破）')
 })
 
-suite.case('检查失败时落到 GitHub API 兜底，而不是回答「已是最新」', async (t) => {
+suite.case('检查失败时落到更新源链路兜底，而不是回答「已是最新」', async (t) => {
   const { updater, state } = loadUpdater()
   state.checkBehavior = 'throw'
   state.checkError = 'net::ERR_CONNECTION_RESET'
@@ -193,8 +193,30 @@ suite.case('检查失败时落到 GitHub API 兜底，而不是回答「已是�
   t.equal(r.version, '1.3.9', '兜底结果要带上版本号')
   t.ok(
     state.fetchCalls.some((c) => c.kind === 'fetch'),
-    '应当真的发出了 GitHub API 请求',
+    '应当真的发出了兜底请求',
   )
+})
+
+suite.case('更新的兜底链路会换源：GitHub 挂了还能靠别的源拿到版本', async (t) => {
+  // 这是国内网络下的常态：api.github.com 连不上，但 jsDelivr / gh-proxy 通。
+  // 只问 GitHub 的实现会让「检查更新」永远返回无更新，用户永远停在旧版本。
+  const { updater, state } = loadUpdater()
+  state.checkBehavior = 'throw'
+  state.checkError = 'net::ERR_CONNECTION_RESET'
+  // 官方 API 与 gh-proxy 都不通，jsDelivr 通
+  state.fetchRoutes.set('api.github.com', () => { throw new Error('ECONNREFUSED') })
+  state.fetchRoutes.set('gh-proxy', () => { throw new Error('ECONNREFUSED') })
+  state.fetchRoutes.set('data.jsdelivr.com', {
+    ok: true,
+    status: 200,
+    json: async () => ({ versions: [{ version: '1.3.7' }] }),
+  })
+
+  const r = await updater.checkForUpdates(true)
+  t.equal(r.hasUpdate, true, 'electron-updater 与官方 API 都失败，但镜像源有 → 必须报有更新')
+  t.equal(r.version, '1.3.7', '版本号来自成功的那个源')
+  const urls = state.fetchCalls.filter((c) => c.kind === 'fetch').map((c) => c.url)
+  t.ok(urls.some((u) => u.includes('jsdelivr')), '应当尝试过 jsDelivr')
 })
 
 suite.case('两条路都失败时如实报错，不假装是最新', async (t) => {
