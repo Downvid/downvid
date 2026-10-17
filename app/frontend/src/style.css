@@ -252,3 +252,163 @@ html, body {
   -webkit-font-feature-settings: 'liga';
   -webkit-font-smoothing: antialiased;
 }
+
+/* ============================================================
+   视觉层：玻璃拟态 + 氛围光晕 + 动效预算
+   ============================================================
+
+   ## 为什么不是「所有卡片都上玻璃」
+
+   `backdrop-filter` 是 GPU 密集操作：每个元素都要把背后的合成结果采样、
+   模糊、再合成一次。Linux 的 WebKitGTK 上尤其明显（GNOME 的合成器路径
+   与 Chromium 不同）。每屏放 10 个玻璃卡片的直接后果是滚动掉帧，
+   而这类掉帧在 macOS 上测不出来——只有 Linux 用户会遇到。
+
+   ## 所以定三条硬预算
+
+   1. **每屏 backdrop-filter 元素 ≤ 3 个**（浮层：弹窗 / 队列 / 工具栏）
+   2. **只对 `position: fixed/sticky` 或独立浮层用**，不对滚动列表里的每项用
+   3. **`@supports` 渐进增强**：不支持时退化为纯色 + 边框，视觉仍然完整
+
+   ## 色调不换成主流紫
+
+   现有 token 是暖橡木 / 琥珀（primary #8c5100、container #ff9800）。
+   那是这个产品**已有的识别度**，换成渐变紫就变成「又一个 AI 生成的页面」。
+   玻璃在这里的作用是让暖色**有层次**，不是覆盖它。
+*/
+
+/* ---------- 氛围光晕：给玻璃提供「可透」的底层 ---------- */
+/* 用同一色系的明暗变化，不用彩虹。fixed + pointer-events:none，
+   不进文档流，也不拦截点击。 */
+.ambient {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(60% 45% at 15% 8%, color-mix(in oklab, var(--color-primary-container) 22%, transparent) 0%, transparent 70%),
+    radial-gradient(50% 40% at 88% 22%, color-mix(in oklab, var(--color-tertiary) 16%, transparent) 0%, transparent 70%),
+    radial-gradient(55% 45% at 45% 96%, color-mix(in oklab, var(--color-secondary) 12%, transparent) 0%, transparent 70%);
+  /* 光晕极缓慢漂移 = 「有生命感」但不抢注意力；prefers-reduced-motion 下关掉 */
+  animation: ambient-drift 40s ease-in-out infinite alternate;
+}
+
+@keyframes ambient-drift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(-2%, 1.5%, 0) scale(1.06); }
+}
+
+/* ---------- 玻璃材质 ---------- */
+/* 基础形态（不支持 backdrop-filter 时）：半透明底 + 细边框 + 柔和阴影。
+   已经是「好看且有层次」的，不是残缺版。 */
+.glass {
+  background: color-mix(in oklab, var(--color-surface-container-lowest) 82%, transparent);
+  border: 1px solid color-mix(in oklab, var(--color-outline-variant) 45%, transparent);
+  box-shadow: var(--shadow-ambient);
+  border-radius: var(--radius-xl);
+}
+
+/* 增强形态：支持时才加模糊与饱和。
+   `saturate(180%)` 让透过来的暖色更「厚」——没有它玻璃会发灰。 */
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass {
+    background: color-mix(in oklab, var(--color-surface-container-lowest) 62%, transparent);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+    border-color: color-mix(in oklab, var(--color-surface-container-lowest) 75%, transparent);
+    /* 顶部一道高光边：玻璃的关键细节，没有它像磨砂塑料 */
+    box-shadow:
+      var(--shadow-ambient),
+      inset 0 1px 0 color-mix(in oklab, white 55%, transparent);
+  }
+}
+
+/* 队列 / 侧栏用的「更薄」的玻璃：面积大，模糊要轻，否则滚动卡 */
+.glass-thin {
+  background: color-mix(in oklab, var(--color-surface-container) 55%, transparent);
+  border: 1px solid color-mix(in oklab, var(--color-outline-variant) 30%, transparent);
+}
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .glass-thin {
+    -webkit-backdrop-filter: blur(12px) saturate(150%);
+    backdrop-filter: blur(12px) saturate(150%);
+  }
+}
+
+/* ---------- 动效：只解释状态变化 ---------- */
+/*
+   心理学依据（都对应可观测的用户行为）：
+   - `--ease-out-expo`：快速起步、缓慢收尾 → 感觉「响应快」，因为
+     人感知延迟主要看前 100ms 的位移量
+   - 时长 160ms 是「既察觉不到等待、又能看出是动画」的平衡点；
+     超过 250ms 会被感知为「卡」
+   - 只在 transform / opacity 上做动画：两者都能走合成层，
+     不触发 layout/paint，是「性能占用极低」的关键
+*/
+:root {
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --dur-fast: 120ms;
+  --dur-base: 160ms;
+  --dur-slow: 260ms;
+}
+
+/* 卡片/按钮的悬停：位移 + 阴影，不改变尺寸（不改尺寸才不会触发重排） */
+.lift {
+  transition:
+    transform var(--dur-base) var(--ease-out-expo),
+    box-shadow var(--dur-base) var(--ease-out-expo);
+  will-change: transform;
+}
+.lift:hover { transform: translate3d(0, -2px, 0); box-shadow: 0 12px 32px rgba(59, 49, 37, 0.1); }
+/* 按下时回弹一点：给出「确实按到了」的触觉替代反馈 */
+.lift:active { transform: translate3d(0, 0, 0) scale(0.985); transition-duration: var(--dur-fast); }
+
+/* 进场：从略微偏下 + 透明 → 原位。
+   只用于「新增的一层」，不用于每次重渲染（那会显得烦躁）。 */
+@keyframes enter-fade {
+  from { opacity: 0; transform: translate3d(0, 8px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+.enter { animation: enter-fade var(--dur-slow) var(--ease-out-expo) both; }
+
+/* 进度条的流光：用 background-position 会触发 paint，
+   所以改用伪元素 + transform（走合成层）。 */
+.progress-sheen { position: relative; overflow: hidden; }
+.progress-sheen::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in oklab, white 35%, transparent) 50%,
+    transparent 100%
+  );
+  transform: translate3d(-100%, 0, 0);
+  animation: sheen 1.6s var(--ease-out-expo) infinite;
+}
+@keyframes sheen {
+  to { transform: translate3d(100%, 0, 0); }
+}
+
+/* 焦点环：键盘用户必须看得见，鼠标用户不该被它打扰 */
+:focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--color-primary) 70%, transparent);
+  outline-offset: 2px;
+  border-radius: var(--radius-md);
+}
+
+/* ---------- 减少动态效果：全部关掉，不是「变慢」 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .ambient { animation: none; }
+  .enter { animation: none; }
+  .progress-sheen::after { animation: none; }
+  .lift { transition: none; }
+  .lift:hover { transform: none; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
