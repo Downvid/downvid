@@ -157,8 +157,20 @@ jobs:
       # wailsjs/ 是**生成**的（wails generate module），不入库。
       # 不生成就直接 svelte-check，会报三条 "Cannot find module
       # '../../wailsjs/go/main/App'"——那是 CI 缺步骤，不是代码错。
+      #
+      # 注意顺序：`wails generate module` 会先把 Go 包编译一遍，
+      # 而 main.go 里有 `//go:embed all:frontend/dist`——dist 不存在时
+      # 直接报 `pattern all:frontend/dist: no matching files found`。
+      # 所以**先构建前端**，再生成绑定。
       - name: 安装 Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
+
+      # 先建一个空的 dist：`//go:embed all:frontend/dist` 在 dist 不存在时
+      # 会让整个 Go 包编译失败，而 `wails generate module` 必须先编译这个包。
+      # 反过来，前端构建又需要 wailsjs ——这是一个鸡生蛋问题，
+      # 只能先用占位目录把 generate 这一步解开（仓库里有 dist/.gitkeep）。
+      - name: 准备 embed 目录
+        run: bash app/scripts/prepare-embed-dir.sh
 
       - name: 生成 Wails 绑定（wailsjs）
         working-directory: app

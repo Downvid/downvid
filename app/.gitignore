@@ -4,5 +4,9 @@ frontend/dist/
 frontend/node_modules/
 frontend/wailsjs/
 
+# dist 整个不入库。它必须是**存在的空目录**（main.go 的
+# `//go:embed all:frontend/dist` 要求），由 scripts/prepare-embed-dir.sh 创建
+# ——不能靠提交占位文件，因为 `vite build` 会清空 dist。
+
 # 注意：wailsjs 是**生成**的（wails generate module），不入库。
 # 首次构建前跑一次 `wails generate module`，否则前端 import 会失败。

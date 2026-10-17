@@ -13,7 +13,10 @@ node_modules
 .pnp.js
 
 # Build outputs
-dist
+# 只排除**根目录**的 dist：写成 `dist` 会连带匹配 app/frontend/dist，
+# 而那个目录不能整个消失——Wails 的 `//go:embed all:frontend/dist`
+# 在目录不存在时会让 Go 包编译失败（见 app/scripts/prepare-embed-dir.sh）。
+/dist
 dist-ssr
 dist-electron
 dist-web
