@@ -1,0 +1,29 @@
+# Canonical identity mapping for contributors (git built-in, see `git help mailmap`).
+#
+# Format: Proper Name <proper@email>  Commit Name <commit@email>
+#         left = canonical (displayed), right = original signature in history
+#
+# Why this file exists: of the 13 signature identities in this repo, only 7 can be
+# resolved to a GitHub login via the `users.noreply.github.com` email format. The rest
+# use real addresses (gmail / 163 / outlook), so the account name cannot be derived
+# from the data -- it needs one manual confirmation, recorded here once.
+# scripts/gen-contributors.mjs depends on this to work reliably.
+#
+# Side benefit: `git shortlog -sne` also merges the multiple identities of one person.
+#
+# NOTE: keep comments ASCII-only. Verified: non-ASCII comment lines break mailmap
+# parsing for the lines that follow them (git 2.56).
+
+# Maintainer: "Black Cat" / "Xynrin" are two display names of one person, three emails.
+Black Cat <203426472+yxxbc@users.noreply.github.com>  Black Cat <203426472+Francis-Xavier-code@users.noreply.github.com>
+Black Cat <203426472+yxxbc@users.noreply.github.com>  Black Cat <xynrin@outlook.com>
+Black Cat <203426472+yxxbc@users.noreply.github.com>  Xynrin <xynrin@outlook.com>
+
+# Upstream author: two display names plus one real address.
+cshuangyy <121596361+cshuangyy@users.noreply.github.com>  cshuangyy <mycitu@163.com>
+cshuangyy <121596361+cshuangyy@users.noreply.github.com>  Zhouzhou <121596361+cshuangyy@users.noreply.github.com>
+
+# Community contributors: real address mapped to known GitHub account (confirmed once).
+jwfstars <jwfstars@users.noreply.github.com>  jwfstars <jwfstars@gmail.com>
+linuztx <linuztx@users.noreply.github.com>    The Master <linuztx@gmail.com>
+zerow <zerow@users.noreply.github.com>        zerow <htmlhao@gmail.com>
