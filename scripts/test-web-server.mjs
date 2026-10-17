@@ -26,6 +26,10 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { loader } from './lib/load-source.mjs'
+
+// shared/app.ts 是 TS，Node 不能直接 import —— 用仓库统一的 loader
+const { APP } = loader()('shared/app.ts')
 import { spawn, execSync } from 'node:child_process'
 import { WebSocket } from 'ws'
 
@@ -197,7 +201,9 @@ try {
   console.log('  ✓ WS app:checkForUpdates 返回容器升级命令（不执行写操作）')
 
   // 健康探针要带上镜像与版本信息：用户排障时贴这一行就够了
-  assert.equal(health.repo, 'yxxbc/downvid', '/healthz 应带仓库坐标')
+  // 从唯一来源比对，不写死：迁移仓库时这里漏改会让 CI 红，
+  // 而真正的 bug（服务端返回错坐标）反而被「测试也跟着错」掩盖
+  assert.equal(health.repo, `${APP.owner}/${APP.repo}`, '/healthz 应带仓库坐标（以 shared/app.ts 为准）')
   assert.ok(typeof health.version === 'string' && health.version.length > 0, '/healthz 应带版本号')
   console.log('  ✓ /healthz 带镜像坐标与版本')
 

@@ -12,7 +12,41 @@
 */
 
 @import 'tailwindcss';
-@import '@material-symbols/font-400/outlined.css';
+
+/* 图标字体内嵌，不走网络：这是本地桌面应用，离线或网络受限时在线字体加载不到，
+   图标会退化成文字或空白（历史上出现过）。
+
+   **必须手写 @font-face，不能用 @import 字体包的 css**：
+   那个文件同时声明了 outlined / rounded / sharp 三套字体，后两套用不到却会被
+   一并打包；而且它的相对 url() 交给构建器解析不可靠——实测产物里 URL 未被改写、
+   字体也没输出，于是图标全部渲染成图标名文字。
+
+   这是从 `src/style.css`（旧版）搬过来的教训，我第一版又踩了一次。 */
+@font-face {
+  font-family: 'Material Symbols Outlined';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('@material-symbols/font-400/material-symbols-outlined.woff2') format('woff2');
+}
+
+/* 基础排版写在这里而不是依赖字体包的样式：避免字体就绪前先渲染成图标名文字 */
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings: 'FILL' 0;
+}
 
 @custom-variant dark (&:is(.dark *));
 

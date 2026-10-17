@@ -71,8 +71,12 @@ try {
       env.PATH = dir
       return { expected: binary(dir, 'ffmpeg') }
     }, (results, expected) => {
-      assert.equal(entry(results, 'ffmpeg').path, expected)
-      assert.equal(entry(results, 'ffmpeg').version, '6.0')
+      const got = entry(results, 'ffmpeg')
+      if (got?.path !== expected || got?.version !== '6.0') {
+        console.error(`  ✗ scan-valid 期望 ${expected} / 6.0，实际 ${JSON.stringify(got, null, 2)}`)
+      }
+      assert.equal(got?.path, expected)
+      assert.equal(got?.version, '6.0')
     })
   }
   for (const mode of ['broken', 'old']) {
@@ -83,7 +87,16 @@ try {
         fs.writeFileSync(path.join(badDir, 'ffprobe.exe'), 'not executable')
       } else binary(badDir, 'ffprobe', 'old')
       return { expected: binary(path.join(home, 'Downloads', 'b-valid'), 'ffprobe') }
-    }, (results, expected) => assert.equal(entry(results, 'ffprobe').path, expected))
+    }, (results, expected) => {
+      const got = entry(results, 'ffprobe')
+      // 失败时把完整结果打出来：只 assert 一个字段时，看到「undefined」
+      // 无法判断是「没扫到」还是「扫到了但被判为不可用」
+      if (got?.path !== expected) {
+        console.error(`  ✗ scan-${mode} 期望 ${expected}，实际 ${JSON.stringify(got, null, 2)}`)
+        console.error(`  完整 results: ${JSON.stringify(results, null, 2)}`)
+      }
+      assert.equal(got?.path, expected)
+    })
   }
   check('relocated-winget', (home, env) => {
     env.LOCALAPPDATA = path.join(home, 'relocated-local')

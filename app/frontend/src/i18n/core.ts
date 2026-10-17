@@ -82,6 +82,10 @@ const messages: Record<Locale, Record<string, string>> = {
     // ===== 链接输入 =====
     'url.placeholder': '在此处粘贴需要解析的视频链接...',
     'url.paste': '粘贴链接',
+    'url.cut': '剪切',
+    'url.copy': '复制',
+    'url.selectAll': '全选',
+    'url.clear': '清空',
     'url.parse': '解析视频信息',
     'url.parsing': '解析中...',
     'url.youtubeCookieTitle': 'YouTube 视频需要 Cookie 才能下载',
@@ -415,6 +419,10 @@ const messages: Record<Locale, Record<string, string>> = {
     // ===== URL input =====
     'url.placeholder': 'Paste the video link you want to download...',
     'url.paste': 'Paste link',
+    'url.cut': 'Cut',
+    'url.copy': 'Copy',
+    'url.selectAll': 'Select all',
+    'url.clear': 'Clear',
     'url.parse': 'Parse video info',
     'url.parsing': 'Parsing...',
     'url.youtubeCookieTitle': 'YouTube videos need cookies to download',

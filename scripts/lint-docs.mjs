@@ -93,6 +93,15 @@ function fileRefs(text) {
 // 运行时路径（用户数据目录、下载目录……）：文档里出现是正常的，但仓库里当然
 // 没有这个文件。识别几个前缀跳过，而不是要求文档把路径写全。
 const RUNTIME_PATH = /^(userData|resources|\.downvid-aria2)\//
+
+/**
+ * 构建产物路径：文档里提到它们是正常的（解释「打包成什么」），
+ * 但它们不入库（`.gitignore`），要求存在必然误报。
+ *
+ * 曾经 `docker/dist-server/index.js` 就是把 CI 弄红的那一处——
+ * 而它恰恰是文档需要解释的产物名。
+ */
+const BUILD_OUTPUT = /^(dist|dist-electron|backend\/build|docker\/dist-web|docker\/dist-server|release)\//
 const isRuntimePath = (ref) => RUNTIME_PATH.test(ref)
 
 /**
@@ -103,6 +112,9 @@ const isRuntimePath = (ref) => RUNTIME_PATH.test(ref)
  * 所以「点开头且不存在」＝运行时产物。
  */
 const isRuntimeArtifact = (ref) => ref.startsWith('.') && !exists(ref)
+
+/** 是否是构建产物（不入库，不要求存在） */
+const isBuildOutput = (ref) => BUILD_OUTPUT.test(ref)
 
 /** 该引用在文档里是否只是「历史 / 反面」提及（存在性本就不该成立） */
 function isNegatedMention(text, ref) {
@@ -130,6 +142,7 @@ for (const [doc, text] of Object.entries(docs)) {
   for (const ref of fileRefs(text)) {
     if (isRuntimePath(ref)) continue
     if (isRuntimeArtifact(ref)) continue
+    if (isBuildOutput(ref)) continue
     if (isNegatedMention(text, ref)) continue
     if (ref.includes('/')) {
       if (!pathExists(ref)) problems.push(`${doc} 引用了不存在的路径：${ref}`)

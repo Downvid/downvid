@@ -10,10 +10,10 @@
    * 数据是 bilibili 的真实形状（三编码 + 浮点 fps），不联网——
    * 这样「组件对不对」与「网络通不通」不会混在一起。
    */
-  import FormatSelector from './components/FormatSelector.svelte'
+  import DownloadView from './components/DownloadView.svelte'
   import MaterialIcon from './components/MaterialIcon.svelte'
   import { t, setLocale, getLocale, LOCALES, type Locale } from './i18n/index.svelte'
-  import type { VideoInfo, VideoFormat, AudioFormat, AudioTrack } from './types'
+  import type { VideoInfo } from './types'
 
   const videoInfo: VideoInfo = {
     id: 'demo',
@@ -42,52 +42,33 @@
     ],
   }
 
-  let selectedFormat = $state<VideoFormat | null>(videoInfo.formats[0])
-  let selectedAudioFormat = $state<AudioFormat | null>(null)
-  let selectedAudioTrack = $state<AudioTrack | null>(null)
-  let selectedSubtitles = $state<string[]>([])
-  let downloadMode = $state<'video' | 'audio' | 'subtitle'>('video')
-  let isDownloading = $state(false)
-  let progress = $state(0)
   let log = $state<string[]>([])
+
+  /**
+   * 演示用的「后端」：延迟一段后返回固定结果。
+   *
+   * 真机上这里接的是 Wails 绑定的 `OnParse`（`internal/parse` 的真实实现）。
+   * 演示版用 Promise 模拟延迟，是为了验证**加载态、错误态、空态**都渲染得对——
+   * 那三种状态在没有网络的环境下永远看不到。
+   */
+  async function fakeParse(url: string): Promise<VideoInfo> {
+    note(`解析 ${url}`)
+    await new Promise((r) => setTimeout(r, 1200))
+    if (url.includes('fail')) {
+      throw new Error('[[parse-error:network]]网络请求失败或超时，请检查连接后重试')
+    }
+    return videoInfo
+  }
+
+  async function fakeDownload(p: { formatId: string; downloadMode: string }) {
+    note(`下载 formatId=${p.formatId} mode=${p.downloadMode}`)
+    await new Promise((r) => setTimeout(r, 600))
+  }
 
   function note(msg: string) {
     log = [...log, msg].slice(-5)
   }
 
-  function onselectVideo(f: VideoFormat) {
-    selectedFormat = f; selectedAudioFormat = null; downloadMode = 'video'
-    note(`选中视频 ${f.quality}`)
-  }
-  function onselectAudio(f: AudioFormat) {
-    selectedAudioFormat = f; downloadMode = 'audio'
-    note(`选中音频 ${f.quality}`)
-  }
-  function onselectTrack(track: AudioTrack) {
-    selectedAudioTrack = track
-    note(`选中音轨 ${track.name}`)
-  }
-  function onselectSubtitle(lang: string) {
-    selectedSubtitles = selectedSubtitles.includes(lang)
-      ? selectedSubtitles.filter((l) => l !== lang)
-      : [...selectedSubtitles, lang]
-    downloadMode = selectedSubtitles.length ? 'subtitle' : 'video'
-    note(`字幕：${selectedSubtitles.join(',') || '（无）'}`)
-  }
-  function ondownload() {
-    isDownloading = true
-    progress = 0
-    note(`开始下载（${downloadMode}）`)
-    // 演示进度：只改一个数字，不触发任何重排（进度条宽度走 transform）
-    const timer = setInterval(() => {
-      progress = Math.min(100, progress + 4)
-      if (progress >= 100) {
-        clearInterval(timer)
-        isDownloading = false
-        note('下载完成')
-      }
-    }, 90)
-  }
 </script>
 
 <!-- 氛围光晕：给玻璃提供「可透」的底层。fixed + pointer-events:none -->
@@ -117,34 +98,8 @@
   <div class="grid">
     <!-- 玻璃 #1：主内容容器（这一屏唯一的大面积玻璃） -->
     <section class="glass enter" style="animation-delay: 40ms">
-      <FormatSelector
-        {videoInfo}
-        {selectedFormat}
-        {selectedAudioFormat}
-        {selectedAudioTrack}
-        {selectedSubtitles}
-        {downloadMode}
-        {isDownloading}
-        {onselectVideo}
-        {onselectAudio}
-        {onselectTrack}
-        {onselectSubtitle}
-        {ondownload}
-      />
+      <DownloadView onParse={fakeParse} onDownload={fakeDownload} />
     </section>
-
-    <!-- 玻璃 #2：下载状态浮层（只在下载时出现，所以常态只有 1 个玻璃） -->
-    {#if isDownloading}
-      <aside class="glass enter floating">
-        <div class="flex items-center justify-between mb-2">
-          <span class="text-xs font-semibold">{t('download.downloading')}</span>
-          <span class="mono text-xs text-on-surface-variant">{Math.round(progress)}%</span>
-        </div>
-        <div class="track">
-          <div class="bar progress-sheen" style="transform: scaleX({progress / 100})"></div>
-        </div>
-      </aside>
-    {/if}
 
     {#if log.length}
       <section class="plain enter" style="animation-delay: 80ms">
@@ -221,29 +176,9 @@
 
   .grid { display: grid; gap: 16px; }
 
-  section.glass, aside.glass { padding: 18px; }
+  section.glass { padding: 18px; }
 
-  /* 浮动状态条：贴底，玻璃 + 更强阴影，暗示「浮在内容之上」 */
-  .floating {
-    position: sticky;
-    bottom: 16px;
-    padding: 12px 16px;
-  }
 
-  .track {
-    height: 6px;
-    border-radius: 999px;
-    background: color-mix(in oklab, var(--color-outline-variant) 35%, transparent);
-    overflow: hidden;
-  }
-  /* 用 transform: scaleX 而不是 width：走合成层，不触发 layout */
-  .bar {
-    height: 100%;
-    border-radius: 999px;
-    background: linear-gradient(90deg, var(--color-primary), var(--color-primary-container));
-    transform-origin: left center;
-    transition: transform 180ms var(--ease-out-expo);
-  }
 
   /* 普通区块：不用玻璃，只用极细的分隔感 */
   .plain {
