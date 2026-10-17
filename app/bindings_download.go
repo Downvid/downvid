@@ -28,6 +28,7 @@ import (
 	"github.com/Downvid/downvid/app/internal/deps"
 	"github.com/Downvid/downvid/app/internal/download"
 	"github.com/Downvid/downvid/app/internal/image"
+	"github.com/Downvid/downvid/app/internal/netx"
 	"github.com/Downvid/downvid/app/internal/parse"
 	"github.com/Downvid/downvid/app/internal/settings"
 	"github.com/Downvid/downvid/app/internal/shell"
@@ -686,6 +687,24 @@ func (a *App) GetDiskSpace(dir string) DiskSpaceResult {
 		return DiskSpaceResult{Error: err.Error()}
 	}
 	return DiskSpaceResult{Free: free, Total: total}
+}
+
+// TestProxy 实际测一次代理连通性。
+//
+// ## 为什么不能只做格式校验
+//
+// 早先前端的「测试」按钮只跑一个正则，于是 Clash 没开、端口填错、
+// 协议写成 socks5 都显示「代理可用」。随后所有下载都超时，而用户
+// 以为代理是好的——**假阳性比不检查更糟**。
+//
+// 现在真的发一次 HTTP 请求（经代理），并把失败翻译成人话
+// （「连接被拒绝：代理软件没启动」比 `dial tcp ... connection refused` 有用）。
+func (a *App) TestProxy(proxy string) netx.ProbeResult {
+	// 空串表示「测直连」：这种情况下也值得测一次——用户可能只是想确认
+	// 网络本身通不通，而那时不该返回「未配置代理」这种答非所问的结果。
+	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+	defer cancel()
+	return netx.Probe(ctx, proxy)
 }
 
 // ===== 用户设置 =====

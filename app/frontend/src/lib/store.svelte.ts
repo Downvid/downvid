@@ -57,6 +57,7 @@ import {
   showInFolder,
   startDownload,
   stripMarker,
+  testProxy as backendTestProxy,
 } from './backend'
 import { CONNECTION_STOPS, nearestConnectionStop, type Mode, type Tab } from './constants'
 import { getLocale, resolveLocale, setLocale, t, type Locale } from './i18n.svelte'
@@ -973,16 +974,39 @@ class AppStore {
     this.applyLanguage(this.settings.language)
   }
 
+  /**
+   * 测试代理连通性。
+   *
+   * 真的发一次请求（后端 `TestProxy` → `netx.Probe`），不是正则校验。
+   *
+   * 早先这里只跑正则，于是「Clash 没开」「端口填错」「填了 socks5」
+   * 全都显示「代理可用」。随后所有下载都超时，而用户以为代理没问题——
+   * **假阳性比不检查更糟**。
+   */
   async testProxy(): Promise<void> {
     this.proxyTesting = true
     try {
-      // 后端没有独立的代理探活接口（TS 版用 session.fetch，Go 侧未移植）。
-      // 这里只做**形状校验**并如实告知，而不是假装成功——
-      // 假装成功会让用户以为代理可用，然后所有下载都超时。
       const proxy = this.settings.proxy.trim()
-      const valid = proxy === '' || /^(https?|socks5):\/\/[^\s]+$/i.test(proxy)
-      this.proxyOk = valid
-      this.toast(valid ? t('toast.proxyFormatOk') : t('toast.proxyFormatBad'), valid ? 'success' : 'error')
+      const res = await backendTestProxy(proxy)
+      if (!res) {
+        // 浏览器预览：如实说明没有后端，不说「可用」
+        this.proxyOk = false
+        this.toast(t('toast.proxyNoBackend'), 'info')
+        return
+      }
+
+      this.proxyOk = res.ok
+      if (res.ok) {
+        // 延迟对用户有实际意义（判断代理是否慢到影响下载）
+        this.toast(
+          proxy
+            ? t('toast.proxyOkLatency', { ms: res.latencyMs ?? 0 })
+            : t('toast.directOkLatency', { ms: res.latencyMs ?? 0 }),
+          'success',
+        )
+      } else {
+        this.toast(res.error || t('toast.proxyBad'), 'error')
+      }
     } finally {
       this.proxyTesting = false
     }

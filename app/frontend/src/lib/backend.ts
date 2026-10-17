@@ -140,6 +140,7 @@ type Bindings = {
   CancelDepsInstall(): Promise<boolean>
   IsInstallingDeps(): Promise<boolean>
   OpenManagedDir(): Promise<string>
+  TestProxy(proxy: string): Promise<{ ok: boolean; latencyMs?: number; status?: number; error?: string; kind?: string }>
   ClassifyError(raw: string): Promise<string>
   Diagnostic(raw: string, ytdlp: string, runtime: string): Promise<string>
 }
@@ -605,6 +606,23 @@ export async function checkUpdate(source = 'auto'): Promise<UpdateCheckResult | 
     }
   } catch {
     return null
+  }
+}
+
+/**
+ * 测试代理连通性（真实发一次请求，不是正则校验）。
+ *
+ * 返回 null 表示没有后端（浏览器预览），调用方要如实说明而不是假装成功。
+ */
+export async function testProxy(
+  proxy: string,
+): Promise<{ ok: boolean; latencyMs?: number; status?: number; error?: string; kind?: string } | null> {
+  const b = await backend()
+  if (!b) return null
+  try {
+    return await b.TestProxy(proxy)
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message ?? e) }
   }
 }
 
