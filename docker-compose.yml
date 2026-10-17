@@ -1,0 +1,32 @@
+# DownVid 容器编排（根目录薄入口，实际配置收纳在 docker/ 目录中）。
+#
+# 用法：
+#   docker compose up -d          # 启动 WebUI（浏览器访问 http://127.0.0.1:6080/）
+#   docker compose logs -f        # 查看运行日志
+#   docker compose down           # 停止服务
+
+services:
+  downvid:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: downvid:latest
+    container_name: downvid
+    restart: unless-stopped
+    ports:
+      - "${DOWNVID_HTTP_PORT:-6080}:6080"
+    volumes:
+      - ./data/downloads:/data/downloads
+      - ./data/userdata:/data/userdata
+    environment:
+      DOWNVID_HOME: /data
+      DOWNVID_DATA_DIR: /data/userdata
+      DOWNVID_DOWNLOADS: /data/downloads
+      DOWNVID_WEB_HOST: 0.0.0.0
+      TZ: "${TZ:-Asia/Shanghai}"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:6080/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

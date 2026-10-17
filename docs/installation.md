@@ -10,6 +10,7 @@
 - [macOS 安装](#macos-安装)
 - [Windows 安装](#windows-安装)
 - [Linux 安装](#linux-安装)
+- [Docker 安装](#docker-安装)
 - [从源码构建](#从源码构建)
 
 ---
@@ -244,6 +245,45 @@ uname -m
 
 ---
 
+## Docker 安装
+
+如果你有一台常开的机器，或者不想在主机上装 Electron 与运行时库，可以用容器跑 DownVid。
+
+DownVid 是桌面应用，容器里没有显示器，因此镜像内置了虚拟显示（Xvfb）并把界面
+通过 noVNC 暴露到浏览器——**打开网页就是完整应用**。
+
+### 前置条件
+
+- Docker 24+ 与 Docker Compose v2（`docker compose version` 能输出版本即可）
+- amd64 或 arm64 均可
+
+### 启动
+
+```bash
+git clone https://github.com/yxxbc/downvid.git
+cd downvid
+docker compose up -d
+```
+
+然后打开 <http://127.0.0.1:6080/vnc.html>，点「连接」即可看到 DownVid 窗口。
+从其他设备访问时把 `127.0.0.1` 换成本机 IP。
+
+### 下载文件在哪
+
+默认落在宿主机当前目录的 `data/downloads/` 下，也就是 compose 文件里声明的卷。
+可以直接进这个目录取文件，不需要额外工具。
+
+### 已内置运行依赖
+
+镜像里已装好 yt-dlp 与 FFmpeg（Debian 仓库 + pip），DownVid 的依赖边车会识别为
+「系统安装」。因此不需要（也不建议）再在界面里点一次下载。
+
+### 更多内容
+
+端口说明、SFTP 取文件、分辨率调整、代理、故障排除见：[Docker 指南](./docker.md)。
+
+---
+
 ## 从源码构建
 
 如果你需要修改源码或参与开发，请参考 [从源码构建指南](./build-from-source.md)。
@@ -254,3 +294,4 @@ uname -m
 
 - 遇到问题？查看 [故障排除指南](./troubleshooting.md)
 - 有疑问？查看 [常见问题](./faq.md)
+- 在容器中运行？查看 [Docker 指南](./docker.md)

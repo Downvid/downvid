@@ -52,6 +52,8 @@
     "test:updater": "node scripts/test-updater.mjs",
     "test:settings:migration": "node scripts/test-settings-migration.mjs",
     "test:package": "node scripts/test-package-contents.mjs",
+    "test:web": "node scripts/test-web-server.mjs",
+    "build:docker:web": "vite build --config docker/web/vite.config.ts",
     "deps:build": "bash scripts/build-backend.sh",
     "deps:manifest": "node scripts/gen-deps-manifest.mjs",
     "deps:manifest:check": "node scripts/gen-deps-manifest.mjs --check",
@@ -79,17 +81,20 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^26.6.4",
+    "@types/ws": "^8.18.2",
     "@vitejs/plugin-vue": "^6.0.9",
     "electron": "44.5.1",
     "electron-builder": "^26.15.3",
     "postcss": "^8.5.28",
     "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
     "typescript": "^5.9.3",
     "vite": "^8.3.2",
     "vite-plugin-electron": "^1.1.2",
     "vite-plugin-electron-renderer": "^1.0.0",
     "vitest": "^5.0.3",
-    "vue-tsc": "^3.3.12"
+    "vue-tsc": "^3.3.12",
+    "ws": "^8.22.0"
   },
   "main": "dist-electron/main.js",
   "pnpm": {

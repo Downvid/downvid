@@ -114,6 +114,7 @@ Dependabot 已忽略其大版本升级。
 | `src/` | Vue 3 渲染进程（`<script setup>`、Tailwind v4、Pinia） | `dist/` |
 | `shared/app.ts` | 仓库坐标与外部链接的**唯一来源** | 被三方共同引用 |
 | `tests/` | Vitest 纯逻辑单测 | — |
+| `docker/` | 容器镜像（入口脚本、虚拟显示与 VNC 编排，见 `docs/docker.md`） | OCI 镜像 |
 | `website/` | 产品落地页（单文件、无构建，由 Vercel 的 Git 集成发布） | — |
 | `scripts/` | 清单生成、构建边车、IPC / 官网校验、Release 正文 | — |
 
@@ -482,6 +483,31 @@ Linux x64 有独立格式脚本可并行：`build:linux:x64:appimage`、`:deb`�
 
 没有发布计划时，`package.json` 的版本号**保持在最近一次已发布的版本**，
 CHANGELOG 用 `## [Unreleased]` 段落累积改动。发布时再一次性改成 `## [x.y.z] - 日期` 并升版本号。
+
+---
+
+## 容器镜像（Dockerfile 与 docker-compose.yml、入口脚本 docker/entrypoint.sh）
+
+DownVid 在容器中采用**原生 WebUI 方案**运行：通过轻量 Node 服务（`docker/server/index.ts`）托管
+前端静态页面与下载引擎，浏览器打开即可操作。用户指南在 `docs/docker.md`。
+
+**前端零重写。** `src/` 中没有任何 Electron 专属导入，所有系统能力均通过全局 `window.electronAPI`
+调用。在浏览器环境下，`docker/web/bridge.ts` 通过 WebSocket RPC 动态注入完全相同形状的 API 适配层，
+现有 Vue 3 组件及 Pinia 状态管理 100% 同构复用。
+
+**核心逻辑共享与架构隔离。** 下载引擎（`electron/download/`）、解析器及依赖管理核心由
+`docker/server/electron-shim.ts` 适配层在无头环境下直接复用执行，桌面端代码（`electron/` 与 `src/`）
+零侵入零修改。下载进度与依赖事件在容器版通过 WebSocket 实时推向浏览器。
+
+**运行依赖预装镜像，不入仓库。** yt-dlp 与 ffmpeg 预装到 `/usr/local/bin` 与 `/usr/bin`；
+这两个目录都在 Go 边车（`backend/internal/runtime`）的系统候选路径内，启动后自动命中并标记为「系统安装」。
+升级只需重建镜像，**不要**在 `backend/internal/manifest/assets.gen.go` 里加条目。
+
+**数据持久化。** 容器内数据路径由环境变量决定：`DOWNVID_DATA_DIR` 指向 `/data/userdata`，
+`DOWNVID_DOWNLOADS` 指向 `/data/downloads`。下载记录与落盘文件均跟随挂载卷持久化。
+
+**镜像构建规范。** Linux 的路径分隔符与换行符必须遵循 POSIX 语义；`docker/entrypoint.sh`
+必须保持 LF 换行（`.gitattributes` 保证）。构建产物及本地数据目录已通过 `.dockerignore` 隔离。
 
 ---
 

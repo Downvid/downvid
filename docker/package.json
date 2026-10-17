@@ -1,0 +1,13 @@
+{
+  "name": "downvid-docker",
+  "private": true,
+  "type": "module",
+  "description": "DownVid 容器化 WebUI 专属服务与依赖配置（与桌面应用完全隔离）",
+  "dependencies": {
+    "tsx": "^4.23.15",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.18.2"
+  }
+}
