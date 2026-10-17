@@ -1,6 +1,14 @@
 <script lang="ts">
-  // 演示用打包内置的 author.md；真实接入换成 fetchAnnouncement(locale)：
-  // GitHub raw → jsDelivr → gh-proxy → 本地兜底（见 lib/announcement.ts）。
+  /**
+   * 「作者的话」。
+   *
+   * 正文由 store 提供：**优先远端**（GitHub raw → jsDelivr → gh-proxy
+   * 三级镜像降级），全失败才用打包内置的那份。
+   *
+   * 早先这里写的是 `loadLocalAnnouncement()` —— 只读本地文件。
+   * `fetchAnnouncement()` 早就写好了却从没被调用过，于是作者更新了
+   * 公告用户也永远看不到，界面上一直是打包那天的内容。
+   */
   import Icon from './Icon.svelte'
   import GitHubIcon from './GitHubIcon.svelte'
   import { app } from '../lib/store.svelte'
@@ -8,7 +16,8 @@
   import { loadLocalAnnouncement } from '../lib/announcement'
   import { REPO_URL } from '../lib/constants'
 
-  const doc = $derived(loadLocalAnnouncement(getLocale()))
+  // store 里没有时（比如直接从 URL 打开对话框）退回本地，保证总有内容
+  const doc = $derived(app.announcement ?? loadLocalAnnouncement(getLocale()))
 
   function openRepo(): void {
     window.open(REPO_URL, '_blank', 'noopener')
@@ -29,6 +38,15 @@
         <h2 id="announcement-title">{doc.title}</h2>
         <p class="num">
           {doc.date}{#if doc.signature} · {doc.signature}{/if}
+          <!--
+            如实标出内容来源。用户看到「离线副本」时能自己判断
+            「作者可能更新了但我这边网络不通」，而不是以为作者没写新的。
+          -->
+          {#if app.announcementSource === 'local'}
+            <span class="source-badge">{t('announcement.offline')}</span>
+          {:else if app.announcementSource === 'loading'}
+            <span class="source-badge">{t('announcement.loading')}</span>
+          {/if}
         </p>
       </div>
       <button
@@ -125,6 +143,15 @@
     letter-spacing: -0.025em;
     color: var(--ink-strong);
   }
+  .source-badge {
+    margin-left: 6px;
+    padding: 1px 6px;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--accent) 12%, transparent);
+    font-size: 9px;
+    color: var(--accent-deep);
+  }
+
   .dialog-heading p {
     margin: 0;
     font-size: 9.5px;

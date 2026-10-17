@@ -153,14 +153,17 @@
               spellcheck="false"
               autocomplete="off"
             />
+            <!-- 这个按钮是**选择**目录，不是**打开**目录。
+                 早先调的是 openDownloadDir()，用户想换保存位置，
+                 点一下却弹出了 Finder，只能自己把路径敲进输入框。 -->
             <button
               type="button"
               class="icon-btn icon-btn--bordered"
-              title={t('status.openFolder')}
-              aria-label={t('status.openFolder')}
-              onclick={() => app.openDownloadDir()}
+              title={t('settings.pickDownloadDir')}
+              aria-label={t('settings.pickDownloadDir')}
+              onclick={() => app.chooseDownloadDir()}
             >
-              <Icon name="folder" size={16} />
+              <Icon name="folder_open" size={16} />
             </button>
           </div>
         </div>
@@ -230,14 +233,15 @@
                 spellcheck="false"
                 autocomplete="off"
               />
+              <!-- 同上：这里要选**文件**，不是打开它所在的目录 -->
               <button
                 type="button"
                 class="icon-btn icon-btn--bordered"
                 title={t('settings.cookieFile')}
                 aria-label={t('settings.cookieFile')}
-                onclick={() => app.openCookieDir()}
+                onclick={() => app.chooseCookieFile()}
               >
-                <Icon name="folder" size={16} />
+                <Icon name="folder_open" size={16} />
               </button>
             </div>
           </div>

@@ -143,6 +143,8 @@ type Bindings = {
   IsInstallingDeps(): Promise<boolean>
   OpenManagedDir(): Promise<string>
   TestProxy(proxy: string): Promise<{ ok: boolean; latencyMs?: number; status?: number; error?: string; kind?: string }>
+  PickDirectory(title: string): Promise<string>
+  PickFile(title: string, extensions: string[]): Promise<string>
   ChangelogList(): Promise<ChangelogEntry[]>
   ChangelogCurrent(): Promise<ChangelogEntry | null>
   ChangelogHistory(): Promise<ChangelogEntry[]>
@@ -631,6 +633,34 @@ export async function platform(): Promise<string> {
   if (!b) return ''
   try {
     return await b.GetPlatform()
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * 弹系统目录选择框，返回选中目录（取消时返回空串）。
+ *
+ * 与 `openPath` 的区别：这个是**选**，那个是**开**。设置页的「默认下载目录」
+ * 旁边那个文件夹按钮早先调的是 `openPath` —— 用户想换位置，点一下却弹出了
+ * Finder，只能自己把路径敲进输入框。
+ */
+export async function pickDirectory(title = ''): Promise<string> {
+  const b = await backend()
+  if (!b) return ''
+  try {
+    return await b.PickDirectory(title)
+  } catch {
+    return ''
+  }
+}
+
+/** 弹系统文件选择框，返回选中文件（取消时返回空串）。 */
+export async function pickFile(title = '', extensions: string[] = []): Promise<string> {
+  const b = await backend()
+  if (!b) return ''
+  try {
+    return await b.PickFile(title, extensions)
   } catch {
     return ''
   }

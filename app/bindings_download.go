@@ -35,6 +35,8 @@ import (
 	"github.com/Downvid/downvid/app/internal/parse"
 	"github.com/Downvid/downvid/app/internal/settings"
 	"github.com/Downvid/downvid/app/internal/shell"
+	"github.com/Downvid/downvid/app/internal/sidecar"
+	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // Dependency 是一次探测结果。
@@ -552,6 +554,22 @@ func (a *App) sidecarPath() string {
 			return p
 		}
 	}
+
+	// 打包后的正式路径：边车**内嵌在主二进制里**，运行时落到数据目录。
+	//
+	// 这是 Wails 版最关键的一处：早先只找 `Resources/downvid-deps/`，
+	// 而 Wails 没有 electron-builder 的 extraResources 机制 —— 打出来的
+	// app 里根本没有边车，于是 `DetectDependencies` 只返回一条
+	// 「探测程序缺失」。用户看到的是「依赖页怎么只剩这么一点」，
+	// 而代码里没有任何一处会报错。
+	if sidecar.Available {
+		dir := filepath.Join(a.dataDir, "runtime", "bin")
+		if p, err := sidecar.Extract(dir); err == nil {
+			return p
+		} else {
+			log.Printf("[downvid] 解出内嵌边车失败：%v", err)
+		}
+	}
 	return ""
 }
 
@@ -890,6 +908,61 @@ func (a *App) GetDiskSpace(dir string) DiskSpaceResult {
 		return DiskSpaceResult{Error: err.Error()}
 	}
 	return DiskSpaceResult{Free: free, Total: total}
+}
+
+// PickDirectory 弹系统目录选择框，返回用户选的目录（取消时返回空串）。
+//
+// ## 为什么必须是系统对话框
+//
+// 设置页「默认下载目录」旁边那个文件夹按钮，早先调的是 `openDownloadDir()`
+// ——**打开**目录而不是**选择**目录。用户想换个保存位置，点一下却弹出了
+// Finder，只能自己手动把路径敲进输入框。
+//
+// Wails 的对话框只能在 Go 侧弹（`runtime.OpenDirectoryDialog`），
+// 前端的 `wailsjs/runtime` 里没有对应函数。
+func (a *App) PickDirectory(title string) string {
+	if a.ctx == nil {
+		return ""
+	}
+	if strings.TrimSpace(title) == "" {
+		title = "选择下载目录"
+	}
+	dir, err := wruntime.OpenDirectoryDialog(a.ctx, wruntime.OpenDialogOptions{
+		Title: title,
+		// 从当前下载目录开始：用户多半只是想换到相邻目录
+		DefaultDirectory: a.downloadsDir,
+	})
+	if err != nil {
+		log.Printf("[downvid] 打开目录选择框失败：%v", err)
+		return ""
+	}
+	return dir
+}
+
+// PickFile 弹系统文件选择框，返回选中文件的路径（取消时返回空串）。
+//
+// 用于「Cookie 文件」。过滤器按扩展名收窄：这个字段只接受 cookies.txt
+// 格式，让用户随手选一个 mp4 只会得到一句「格式不对」。
+func (a *App) PickFile(title string, extensions []string) string {
+	if a.ctx == nil {
+		return ""
+	}
+	if strings.TrimSpace(title) == "" {
+		title = "选择文件"
+	}
+	if len(extensions) == 0 {
+		extensions = []string{"txt"}
+	}
+	// 传目录时带上当前值所在目录，比每次都从主目录开始顺手
+	file, err := wruntime.OpenFileDialog(a.ctx, wruntime.OpenDialogOptions{
+		Title:   title,
+		Filters: []wruntime.FileFilter{{DisplayName: "文件", Pattern: "*." + strings.Join(extensions, ";*.")}},
+	})
+	if err != nil {
+		log.Printf("[downvid] 打开文件选择框失败：%v", err)
+		return ""
+	}
+	return file
 }
 
 // ChangelogList 返回全部更新日志条目（本地内嵌，离线可用）。

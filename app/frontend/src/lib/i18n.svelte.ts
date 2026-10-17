@@ -178,6 +178,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'settings.navInterface': '界面',
     'settings.autoSave': '已自动保存',
     'settings.downloadDir': '默认下载目录',
+    'settings.pickDownloadDir': '选择下载目录',
     'settings.downloadDirHint': '所有任务默认保存到这里。',
     'settings.filenameTemplate': '文件名模板',
     'settings.filenameTemplateHint': '%(title)s 标题 · %(id)s 视频 ID · %(uploader)s 上传者',
@@ -323,6 +324,8 @@ const messages: Record<Locale, Record<string, string>> = {
     'lang.zh': '中文',
     'lang.en': 'English',
 
+    'announcement.offline': '离线副本',
+    'announcement.loading': '正在获取最新…',
     'announcement.short': '作者的话',
     'announcement.close': '知道了',
     'announcement.repo': '去 GitHub 看看',
@@ -517,6 +520,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'settings.navInterface': 'Interface',
     'settings.autoSave': 'Saved automatically',
     'settings.downloadDir': 'Default download directory',
+    'settings.pickDownloadDir': 'Choose download folder',
     'settings.downloadDirHint': 'Every task saves here by default.',
     'settings.filenameTemplate': 'File name template',
     'settings.filenameTemplateHint': '%(title)s title · %(id)s video ID · %(uploader)s uploader',
@@ -662,6 +666,8 @@ const messages: Record<Locale, Record<string, string>> = {
     'lang.zh': '中文',
     'lang.en': 'English',
 
+    'announcement.offline': 'Offline copy',
+    'announcement.loading': 'Fetching the latest…',
     'announcement.short': 'Author note',
     'announcement.close': 'Got it',
     'announcement.repo': 'View on GitHub',

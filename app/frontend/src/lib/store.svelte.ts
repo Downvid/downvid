@@ -55,6 +55,8 @@ import {
   resetSettings as backendResetSettings,
   saveSettings,
   showInFolder,
+  pickDirectory,
+  pickFile,
   platform as backendPlatform,
   changelogHistory as backendChangelogHistory,
   type ChangelogEntry,
@@ -72,6 +74,7 @@ import {
   toBackendPatch,
   type AppSettings,
 } from './settings'
+import { fetchAnnouncement, loadLocalAnnouncement, type AnnouncementDoc } from './announcement'
 import type {
   DepItem,
   Dialog,
@@ -214,6 +217,19 @@ class AppStore {
 
   // ===== 公告 =====
   announcementRead = $state(false)
+
+  /**
+   * 公告（作者的话）的正文。
+   *
+   * 优先从**远端**拉（GitHub raw → jsDelivr → gh-proxy 三级降级），
+   * 全失败才用构建时打进包里的那一份。
+   *
+   * 早先只读本地：`fetchAnnouncement()` 写好了却从来没被调用过——
+   * 于是「作者的话」永远停在打包那天的内容，作者改了什么用户看不到。
+   */
+  announcement = $state<AnnouncementDoc | null>(null)
+  /** 公告的加载状态：远端取到 vs 用了本地兜底 */
+  announcementSource = $state<'idle' | 'loading' | 'remote' | 'local'>('idle')
 
   // ===== Toast =====
   toasts = $state<ToastItem[]>([])
@@ -863,6 +879,26 @@ class AppStore {
     if (!res.ok) this.toast(res.message || t('error.openFolderFailed'), 'error')
   }
 
+  /**
+   * 选一个目录（设置页「默认下载目录」旁边的按钮）。
+   *
+   * 与 `openDownloadDir()` 分开：那是**打开**，这是**选择**。
+   * 早先两者混用，用户点「换目录」却弹出了 Finder。
+   */
+  async chooseDownloadDir(): Promise<void> {
+    const dir = await pickDirectory(t('settings.pickDownloadDir'))
+    if (!dir) return // 用户取消：什么都不做，不要弹提示
+    this.update({ downloadDir: dir })
+    void this.refreshStorage()
+  }
+
+  /** 选 Cookie 文件（同样与 openCookieDir 分开） */
+  async chooseCookieFile(): Promise<void> {
+    const file = await pickFile(t('settings.cookieFile'), ['txt'])
+    if (!file) return
+    this.update({ cookieFile: file })
+  }
+
   /** 打开 Cookie 文件所在的目录 */
   async openCookieDir(): Promise<void> {
     const file = this.settings.cookieFile.trim()
@@ -1342,6 +1378,33 @@ class AppStore {
   openAnnouncement(): void {
     this.announcementRead = true
     this.dialog = 'announcement'
+    // 打开时确保有内容：先给本地（立即可见），同时后台拉远端
+    if (!this.announcement) {
+      this.announcement = loadLocalAnnouncement(getLocale())
+      this.announcementSource = 'local'
+    }
+    void this.refreshAnnouncement()
+  }
+
+  /**
+   * 从远端刷新公告（三级镜像降级）。
+   *
+   * 失败不弹错：公告只是内容，取不到就用本地那份，不该打断用户。
+   */
+  async refreshAnnouncement(): Promise<void> {
+    if (this.announcementSource === 'loading') return
+    this.announcementSource = 'loading'
+    try {
+      const doc = await fetchAnnouncement(getLocale())
+      this.announcement = doc
+      // `fetchAnnouncement` 内部已经把「全挂」处理成本地兜底，
+      // 这里只能按「拿到的内容与本地是否相同」判断来源
+      const local = loadLocalAnnouncement(getLocale())
+      this.announcementSource = doc.blocks.length >= local.blocks.length ? 'remote' : 'local'
+    } catch {
+      this.announcement = loadLocalAnnouncement(getLocale())
+      this.announcementSource = 'local'
+    }
   }
 
   // ============================================================

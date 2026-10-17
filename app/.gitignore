@@ -10,3 +10,9 @@ frontend/wailsjs/
 
 # 注意：wailsjs 是**生成**的（wails generate module），不入库。
 # 首次构建前跑一次 `wails generate module`，否则前端 import 会失败。
+
+# 依赖边车的构建产物（每个平台一个，约 7~10MB）。
+# 它由 scripts/build.sh 现场编译并嵌入主二进制，**不进仓库**。
+# bin/.gitkeep 保留目录本身，否则 `//go:embed all:bin` 会编译失败。
+internal/sidecar/bin/*
+!internal/sidecar/bin/.gitkeep
