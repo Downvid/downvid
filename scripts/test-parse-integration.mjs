@@ -6,8 +6,18 @@ import { loader } from './lib/load-source.mjs'
 async function scenario(errors, version = '2026.10.10.233141', available = true) {
   const calls = []
   let cleaned = false
+  // 模拟真实的「探测缓存」：首次解析时它还是**冷的**，只有 resolveDependency
+  // 跑过一次（边车 detect）之后才有值。dumpInfo 若在 spawn 之前就提前读版本，
+  // 拿到的会是空串 —— 那正是 2026.10 那次静默退化过的形状。
+  let probeDone = false
   const load = loader({
-    'electron/utils/binary.ts': { resolveDependency: async () => 'fixture-tool', checkJsRuntime: async () => ({ available, kind: 'node', path: 'fixture-node', version: '22.0.0' }) },
+    'electron/utils/binary.ts': {
+      resolveDependency: async () => { probeDone = true; return 'fixture-tool' },
+      checkJsRuntime: async () => ({ available, kind: 'node', path: 'fixture-node', version: '22.0.0' }),
+      // 重试策略用的版本号来自**依赖探测缓存**（边车 detect 时已经跑过
+      // `--version`），不再是 dumpInfo 自己 spawn 一次。
+      cachedVersionOf: () => (probeDone ? version : ''),
+    },
     'electron/utils/browser.ts': { getInstalledBrowsers: () => [] },
     'electron/utils/cookies.ts': {
       getCookieAttempts: () => [], isCookieError: () => false, cookieFailureHint: () => '',

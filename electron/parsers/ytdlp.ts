@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process'
 import path from 'node:path'
-import { resolveDependency, checkJsRuntime } from '../utils/binary'
+import { resolveDependency, checkJsRuntime, cachedVersionOf } from '../utils/binary'
 import { getCookieAttempts, runWithCookies, cookieFailureHint, isCookieError } from '../utils/cookies'
 import { classifyParseError, parseDiagnostic, PARSE_MESSAGES } from '../../shared/parse-error'
 import { nextYoutubeRetry, youtubeExtractorArgs, type YoutubeRetryState } from './youtube-retry'
@@ -117,16 +117,24 @@ async function dumpInfo(url: string, cookiesFile: string | undefined, proxy: str
   if (runtime?.path && runtime.kind) base.push('--js-runtimes', `${runtime.kind}:${runtime.path}`)
   // 版本号**不在这里单独跑一次 `--version`**：
   // yt-dlp 的 PyInstaller 构建每次启动要 8~10 秒（解压 72MB 到临时目录），
-  // 为了拿一个「错误诊断里才有用」的版本号多付一次启动，等于把解析时间翻倍。
-  // 改为「出错时才去问」——见下面 parseViaCli 里的 catch 分支。
-  const version = ''
+  // 为了拿一个「诊断里才有用」的版本号多付一次启动，等于把解析时间翻倍。
+  //
+  // 但版本号**不是可选项**：`nextYoutubeRetry` 用它选兼容客户端
+  // （2026.10.10 起 `default,web_embedded`，更早 `web_safari`）。
+  // 曾经这里写成 `const version = ''`，于是新版本分支永远不可达、回退静默退化。
+  // 现在从**依赖探测缓存**里读 —— 边车的 `detect` 早就执行过 `--version`
+  // 并把结果一并返回（`Result.Version`，60 秒缓存），读它是 0 代价。
+  //
+  // 必须**惰性**读：首次解析时缓存可能还是冷的，而 `runYtdlp` 里的
+  // `resolveDependency` 会把它填好。放到重试决策那一刻读，缓存一定已热。
+  const versionOf = () => (isYoutube ? cachedVersionOf('yt-dlp') : '')
   let state: YoutubeRetryState = { manifests: false, client: '' }
   let retries = 0
   const run = await runWithCookies(getCookieAttempts(cookiesFile), async (cookieArgs) => {
     let result = await runYtdlp([...base, ...(isYoutube ? youtubeExtractorArgs(state) : []), ...cookieArgs, url])
     // 重试在同一次 Cookie 生命周期内完成；临时快照尚未清理，登录来源不变。
     while (isYoutube && result.code !== 0 && retries < 2 && !isCookieError(result.stderr)) {
-      const next = nextYoutubeRetry(result.stderr, state, version)
+      const next = nextYoutubeRetry(result.stderr, state, versionOf())
       if (!next) break
       state = next
       retries++
@@ -134,7 +142,7 @@ async function dumpInfo(url: string, cookiesFile: string | undefined, proxy: str
     }
     return result
   })
-  return { ...run, state, version, runtimeVersion: runtime?.version && runtime.kind ? `${runtime.kind}@${runtime.version}` : '' }
+  return { ...run, state, version: versionOf(), runtimeVersion: runtime?.version && runtime.kind ? `${runtime.kind}@${runtime.version}` : '' }
 }
 
 /**

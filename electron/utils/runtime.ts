@@ -213,6 +213,29 @@ export function cachedPathOf(kind: DepKind): string | null {
   return found?.path || null
 }
 
+/**
+ * 同步读取缓存中某个依赖的版本号；未探测过时返回空串。
+ *
+ * ## 为什么需要它
+ *
+ * 解析 YouTube 时，「页面需要重载」这条错误的回退策略**按版本分支**选客户端
+ * （2026.10.10 起用 `default,web_embedded`，更早用 `web_safari`）。
+ * 此前那次改动为了避免多跑一次 `--version`，把传给策略的版本号直接写成了 `''`，
+ * 于是「新版本」那条分支**永远不可达**——策略静默退化成只走旧客户端，
+ * 而我方没有任何报错，只有 CI 的解析集成回归会红。
+ *
+ * ## 为什么这里取版本不额外 spawn
+ *
+ * Go 边车在 `detect` 时**已经**执行过 `yt-dlp --version` 并把版本写进结果
+ * （`backend/internal/runtime/find.go` 的 `Result.Version`，60 秒缓存）。
+ * 所以这里只是读缓存，代价是 0；真正贵的是「为了版本号再 spawn 一次」，
+ * 那条路径仍然只在失败诊断时走（`readYtdlpVersion`）。
+ */
+export function cachedVersionOf(kind: DepKind): string {
+  const found = cachedStatus?.results.find(r => r.kind === kind && r.found)
+  return found?.version || ''
+}
+
 export function cachedStatusSnapshot(): RuntimeStatus | null {
   return cachedStatus
 }

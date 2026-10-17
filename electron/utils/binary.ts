@@ -3,6 +3,8 @@ import fs from 'node:fs'
 import { spawn } from 'node:child_process'
 import { getRuntimeStatus, cachedPathOf, type DepKind } from './runtime'
 export { checkJsRuntime, type JsRuntimeInfo, type JsRuntimeKind } from './js-runtime'
+// 版本号从探测缓存读（边车 detect 时已跑过 --version），不复用 cachedPathOf
+export { cachedVersionOf } from './runtime'
 
 // 依赖解析策略（与 AGENTS.md 的描述保持一致）：
 //   手动指定 → userData 托管目录 → 登录 shell 的 PATH → 各平台常见安装目录 → 裸命令名交给 PATH
