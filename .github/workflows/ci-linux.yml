@@ -118,6 +118,11 @@ jobs:
       - name: 代码来源审计
         run: pnpm audit:provenance
 
+      # 架构边界：core/ 不得 import electron、前端不得直接用主进程实现等七条规则。
+      # 违反时类型检查与单测都不会红，只在容器/前端运行时静默失效（见 docs/provenance/architecture.md §3.2）
+      - name: 架构边界校验
+        run: pnpm lint:boundaries
+
       # 词条漏英文 / 占位符对不上都不会报错，只会静默显示错文案
       - name: i18n 词条校验
         run: pnpm lint:i18n
@@ -211,6 +216,16 @@ jobs:
       # 解析链路（抖音/快手解析器与 yt-dlp 回退），只在本地服务上跑
       - name: 解析集成回归
         run: pnpm test:parse:integration
+
+      # 真机 E2E：用真实 yt-dlp / ffmpeg 跑一次完整链路。
+      # 上面两条用的是假服务器 + mock 的 yt-dlp，能证明「我们的逻辑没坏」，
+      # 但证明不了「真实 yt-dlp 的输出我们仍解析得对」——进度输出格式一变，
+      # 界面进度条不动而所有单测全绿。缺依赖时本脚本会明确跳过，不会假装通过。
+      - name: 真机 E2E（真实 yt-dlp / ffmpeg）
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+          python3 -m pip install --quiet --upgrade yt-dlp
+          pnpm test:e2e:real
 
   # ===== 构建与打包 =====
   package:

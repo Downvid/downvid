@@ -109,6 +109,11 @@ jobs:
       - name: 代码来源审计
         run: pnpm audit:provenance
 
+      # 架构边界：core/ 不得 import electron、前端不得直接用主进程实现等七条规则。
+      # 违反时类型检查与单测都不会红，只在容器/前端运行时静默失效（见 docs/provenance/architecture.md §3.2）
+      - name: 架构边界校验
+        run: pnpm lint:boundaries
+
       # 词条漏英文 / 占位符对不上都不会报错，只会静默显示错文案
       - name: i18n 词条校验
         run: pnpm lint:i18n
