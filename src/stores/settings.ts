@@ -1,4 +1,6 @@
 import { normalizeAcceleration, type AccelerationSettings } from '../../shared/acceleration'
+import { normalizeUpdateSource, type UpdateSourceId } from '../../shared/update-sources'
+import { DEP_KINDS, normalizeDepMirror, type DepMirrorId, type DepKind } from '../../shared/acceleration'
 
 /**
  * 用户设置的读写。
@@ -38,7 +40,7 @@ export interface AppSettings {
    * 值类型必须是 `string | undefined`：早期用 `Partial<Record<...>>` 会与
    * 存档数据里可能出现任意类型的现实冲突（`normalizeDepPaths` 负责清洗）。
    */
-  depPaths: { [K in 'yt-dlp' | 'ffmpeg' | 'ffprobe']?: string }
+  depPaths: { [K in DepKind]?: string }
 
   /**
    * 自动检查更新。
@@ -54,6 +56,23 @@ export interface AppSettings {
    * 关闭时只提示有新版本，下载由用户决定——移动网络/计费流量下更友好。
    */
   autoDownloadUpdate: boolean
+
+  /**
+   * 依赖下载源（yt-dlp / ffmpeg / ffprobe 从哪个源下载）。
+   *
+   * 与 `updateSource` 分开是因为两者代理的东西不同：更新走 release 元数据，
+   * 依赖走 release 资产的原始文件，能用前者的镜像未必能代理后者。
+   */
+  depMirror: DepMirrorId
+
+  /**
+   * 更新源。
+   *
+   * `'auto'` 会依次尝试 GitHub → jsDelivr → gh-proxy → Gitee → 官网，任一成功即止。
+   * 之所以做成可选而不只是固定链路：有些用户的网络能通某一条、有些反过来，
+   * 而**更新通道本身坏了就没法靠发新版修**，只能让用户自己换一条路。
+   */
+  updateSource: UpdateSourceId
 
   /**
    * 界面语言。
@@ -78,6 +97,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   depPaths: {},
   autoCheckUpdate: true,
   autoDownloadUpdate: false,
+  updateSource: 'auto',
+  depMirror: 'auto',
   language: 'auto',
 }
 
@@ -93,7 +114,7 @@ export function normalizeDepPaths(value: unknown): AppSettings['depPaths'] {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
   const raw = value as Record<string, unknown>
   const out: AppSettings['depPaths'] = {}
-  for (const kind of ['yt-dlp', 'ffmpeg', 'ffprobe'] as const) {
+  for (const kind of DEP_KINDS) {
     const v = raw[kind]
     if (typeof v === 'string' && v.trim()) out[kind] = v.trim()
   }
@@ -125,10 +146,20 @@ export function readSettings(): AppSettings {
       acceleration: normalizeAcceleration(raw?.acceleration),
       // depPaths 需要单独兜：旧数据里可能没有、不是对象，或类型不对
       depPaths: normalizeDepPaths(raw?.depPaths),
+      // 更新源同理由这里兜：非法值不能原样留着，否则「一个源都不试」
+      // 会表现成「永远检测不到更新」
+      updateSource: normalizeUpdateSource(raw?.updateSource),
+      depMirror: normalizeDepMirror(raw?.depMirror),
       language: normalizeLanguage(raw?.language),
     }
   } catch {
-    return { ...DEFAULT_SETTINGS, acceleration: normalizeAcceleration() }
+    return {
+      ...DEFAULT_SETTINGS,
+      acceleration: normalizeAcceleration(),
+      depPaths: {},
+      updateSource: 'auto',
+      depMirror: 'auto',
+    }
   }
 }
 

@@ -5,7 +5,8 @@ import path from 'node:path'
 
 // ===== 类型 =====
 
-export type DepKind = 'yt-dlp' | 'ffmpeg' | 'ffprobe'
+export type { DepKind } from '../../shared/acceleration'
+import type { DepKind } from '../../shared/acceleration'
 
 export interface DepStatus {
   kind: DepKind
@@ -18,6 +19,8 @@ export interface DepStatus {
   managed?: boolean
   requiredVersion?: string
   stale?: boolean
+  /** 二进制形态（仅 yt-dlp），见 src/types/deps.ts 的说明 */
+  form?: 'zipapp' | 'native'
 }
 
 export interface RuntimeStatus {
@@ -38,6 +41,14 @@ export interface DownloadOptions extends DetectOptions {
   proxy?: string
   /** 已存在也重新下载 */
   force?: boolean
+  /**
+   * 下载源偏好：`auto`（GitHub → 公共镜像依次降级）或钉死某个镜像 ID。
+   *
+   * 与更新源（`shared/update-sources.ts`）是**同一类设计**：下载通道本身要是
+   * 坏了，用户就装不上依赖，而依赖装不上意味着整个应用不可用。区别是这里走
+   * Go 边车（它自己实现镜像前缀拼接），所以只透传一个字符串。
+   */
+  mirror?: string
 }
 
 export interface DownloadProgress {
@@ -242,6 +253,7 @@ export function downloadDeps(
     if (options.only?.length) args.push('--only', options.only.join(','))
     if (options.proxy) args.push('--proxy', options.proxy)
     if (options.force) args.push('--force')
+    if (options.mirror) args.push('--mirror', options.mirror)
     // 注意：不要给 fetch 传 --manual，它只认托管目录
 
     const child = spawn(bin, args, { windowsHide: true })

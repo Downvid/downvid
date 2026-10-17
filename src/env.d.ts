@@ -100,8 +100,13 @@ interface Window {
       onUpdated: (callback: (history: any[]) => void) => () => void
     }
     // 更新检查
-    /** 同步自动更新开关到主进程（设置变更或启动时调用） */
-    setUpdatePrefs: (prefs: { autoCheck?: boolean; autoDownload?: boolean }) => Promise<boolean>
+    /** 同步自动更新开关与更新源到主进程（设置变更或启动时调用） */
+    setUpdatePrefs: (prefs: {
+      autoCheck?: boolean
+      autoDownload?: boolean
+      /** 'auto' = 依次降级；其余为强制指定某个源（见 shared/update-sources.ts） */
+      source?: import('../../shared/update-sources').UpdateSourceId
+    }) => Promise<boolean>
     checkForUpdates: () => Promise<{
       hasUpdate: boolean
       version?: string

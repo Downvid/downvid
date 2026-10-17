@@ -5,9 +5,11 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { APP, GITHUB_API, HTTP_USER_AGENT, RELEASES_URL } from './constants'
+import { HTTP_USER_AGENT, RELEASES_URL } from './constants'
 import { broadcast } from './store'
 import { log } from './main'
+import { compareVersions, normalizeUpdateSource, type UpdateSourceId } from '../shared/update-sources'
+import { lookupLatestRelease, summarizeFailures, type FetchLike } from '../shared/update-check'
 
 // 更新流程：
 // - Windows(NSIS) / Linux(AppImage、deb、rpm)：electron-updater
@@ -50,9 +52,28 @@ let updaterReady = false
  */
 const updatePrefs = { autoCheck: true, autoDownload: false }
 
-export function setUpdaterPrefs(prefs: { autoCheck?: boolean; autoDownload?: boolean }) {
+/**
+ * 更新源（`'auto'` = 依次尝试 GitHub / jsDelivr / gh-proxy / Gitee / 官网）。
+ *
+ * 与 `autoCheck` 一样由渲染进程同步过来：设置存在渲染进程的 localStorage，
+ * 主进程读不到。改这里只影响**检查**，不影响 electron-updater 的下载
+ * （下载地址由 `latest*.yml` 决定，那是发布产物的一部分）。
+ */
+let updateSource: UpdateSourceId = 'auto'
+
+export function setUpdaterPrefs(prefs: { autoCheck?: boolean; autoDownload?: boolean; source?: UpdateSourceId }) {
   if (typeof prefs.autoCheck === 'boolean') updatePrefs.autoCheck = prefs.autoCheck
   if (typeof prefs.autoDownload === 'boolean') updatePrefs.autoDownload = prefs.autoDownload
+  if (prefs.source !== undefined) {
+    const next = normalizeUpdateSource(prefs.source)
+    if (next !== updateSource) {
+      log(`[UPDATE] 更新源切换：${updateSource} → ${next}（清空检查缓存）`)
+      updateSource = next
+      // 换了源就丢掉旧结果，否则用户会看到「刚换到 Gitee，还是 GitHub 的答案」
+      lastCheckAt = 0
+      lastCheckResult = null
+    }
+  }
   // 关闭自动检查时，也不应在退出时自动安装（那同样需要先检查/下载）
   autoUpdater.autoInstallOnAppQuit = updatePrefs.autoCheck
   autoUpdater.autoDownload = updatePrefs.autoDownload
@@ -95,15 +116,10 @@ export function friendlyUpdateError(error: unknown): string {
   return `更新失败：${msg.split('\n')[0].slice(0, 200) || '未知错误'}`
 }
 
-function compareVersions(a: string, b: string): number {
-  const parse = (v: string) => v.replace(/^v/, '').split(/[.-]/).map(n => parseInt(n) || 0)
-  const pa = parse(a), pb = parse(b)
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const d = (pa[i] || 0) - (pb[i] || 0)
-    if (d !== 0) return d
-  }
-  return 0
-}
+// 版本比较只在 shared/update-sources.ts 里实现一次。
+// 各写一份的话，「有没有更新」在不同入口会给出不同答案（多段版本号、
+// 带 v 前缀、预发布后缀都容易写岔），而界面上的表现是「设置说有更新、
+// 弹窗说已最新」——查起来非常费时间。
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([
@@ -255,14 +271,32 @@ function unsupportedReason(): string | undefined {
   return undefined
 }
 
-async function checkViaGitHubApi(): Promise<{ version: string; releaseNotes: string; releaseDate: string }> {
-  const response = await updaterSession().fetch(
-    `${GITHUB_API}/repos/${APP.owner}/${APP.repo}/releases/latest`,
-    { headers: { 'Accept': 'application/vnd.github+json', 'User-Agent': HTTP_USER_AGENT } },
-  )
-  if (!response.ok) throw new Error(`HTTP ${response.status}`)
-  const data = await response.json()
-  return { version: String(data.tag_name || '').replace(/^v/, ''), releaseNotes: data.body || '', releaseDate: data.published_at || '' }
+/**
+ * 沿设置的更新源链路查最新版本。
+ *
+ * 取代了原先「只问 GitHub API」的实现。原实现在国内网络下的表现是
+ * 一直失败，然后被上层 catch 成「已是最新」——用户永远收不到更新。
+ * 现在链路里有多条通道，任一条通就能拿到版本号。
+ *
+ * 使用 electron-updater 专用的 session：那上面设置过用户的代理，
+ * 直接用 Node 的 fetch 会绕过代理、在该场景下必定失败。
+ */
+async function checkViaSources(): Promise<{ version: string; releaseNotes: string; releaseDate: string }> {
+  const session = updaterSession()
+  const fetchImpl: FetchLike = (url, init) =>
+    session.fetch(url, { headers: { 'User-Agent': HTTP_USER_AGENT, ...(init?.headers || {}) }, signal: init?.signal })
+
+  const { release, attempts } = await lookupLatestRelease({
+    source: updateSource,
+    fetch: fetchImpl,
+    headers: { 'User-Agent': HTTP_USER_AGENT },
+    onAttempt: (attempt) => {
+      log(`[UPDATE] 源 ${attempt.source}：${attempt.ok ? '成功' : attempt.detail}`)
+    },
+  })
+
+  if (!release) throw new Error(summarizeFailures(attempts))
+  return { version: release.version, releaseNotes: release.releaseNotes, releaseDate: release.releaseDate }
 }
 
 /**
@@ -298,7 +332,7 @@ export async function checkForUpdates(manual = false): Promise<CheckResult> {
   try {
     if (reason) {
       if (!app.isPackaged) return { ...base, hasUpdate: false }
-      const latest = await withTimeout(checkViaGitHubApi(), CHECK_TIMEOUT)
+      const latest = await withTimeout(checkViaSources(), CHECK_TIMEOUT)
       const hasUpdate = compareVersions(latest.version, currentVersion) > 0
       if (hasUpdate) sendStatus({ status: 'available', version: latest.version, releaseNotes: latest.releaseNotes, manual: true, manualReason: reason })
       return { ...base, hasUpdate, ...latest, manual: true, manualReason: reason }
@@ -317,13 +351,14 @@ export async function checkForUpdates(manual = false): Promise<CheckResult> {
       releaseDate: result.updateInfo.releaseDate,
     }
   } catch (error) {
-    // electron-updater 走的是 releases.atom + /releases/latest 两步。
-    // 任一环节被网络或限流打断时，**不能直接回答「已是最新」**——那正是
-    // 「明明有新版本却检测不到」的观感来源。改用 GitHub API 再试一次，
-    // 它只需要一个请求；两条路都失败才如实报错。
-    log(`[UPDATE] electron-updater 检查失败，改用 GitHub API 兜底：${friendlyUpdateError(error)}`)
+    // electron-updater 走的是 releases.atom + /releases/latest 两步，两步都在
+    // github.com 上，国内网络下经常整段失败。**不能直接回答「已是最新」**——
+    // 那正是「明明有新版本却检测不到」的观感来源。
+    // 改用更新源链路（GitHub API → jsDelivr → gh-proxy → Gitee → 官网）再试一次，
+    // 任一条通就能拿到版本号；全挂才如实报错。
+    log(`[UPDATE] electron-updater 检查失败，改用更新源链路兜底：${friendlyUpdateError(error)}`)
     try {
-      const latest = await withTimeout(checkViaGitHubApi(), CHECK_TIMEOUT)
+      const latest = await withTimeout(checkViaSources(), CHECK_TIMEOUT)
       const hasUpdate = compareVersions(latest.version, currentVersion) > 0
       log(`[UPDATE] GitHub API 兜底成功：latest=${latest.version} hasUpdate=${hasUpdate}`)
       if (hasUpdate) {
@@ -331,7 +366,9 @@ export async function checkForUpdates(manual = false): Promise<CheckResult> {
       }
       return { ...base, hasUpdate, ...latest }
     } catch (fallbackError) {
-      log(`[UPDATE] 兜底也失败：${friendlyUpdateError(fallbackError)}`)
+      // 兜底给的是「每个源分别怎么失败的」，比原来的 GitHub 报文更有诊断价值
+      const detail = String((fallbackError as any)?.message || '')
+      log(`[UPDATE] 兜底也失败：${detail || friendlyUpdateError(fallbackError)}`)
       return { ...base, hasUpdate: false, error: friendlyUpdateError(error) }
     }
   }

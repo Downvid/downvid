@@ -5,7 +5,11 @@ export function registerAppIpc() {
   ipcMain.handle('app:getVersion', () => app.getVersion())
 
   ipcMain.handle('app:checkForUpdates', () => checkForUpdates(true))
-  ipcMain.handle('app:setUpdatePrefs', (_, prefs: { autoCheck?: boolean; autoDownload?: boolean }) => {
+  ipcMain.handle('app:setUpdatePrefs', (_, prefs: {
+    autoCheck?: boolean
+    autoDownload?: boolean
+    source?: import('../../shared/update-sources').UpdateSourceId
+  }) => {
     setUpdaterPrefs(prefs || {})
     return true
   })

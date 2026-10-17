@@ -107,7 +107,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   // 更新检查
   checkForUpdates: () => ipcRenderer.invoke('app:checkForUpdates'),
-  setUpdatePrefs: (prefs: { autoCheck?: boolean; autoDownload?: boolean }) =>
+  setUpdatePrefs: (prefs: { autoCheck?: boolean; autoDownload?: boolean; source?: string }) =>
     ipcRenderer.invoke('app:setUpdatePrefs', prefs),
   downloadUpdate: () => ipcRenderer.invoke('app:downloadUpdate'),
   installUpdate: () => ipcRenderer.invoke('app:installUpdate'),

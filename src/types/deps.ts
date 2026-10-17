@@ -6,7 +6,8 @@
  * 这里定义的类型同时被 preload、env.d.ts 与渲染进程使用。
  */
 
-export type DepKind = 'yt-dlp' | 'ffmpeg' | 'ffprobe'
+export type { DepKind } from '../../shared/acceleration'
+import type { DepKind } from '../../shared/acceleration'
 
 /** 依赖来源，用于界面标识与排查 */
 export type DepSource = 'system' | 'managed' | 'manual' | 'scanned'
@@ -27,6 +28,14 @@ export interface DepStatus {
   requiredVersion?: string
   /** 找到了副本但版本落后于清单（此时 found 为 false） */
   stale?: boolean
+  /**
+   * 二进制形态（仅 yt-dlp 有值）：`zipapp` 或 `native`。
+   *
+   * 两者的 `--version` 完全相同，但启动时间差 20 倍（0.4s vs 9~10s）：
+   * PyInstaller 独立包每次启动都要解压 ~72MB。所以「版本一样」不代表
+   * 「装对了」——界面必须能看出形态，否则用户永远在等一个没必要等的时间。
+   */
+  form?: 'zipapp' | 'native'
 }
 
 export interface RuntimeStatus {
@@ -41,6 +50,8 @@ export interface DepsSettings {
   /** 设置里手动指定的可执行文件路径 */
   manualPaths?: Partial<Record<DepKind, string>>
   proxy?: string
+  /** 下载源偏好（见 shared/acceleration.ts 的 DEP_MIRROR_IDS） */
+  mirror?: string
 }
 
 export interface DepsResponse {
@@ -50,7 +61,12 @@ export interface DepsResponse {
 }
 
 export interface DepsProgress {
-  event: 'start' | 'progress' | 'retry' | 'installed' | 'error' | 'warn' | 'done'
+  /**
+   * `mirror` 是「直连不通、正在换下一个镜像源」（Go 边车在回退时发出）。
+   * 必须单独一类：与 `retry` 混在一起时，用户看到的文案是「网络不稳定，正在重试」，
+   * 而实际发生的是「换了一条路」——两者对用户的意义完全不同。
+   */
+  event: 'start' | 'progress' | 'retry' | 'mirror' | 'installed' | 'error' | 'warn' | 'done'
   tool?: DepKind
   downloaded?: number
   total?: number
