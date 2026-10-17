@@ -79,7 +79,8 @@ const TARGETS = [
   { file: 'scripts/verify-release.mjs', kind: 'text', required: false },
 
   // --- 用户可见的入口 ---
-  { file: 'website/index.html', kind: 'text', required: true, note: '官网下载按钮拼 API 地址' },
+  { file: 'website/index.html', kind: 'text', required: true, note: '官网 HTML 里的仓库资源地址' },
+  { file: 'website/app.js', kind: 'text', required: true, note: '官网下载按钮拼 API 地址' },
   // 两份 compose **都要**：根目录那份是用户实际 `docker compose up` 用的入口，
   // docker/ 那份是内部构建用。实测迁移时只列了后者，结果根目录的
   // `ghcr.io/<owner>/downvid` 被漏掉——用户会 pull 到旧镜像，表现为「升级了还是旧版」。

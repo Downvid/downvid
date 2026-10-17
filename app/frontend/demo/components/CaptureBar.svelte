@@ -87,7 +87,7 @@
     height: 64px;
     padding: 0 12px 0 18px;
     border: 1px solid var(--rule-strong);
-    border-radius: 12px;
+    border-radius: var(--radius-panel);
     background: var(--paper-raised);
     box-shadow: var(--shadow-lift);
     transition:
@@ -105,7 +105,7 @@
     padding-left: 14px;
     border-color: var(--rule);
     box-shadow: none;
-    border-radius: 9px;
+    border-radius: var(--radius-control);
   }
 
   .capture-icon {

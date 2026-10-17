@@ -7,6 +7,7 @@
    * 所有文案走 t('key')，新增的键必须并回 lib/i18n.svelte.ts 与 src/i18n/core.ts。
    */
   import Icon from './Icon.svelte'
+  import EffortSlider from './EffortSlider.svelte'
   import { app } from '../lib/store.svelte'
   import type { SettingsSection } from '../lib/store.svelte'
   import { t } from '../lib/i18n.svelte'
@@ -29,7 +30,6 @@
     { value: '480p', key: 'settings.quality480' },
   ] as const
 
-  const connectionOptions = [4, 8, 12, 16] as const
 
   const sourceOptions = [
     { value: 'auto', key: 'settings.sourceAuto' },
@@ -47,6 +47,18 @@
     { value: 'en-US', key: 'demo.en' },
   ] as const
 
+  const themeOptions = [
+    { value: 'auto', key: 'settings.themeAuto' },
+    { value: 'light', key: 'settings.themeLight' },
+    { value: 'dark', key: 'settings.themeDark' },
+  ] as const
+
+  const radiusOptions = [
+    { value: 'default', key: 'settings.radiusDefault' },
+    { value: 'sharp', key: 'settings.radiusSharp' },
+    { value: 'round', key: 'settings.radiusRound' },
+  ] as const
+
   const aria2Dep = $derived(app.deps.find((dep) => dep.id === 'aria2c') ?? null)
 
   type TextKey = 'downloadDir' | 'filenameTemplate' | 'cookieFile' | 'proxy'
@@ -57,10 +69,6 @@
 
   function onQualityChange(event: Event): void {
     app.updateSetting('quality', (event.currentTarget as HTMLSelectElement).value as DemoSettings['quality'])
-  }
-
-  function onMaxConnectionsChange(event: Event): void {
-    app.updateSetting('maxConnections', Number((event.currentTarget as HTMLSelectElement).value))
   }
 
   function onUpdateSourceChange(event: Event): void {
@@ -289,16 +297,10 @@
             <span class="row-title">{t('settings.maxConnections')}</span>
           </div>
           <div class="row-control">
-            <select
-              class="field"
-              value={String(app.settings.maxConnections)}
-              onchange={onMaxConnectionsChange}
-              aria-label={t('settings.maxConnections')}
-            >
-              {#each connectionOptions as count (count)}
-                <option value={String(count)}>{count}</option>
-              {/each}
-            </select>
+            <EffortSlider
+              value={app.settings.maxConnections}
+              onchange={(value) => app.updateSetting('maxConnections', value)}
+            />
           </div>
         </div>
 
@@ -502,6 +504,43 @@
           </button>
         </div>
       {:else}
+        <div class="row">
+          <div class="row-label">
+            <span class="row-title">{t('settings.theme')}</span>
+            <span class="row-hint">{t('settings.themeHint')}</span>
+          </div>
+          <div class="row-control">
+            <div class="seg" role="group" aria-label={t('settings.theme')}>
+              {#each themeOptions as option (option.value)}
+                <button
+                  type="button"
+                  class:is-active={app.settings.theme === option.value}
+                  aria-pressed={app.settings.theme === option.value}
+                  onclick={() => app.updateSetting('theme', option.value)}
+                >{t(option.key)}</button>
+              {/each}
+            </div>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="row-label">
+            <span class="row-title">{t('settings.radius')}</span>
+          </div>
+          <div class="row-control">
+            <div class="seg" role="group" aria-label={t('settings.radius')}>
+              {#each radiusOptions as option (option.value)}
+                <button
+                  type="button"
+                  class:is-active={app.settings.radius === option.value}
+                  aria-pressed={app.settings.radius === option.value}
+                  onclick={() => app.updateSetting('radius', option.value)}
+                >{t(option.key)}</button>
+              {/each}
+            </div>
+          </div>
+        </div>
+
         <div class="row">
           <div class="row-label">
             <span class="row-title">{t('settings.language')}</span>
@@ -891,6 +930,34 @@
   }
 
   /* ---------- 窄屏：竖导航变成横向 chip 行 ---------- */
+  @media (max-width: 640px) {
+    .row {
+      flex-direction: column;
+      align-items: stretch;
+      gap: 8px;
+      padding: 13px 16px;
+    }
+    .row-label {
+      max-width: none;
+    }
+    .row-control {
+      justify-content: flex-start;
+    }
+    .row-control > .field,
+    .row-control > select.field {
+      flex: 1 1 auto;
+      width: 100%;
+      max-width: none;
+      min-width: 0;
+    }
+    .control-stack {
+      align-items: stretch;
+    }
+    .control-line {
+      justify-content: flex-start;
+    }
+  }
+
   @media (max-width: 900px) {
     .settings-body {
       grid-template-columns: minmax(0, 1fr);

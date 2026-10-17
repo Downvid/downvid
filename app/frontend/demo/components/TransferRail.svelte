@@ -153,7 +153,7 @@
     gap: 9px;
     padding: 8px 9px;
     border: 1px dashed var(--rule);
-    border-radius: 8px;
+    border-radius: var(--radius-control);
     background: color-mix(in oklab, var(--paper-raised) 55%, transparent);
   }
   .queued-index {
@@ -194,7 +194,7 @@
     align-items: center;
     gap: 8px;
     padding: 7px 8px;
-    border-radius: 7px;
+    border-radius: var(--radius-control);
     background: color-mix(in oklab, var(--paper-raised) 45%, transparent);
   }
   .done-icon {

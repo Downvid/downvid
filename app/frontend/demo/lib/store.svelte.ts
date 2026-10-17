@@ -20,6 +20,7 @@ import {
   extractUrl,
   historySeed,
   makeVideoInfo,
+  nearestConnectionStop,
   type DemoSettings,
   type DemoVideo,
   type DepItem,
@@ -31,7 +32,7 @@ import { getLocale, resolveLocale, setLocale, t, type Locale } from './i18n.svel
 
 export type Tab = 'download' | 'history' | 'settings' | 'about'
 export type ParseState = 'idle' | 'parsing' | 'done' | 'error'
-export type Dialog = 'none' | 'update' | 'deps'
+export type Dialog = 'none' | 'update' | 'deps' | 'announcement'
 export type SettingsSection = 'download' | 'network' | 'acceleration' | 'deps' | 'update' | 'interface'
 export type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'ready'
 
@@ -48,7 +49,12 @@ const TICK_MS = 320
 function loadSettings(): DemoSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<DemoSettings>) }
+    if (raw) {
+      const merged = { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<DemoSettings>) }
+      // 旧存档里可能是 1–16 的任意值；滑块改成 4 档后收敛到最近档位
+      merged.maxConnections = nearestConnectionStop(merged.maxConnections)
+      return merged
+    }
   } catch {
     /* demo 里坏掉的存档直接忽略 */
   }
@@ -81,6 +87,7 @@ class DemoStore {
   parseError = $state('')
   parseErrorDetail = $state('')
   url = $state(SAMPLE_URL)
+  alreadyDownloaded = $state<HistoryItem | null>(null)
   video = $state<DemoVideo | null>(null)
   mode = $state<Mode>('video')
   selectedFormatId = $state<string | null>(null)
@@ -98,6 +105,7 @@ class DemoStore {
 
   // ---- 设置 ----
   settings = $state<DemoSettings>(loadSettings())
+  resolvedTheme = $state<'light' | 'dark'>('light')
   settingsSection = $state<SettingsSection>('download')
   autoSaveVisible = $state(false)
   proxyTesting = $state(false)
@@ -113,6 +121,9 @@ class DemoStore {
   // ---- 更新 ----
   update = $state<{ status: UpdateStatus; progress: number }>({ status: 'idle', progress: 0 })
 
+  // ---- 公告 ----
+  announcementRead = $state(false)
+
   // ---- 反馈 ----
   toasts = $state<ToastItem[]>([])
   storageFree = $state(STORAGE_FREE)
@@ -124,6 +135,8 @@ class DemoStore {
   private elapsedTimer: number | undefined
   private autoSaveTimer: number | undefined
   private toastSeq = 0
+  private themeMedia: MediaQueryList | undefined
+  private onThemeMedia: (() => void) | undefined
 
   // ============================================================
   // 生命周期
@@ -144,6 +157,19 @@ class DemoStore {
       this.tab = tab
     }
 
+    const theme = params.get('theme')
+    if (theme === 'auto' || theme === 'light' || theme === 'dark') this.settings.theme = theme
+    this.applyTheme(this.settings.theme)
+
+    const radius = params.get('radius')
+    if (radius === 'default' || radius === 'sharp' || radius === 'round') this.settings.radius = radius
+    this.applyRadius(this.settings.radius)
+    this.themeMedia = window.matchMedia('(prefers-color-scheme: dark)')
+    this.onThemeMedia = () => {
+      if (this.settings.theme === 'auto') this.applyTheme('auto')
+    }
+    this.themeMedia.addEventListener('change', this.onThemeMedia)
+
     this.ticker = window.setInterval(() => this.tick(), TICK_MS)
 
     const state = params.get('state')
@@ -154,12 +180,37 @@ class DemoStore {
 
     if (params.get('update') === '1') this.demoUpdate()
     if (params.get('deps') === '1') this.demoDeps()
+    if (params.get('announcement') === '1') this.openAnnouncement()
   }
 
   destroy(): void {
     if (this.ticker) window.clearInterval(this.ticker)
     this.clearParseTimers()
     if (this.autoSaveTimer) window.clearTimeout(this.autoSaveTimer)
+    if (this.themeMedia && this.onThemeMedia) {
+      this.themeMedia.removeEventListener('change', this.onThemeMedia)
+    }
+  }
+
+  /**
+   * 圆角档位。圆润档沿用 website/index.html 的 --radius-card / --radius-panel /
+   * --radius-media（24 / 16 / 12），其余档位只是同一组变量的收敛/放大。
+   */
+  applyRadius(setting: DemoSettings['radius']): void {
+    const normalized: DemoSettings['radius'] =
+      setting === 'sharp' || setting === 'round' ? setting : 'default'
+    this.settings = { ...this.settings, radius: normalized }
+    document.documentElement.dataset.radius = normalized
+  }
+
+  applyTheme(setting: DemoSettings['theme']): void {
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+    const normalized: DemoSettings['theme'] =
+      setting === 'light' || setting === 'dark' ? setting : 'auto'
+    const resolved = normalized === 'auto' ? (prefersDark ? 'dark' : 'light') : normalized
+    this.resolvedTheme = resolved
+    document.documentElement.dataset.theme = resolved
+    document.documentElement.style.colorScheme = resolved
   }
 
   // ============================================================
@@ -217,6 +268,7 @@ class DemoStore {
     this.clearParseTimers()
     this.url = extracted
     this.video = null
+    this.alreadyDownloaded = null
     this.parseState = 'parsing'
     this.parseStage = 0
     this.parseElapsed = 0
@@ -237,7 +289,20 @@ class DemoStore {
     const video = makeVideoInfo(url)
     this.video = video
     this.parseState = 'done'
+    this.alreadyDownloaded = this.findExistingDownload(video, url)
     this.applyDefaults(video)
+  }
+
+  /** 同一视频（标题或 URL 相同）且文件还在，视为已经下载过。 */
+  private findExistingDownload(video: DemoVideo, url: string): HistoryItem | null {
+    const normalize = (value: string): string => value.trim().toLowerCase().replace(/\s+/g, ' ')
+    return (
+      this.history.find(
+        (item) =>
+          item.fileExists &&
+          (item.url === url || normalize(item.title) === normalize(video.title)),
+      ) ?? null
+    )
   }
 
   private applyDefaults(video: DemoVideo): void {
@@ -251,6 +316,7 @@ class DemoStore {
 
   private showParseError(message: string, detail: string): void {
     this.clearParseTimers()
+    this.alreadyDownloaded = null
     this.parseState = 'error'
     this.parseError = message
     this.parseErrorDetail = detail
@@ -259,6 +325,7 @@ class DemoStore {
 
   cancelParse(): void {
     this.clearParseTimers()
+    this.alreadyDownloaded = null
     this.parseState = 'idle'
     this.parseStage = 0
     this.parseElapsed = 0
@@ -266,6 +333,7 @@ class DemoStore {
 
   clearResult(): void {
     this.clearParseTimers()
+    this.alreadyDownloaded = null
     this.parseState = 'idle'
     this.video = null
     this.parseStage = 0
@@ -393,6 +461,11 @@ class DemoStore {
 
   addDownload(): void {
     if (!this.video || !this.canDownload) return
+    if (this.alreadyDownloaded) {
+      this.toast(t('result.alreadyToast'), 'info')
+      this.setTab('history')
+      return
+    }
     const video = this.video
     let task: TaskItem
     if (this.mode === 'video' && this.selectedFormat) {
@@ -596,8 +669,14 @@ class DemoStore {
   // ============================================================
 
   updateSetting<K extends keyof DemoSettings>(key: K, value: DemoSettings[K]): void {
-    this.settings = { ...this.settings, [key]: value }
+    const next =
+      key === 'maxConnections'
+        ? (nearestConnectionStop(Number(value)) as DemoSettings[K])
+        : value
+    this.settings = { ...this.settings, [key]: next }
     if (key === 'language') this.applyLanguage(value as DemoSettings['language'])
+    if (key === 'theme') this.applyTheme(value as DemoSettings['theme'])
+    if (key === 'radius') this.applyRadius(value as DemoSettings['radius'])
     this.persistSettings()
     this.autoSaveVisible = true
     if (this.autoSaveTimer) window.clearTimeout(this.autoSaveTimer)
@@ -615,6 +694,8 @@ class DemoStore {
   resetSettings(): void {
     this.settings = { ...DEFAULT_SETTINGS }
     this.applyLanguage('auto')
+    this.applyTheme('auto')
+    this.applyRadius('default')
     this.persistSettings()
     this.toast(t('toast.settingsReset'), 'success')
   }
@@ -739,6 +820,11 @@ class DemoStore {
     this.dialog = 'update'
   }
 
+  openAnnouncement(): void {
+    this.announcementRead = true
+    this.dialog = 'announcement'
+  }
+
   // ============================================================
   // Toast
   // ============================================================
@@ -759,6 +845,7 @@ class DemoStore {
 
   demoIdle(): void {
     this.clearParseTimers()
+    this.alreadyDownloaded = null
     this.parseState = 'idle'
     this.parseStage = 0
     this.parseElapsed = 0
@@ -857,6 +944,8 @@ class DemoStore {
   resetDemo(): void {
     this.settings = { ...DEFAULT_SETTINGS }
     this.applyLanguage('auto')
+    this.applyTheme('auto')
+    this.applyRadius('default')
     this.deps = depsSeed()
     this.history = historySeed()
     this.historySearch = ''
@@ -865,6 +954,7 @@ class DemoStore {
     this.storageFree = STORAGE_FREE
     this.depsPromptBusy = false
     this.depsPromptProgress = 0
+    this.announcementRead = false
     this.demoIdle()
     this.toast(t('toast.settingsReset'), 'info')
   }
@@ -886,6 +976,7 @@ class DemoStore {
       params.set('state', 'busy')
     }
     params.set('lang', getLocale() === 'zh-CN' ? 'zh' : 'en')
+    params.set('radius', this.settings.radius)
     const link = window.location.origin + window.location.pathname + '?' + params.toString()
     try {
       await navigator.clipboard.writeText(link)

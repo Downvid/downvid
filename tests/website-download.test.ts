@@ -3,17 +3,17 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 /**
- * 官网（website/index.html）下载区的分发逻辑。
+ * 官网（website/app.js）下载区的分发逻辑。
  *
- * 官网是单文件、无构建，脚本内联。这里把标注为「>>> 纯逻辑」的那一段（不碰 DOM）
- * 从 HTML 里抽出来单独执行，用**真实的** Release 产物列表做输入，断言
+ * 官网是无构建的多文件静态站，脚本在 app.js。这里把标注为「>>> 纯逻辑」的那一段
+ * （不碰 DOM）从脚本里抽出来单独执行，用**真实的** Release 产物列表做输入，断言
  * 「哪个系统该拿哪个包」。选错了用户会下到装不上的包（Intel 版装到 Apple 芯片、
  * Linux 版装到 Windows），而线上没有任何报错——只能靠这一层拦住。
  */
-const HTML = readFileSync(path.resolve(import.meta.dirname, '../website/index.html'), 'utf8')
+const SCRIPT = readFileSync(path.resolve(import.meta.dirname, '../website/app.js'), 'utf8')
 
-const BLOCK = /\/\/ >>> 纯逻辑[^\n]*\n([\s\S]*?)\n\/\/ <<< 纯逻辑/.exec(HTML)?.[1]
-if (!BLOCK) throw new Error('website/index.html 里没有找到「>>> 纯逻辑」标记块')
+const BLOCK = /\/\/ >>> 纯逻辑[^\n]*\n([\s\S]*?)\n\/\/ <<< 纯逻辑/.exec(SCRIPT)?.[1]
+if (!BLOCK) throw new Error('website/app.js 里没有找到「>>> 纯逻辑」标记块')
 
 type Variant = { name: string; key: string; arch: string; primary?: boolean }
 type Asset = { name: string; url: string; size: number }

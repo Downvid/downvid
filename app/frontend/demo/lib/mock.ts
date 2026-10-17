@@ -9,6 +9,9 @@ import posterFuji from '../assets/posters/fuji.jpg'
 import posterKyoto from '../assets/posters/kyoto.jpg'
 import posterTokyo from '../assets/posters/tokyo.jpg'
 import posterDesk from '../assets/posters/desk.jpg'
+import posterPalace from '../assets/posters/palace.jpg'
+import posterRamen from '../assets/posters/ramen.jpg'
+import posterAlley from '../assets/posters/alley.jpg'
 
 export const GB = 1024 * 1024 * 1024
 export const MB = 1024 * 1024
@@ -18,7 +21,15 @@ export const NEXT_VERSION = '1.5.0'
 export const REPO_URL = 'https://github.com/Downvid/downvid'
 export const WEBSITE_URL = 'https://downvid-coral.vercel.app'
 
-export const POSTERS = { fuji: posterFuji, kyoto: posterKyoto, tokyo: posterTokyo, desk: posterDesk }
+export const POSTERS = {
+  fuji: posterFuji,
+  kyoto: posterKyoto,
+  tokyo: posterTokyo,
+  desk: posterDesk,
+  palace: posterPalace,
+  ramen: posterRamen,
+  alley: posterAlley,
+}
 
 export type PlatformId = 'bilibili' | 'youtube' | 'douyin' | 'xiaohongshu' | 'instagram' | 'kuaishou' | 'other'
 
@@ -136,8 +147,20 @@ export interface DepItem {
   busy?: boolean
 }
 
+/** 下载加速的 4 个 effort 档位（与设置 / 首页滑块共用） */
+export const CONNECTION_STOPS = [4, 8, 12, 16] as const
+export type ConnectionStop = (typeof CONNECTION_STOPS)[number]
+
+export function nearestConnectionStop(value: number): ConnectionStop {
+  return CONNECTION_STOPS.reduce((best, stop) =>
+    Math.abs(stop - value) < Math.abs(best - value) ? stop : best,
+  )
+}
+
 export interface DemoSettings {
   language: 'auto' | 'zh-CN' | 'en-US'
+  theme: 'auto' | 'light' | 'dark'
+  radius: 'default' | 'sharp' | 'round'
   downloadDir: string
   filenameTemplate: string
   quality: 'best' | '1080p' | '720p' | '480p'
@@ -153,6 +176,8 @@ export interface DemoSettings {
 
 export const DEFAULT_SETTINGS: DemoSettings = {
   language: 'auto',
+  theme: 'auto',
+  radius: 'default',
   downloadDir: '~/Downloads/DownVid',
   filenameTemplate: '%(title)s.%(ext)s',
   quality: 'best',
@@ -368,14 +393,14 @@ export function historySeed(): HistoryItem[] {
     },
     {
       id: 'h-5',
-      title: '周末去有风的地方｜大理 · 喜洲古镇两日',
-      thumbnail: posterFuji,
-      url: SAMPLE_URLS.xiaohongshu,
-      filePath: '~/Downloads/DownVid/大理 · 喜洲古镇.mp4',
-      quality: '720P',
+      title: '故宫 · 初秋的午后｜4K 漫步',
+      thumbnail: posterPalace,
+      url: 'https://www.bilibili.com/video/BV1xx411c7mD',
+      filePath: '~/Downloads/DownVid/故宫 · 初秋的午后.mp4',
+      quality: '1080P',
       ext: 'MP4',
       mode: 'video',
-      sizeBytes: 42.1 * MB,
+      sizeBytes: 248.6 * MB,
       createdAt: now - 4 * 24 * HOUR,
       fileExists: false,
     },
@@ -390,6 +415,32 @@ export function historySeed(): HistoryItem[] {
       mode: 'video',
       sizeBytes: 966.0 * MB,
       createdAt: now - 6 * 24 * HOUR,
+      fileExists: true,
+    },
+    {
+      id: 'h-7',
+      title: '新宿霓虹 · 深夜散步｜4K HDR',
+      thumbnail: posterAlley,
+      url: 'https://www.youtube.com/watch?v=ScMzIvxBSi4',
+      filePath: '~/Downloads/DownVid/新宿霓虹 · 深夜散步.mp4',
+      quality: '4K',
+      ext: 'MP4',
+      mode: 'video',
+      sizeBytes: 1.42 * GB,
+      createdAt: now - 7 * 24 * HOUR,
+      fileExists: true,
+    },
+    {
+      id: 'h-8',
+      title: '深夜食堂 · 寿司拼盘｜ASMR',
+      thumbnail: posterRamen,
+      url: 'https://www.bilibili.com/video/BV1xx411c7mD',
+      filePath: '~/Downloads/DownVid/深夜食堂 · 寿司拼盘.mp4',
+      quality: '1080P',
+      ext: 'MP4',
+      mode: 'video',
+      sizeBytes: 156.2 * MB,
+      createdAt: now - 9 * 24 * HOUR,
       fileExists: true,
     },
   ]

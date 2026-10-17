@@ -93,7 +93,7 @@ describe('商务合作 / 赞助邮箱', () => {
   })
 
   it('官网也提供邮箱入口，且主题按语言切换', () => {
-    const site = read('website/index.html')
+    const site = read('website/index.html') + '\n' + read('website/app.js')
     expect(site).toContain(`mailto:${CONTACT_EMAIL}`)
     // 主题写死中文时，英文用户点开会收到一封中文主题的邮件——收件箱里无法归类
     expect(site).toMatch(/data-i18n-subject="sponsor\.subject\./)

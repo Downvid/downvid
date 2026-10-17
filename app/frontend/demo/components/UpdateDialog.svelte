@@ -91,7 +91,7 @@
     display: grid;
     place-items: center;
     padding: 24px;
-    background: color-mix(in oklab, var(--ink-strong) 42%, transparent);
+    background: var(--scrim);
     animation: fade-in var(--dur-base) var(--ease-out);
   }
   .dialog {
@@ -100,7 +100,7 @@
     display: flex;
     flex-direction: column;
     border: 1px solid var(--rule);
-    border-radius: 12px;
+    border-radius: var(--radius-panel);
     background: var(--paper-raised);
     box-shadow: var(--shadow-pop);
     animation: rise-in var(--dur-slow) var(--ease-out);
@@ -120,7 +120,7 @@
     width: 38px;
     height: 38px;
     flex: none;
-    border-radius: 9px;
+    border-radius: var(--radius-control);
     background: var(--accent-wash);
     color: var(--accent-deep);
   }
@@ -190,7 +190,7 @@
   .progress-block {
     padding: 14px;
     border: 1px solid var(--rule);
-    border-radius: 8px;
+    border-radius: var(--radius-control);
     background: var(--paper-deep);
   }
   .progress-row {

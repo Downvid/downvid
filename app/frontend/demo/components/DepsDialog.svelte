@@ -50,13 +50,13 @@
     display: grid;
     place-items: center;
     padding: 24px;
-    background: color-mix(in oklab, var(--ink-strong) 42%, transparent);
+    background: var(--scrim);
     animation: fade-in var(--dur-base) var(--ease-out);
   }
   .dialog {
     width: min(460px, 100%);
     border: 1px solid var(--rule);
-    border-radius: 12px;
+    border-radius: var(--radius-panel);
     background: var(--paper-raised);
     box-shadow: var(--shadow-pop);
     overflow: hidden;
@@ -68,7 +68,7 @@
     width: 44px;
     height: 44px;
     margin: 20px 20px 0;
-    border-radius: 10px;
+    border-radius: var(--radius-media);
     background: var(--accent-wash);
     color: var(--accent-deep);
   }

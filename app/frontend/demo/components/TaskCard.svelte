@@ -92,7 +92,7 @@
     gap: 8px;
     padding: 11px 10px 11px 11px;
     border: 1px solid var(--rule);
-    border-radius: 9px;
+    border-radius: var(--radius-panel);
     background: var(--paper-raised);
   }
   .task.is-paused {
@@ -111,7 +111,7 @@
     width: 40px;
     height: 40px;
     flex: none;
-    border-radius: 5px;
+    border-radius: var(--radius-control);
     border: 1px solid var(--rule);
     background-color: var(--paper-sunk);
     background-size: cover;
@@ -128,8 +128,8 @@
     width: 15px;
     height: 15px;
     border-radius: 3px;
-    background: color-mix(in oklab, var(--ink-strong) 78%, transparent);
-    color: var(--paper);
+    background: color-mix(in oklab, var(--panel-dark) 78%, transparent);
+    color: var(--panel-dark-fg);
   }
 
   .task-info {

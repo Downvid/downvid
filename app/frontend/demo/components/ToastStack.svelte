@@ -46,11 +46,11 @@
     gap: 8px;
     max-width: min(520px, calc(100vw - 48px));
     padding: 9px 10px 9px 12px;
-    border-radius: 8px;
-    border: 1px solid color-mix(in oklab, var(--paper) 16%, transparent);
-    background: var(--ink-strong);
-    color: var(--color-surface);
-    box-shadow: 0 10px 28px -12px color-mix(in oklab, var(--ink-strong) 70%, transparent);
+    border-radius: var(--radius-control);
+    border: 1px solid color-mix(in oklab, var(--panel-dark-fg) 16%, transparent);
+    background: var(--panel-dark);
+    color: var(--panel-dark-fg);
+    box-shadow: 0 10px 28px -12px color-mix(in oklab, var(--panel-dark) 70%, transparent);
     font-size: 11.5px;
     pointer-events: auto;
   }
@@ -75,11 +75,22 @@
     border: 0;
     border-radius: 4px;
     background: transparent;
-    color: color-mix(in oklab, var(--paper) 60%, transparent);
+    color: color-mix(in oklab, var(--panel-dark-fg) 60%, transparent);
     flex: none;
   }
   .toast-close:hover {
-    background: color-mix(in oklab, var(--paper) 14%, transparent);
-    color: var(--paper);
+    background: color-mix(in oklab, var(--panel-dark-fg) 14%, transparent);
+    color: var(--panel-dark-fg);
+  }
+
+  @media (max-width: 820px) {
+    .toasts {
+      left: 10px;
+      right: 10px;
+      bottom: 66px;
+    }
+    .toast {
+      max-width: 100%;
+    }
   }
 </style>

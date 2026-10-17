@@ -131,11 +131,11 @@
     max-height: min(72vh, 560px);
     display: flex;
     flex-direction: column;
-    border-radius: 10px;
-    border: 1px solid color-mix(in oklab, var(--paper) 14%, transparent);
-    background: var(--ink-strong);
-    color: var(--color-surface);
-    box-shadow: 0 24px 60px -24px color-mix(in oklab, var(--ink-strong) 90%, transparent);
+    border-radius: var(--radius-panel);
+    border: 1px solid color-mix(in oklab, var(--panel-dark-fg) 14%, transparent);
+    background: var(--panel-dark);
+    color: var(--panel-dark-fg);
+    box-shadow: 0 24px 60px -24px color-mix(in oklab, var(--panel-dark) 90%, transparent);
     overflow: hidden;
     animation: rise-in var(--dur-base) var(--ease-out);
   }
@@ -146,7 +146,7 @@
     justify-content: space-between;
     gap: 10px;
     padding: 11px 12px;
-    border-bottom: 1px solid color-mix(in oklab, var(--paper) 12%, transparent);
+    border-bottom: 1px solid color-mix(in oklab, var(--panel-dark-fg) 12%, transparent);
     flex: none;
   }
   .panel-title {
@@ -167,7 +167,7 @@
     font-family: var(--font-code);
     font-size: 8px;
     letter-spacing: 0.12em;
-    color: color-mix(in oklab, var(--paper) 45%, transparent);
+    color: color-mix(in oklab, var(--panel-dark-fg) 45%, transparent);
   }
   .panel-close {
     display: grid;
@@ -175,14 +175,14 @@
     width: 22px;
     height: 22px;
     border: 0;
-    border-radius: 5px;
+    border-radius: var(--radius-small);
     background: transparent;
-    color: color-mix(in oklab, var(--paper) 60%, transparent);
+    color: color-mix(in oklab, var(--panel-dark-fg) 60%, transparent);
     flex: none;
   }
   .panel-close:hover {
-    background: color-mix(in oklab, var(--paper) 10%, transparent);
-    color: var(--paper);
+    background: color-mix(in oklab, var(--panel-dark-fg) 10%, transparent);
+    color: var(--panel-dark-fg);
   }
 
   .panel-scroll {
@@ -203,7 +203,7 @@
     font-weight: 600;
     letter-spacing: 0.14em;
     text-transform: uppercase;
-    color: color-mix(in oklab, var(--paper) 42%, transparent);
+    color: color-mix(in oklab, var(--panel-dark-fg) 42%, transparent);
   }
   .grid {
     display: grid;
@@ -218,9 +218,9 @@
     height: 28px;
     padding: 0 8px;
     border-radius: 5px;
-    border: 1px solid color-mix(in oklab, var(--paper) 13%, transparent);
-    background: color-mix(in oklab, var(--paper) 5%, transparent);
-    color: color-mix(in oklab, var(--paper) 82%, transparent);
+    border: 1px solid color-mix(in oklab, var(--panel-dark-fg) 13%, transparent);
+    background: color-mix(in oklab, var(--panel-dark-fg) 5%, transparent);
+    color: color-mix(in oklab, var(--panel-dark-fg) 82%, transparent);
     font-family: var(--font-ui);
     font-size: 10.5px;
     font-weight: 500;
@@ -231,7 +231,7 @@
   }
   .demo-btn:hover {
     border-color: color-mix(in oklab, var(--accent) 45%, transparent);
-    color: var(--paper);
+    color: var(--panel-dark-fg);
   }
   .demo-btn.is-active {
     background: color-mix(in oklab, var(--accent) 20%, transparent);
@@ -247,7 +247,7 @@
     flex-direction: column;
     gap: 5px;
     padding-top: 10px;
-    border-top: 1px solid color-mix(in oklab, var(--paper) 10%, transparent);
+    border-top: 1px solid color-mix(in oklab, var(--panel-dark-fg) 10%, transparent);
   }
   .demo-link {
     display: inline-flex;
@@ -256,7 +256,7 @@
     padding: 3px 0;
     border: 0;
     background: none;
-    color: color-mix(in oklab, var(--paper) 62%, transparent);
+    color: color-mix(in oklab, var(--panel-dark-fg) 62%, transparent);
     font-family: var(--font-ui);
     font-size: 10px;
     text-align: left;
@@ -270,9 +270,19 @@
     margin: 0;
     font-size: 9px;
     line-height: 1.6;
-    color: color-mix(in oklab, var(--paper) 44%, transparent);
+    color: color-mix(in oklab, var(--panel-dark-fg) 44%, transparent);
   }
   .panel-note--dim {
-    color: color-mix(in oklab, var(--paper) 30%, transparent);
+    color: color-mix(in oklab, var(--panel-dark-fg) 30%, transparent);
+  }
+
+  @media (max-width: 820px) {
+    .panel {
+      left: 10px;
+      right: 10px;
+      bottom: 64px;
+      width: auto;
+      max-height: 68vh;
+    }
   }
 </style>

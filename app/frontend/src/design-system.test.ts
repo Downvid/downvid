@@ -150,3 +150,33 @@ describe('玻璃类的命名白名单', () => {
     expect([...names].sort()).toEqual(['glass', 'glass-thin'])
   })
 })
+
+describe('两套样式的配色必须同源', () => {
+  it('src/style.css 与 demo/app.css 的 @theme 关键色值一致', () => {
+    // demo 是独立入口，但它「复用 src/style.css 的 @theme 色值」（demo README 里写的）。
+    // 两边各抄一份色值是必要的（demo 要在浏览器里独立跑），但抄错就变成
+    // 「预览是这个颜色、打包后是另一个颜色」——而这种差异在单独看任何一边时
+    // 都发现不了。
+    const demoCss = readFileSync(resolve(import.meta.dirname, '../demo/app.css'), 'utf8')
+    const demoCode = demoCss.replace(/\/\*[\s\S]*?\*\//g, '')
+
+    // 只比对「品牌识别度高」的几个：全部 51 个 token 逐字比对会让
+    // demo 想微调某个灰阶时被迫同步，反而没人愿意动
+    const KEY_TOKENS = [
+      '--color-primary',
+      '--color-primary-container',
+      '--color-surface',
+      '--color-on-surface',
+      '--color-tertiary',
+      '--color-secondary',
+    ]
+
+    for (const token of KEY_TOKENS) {
+      const inSrc = new RegExp(`${token}:\\s*([^;]+);`).exec(code)?.[1]?.trim()
+      const inDemo = new RegExp(`${token}:\\s*([^;]+);`).exec(demoCode)?.[1]?.trim()
+      expect(inSrc, `src/style.css 缺 ${token}`).toBeTruthy()
+      expect(inDemo, `demo/app.css 缺 ${token}`).toBeTruthy()
+      expect(inDemo, `${token} 在两套样式里不一致（预览与打包后会不是同一个颜色）`).toBe(inSrc)
+    }
+  })
+})

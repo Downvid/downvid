@@ -2,13 +2,13 @@
 /**
  * 产品官网（website/）静态校验。
  *
- * 官网是**单文件**（website/index.html，样式与脚本内联），改完直接推 main 就会
- * 由 Vercel 的 Git 集成发布——中间没有任何构建或校验步骤，写错只会静默地
- * 出现在线上。这个脚本把这些「静默失败」变成 CI 里的一次红叉：
+ * 官网是**无构建的多文件静态站**（website/index.html + styles.css + app.js），
+ * 改完直接推 main 就会由 Vercel 的 Git 集成发布——中间没有任何构建或校验步骤，
+ * 写错只会静默地出现在线上。这个脚本把这些「静默失败」变成 CI 里的一次红叉：
  *
- *   1. 单文件约定：不出现 `<script src>` / 外链样式表（字体 CDN 除外），
- *      否则「无构建、无依赖」的前提就不成立了。注意 img 标签不算依赖：
- *      shields.io 徽章与 raw.githubusercontent 的图片是刻意的例外
+ *   1. 无构建约定：只允许本地 styles.css / app.js，不出现第三方脚本 / 样式表
+ *      （字体 CDN 除外），否则「无构建、无依赖」的前提就不成立了。注意 img 标签
+ *      不算依赖：shields.io 徽章与 raw.githubusercontent 的图片是刻意的例外
  *   2. 引用的仓库资源必须真实存在：og:image、favicon、截图都是 raw.githubusercontent
  *      的绝对地址，文件被改名/删除时线上是裂图，本地毫无提示
  *   3. 中英词条必须**双向**成对：`data-i18n` 占位 ↔ I18N.en 词条。
@@ -34,16 +34,27 @@ import path from 'node:path'
 const ROOT = path.resolve(import.meta.dirname, '..')
 const SITE_DIR = path.join(ROOT, 'website')
 const INDEX = path.join(SITE_DIR, 'index.html')
+const STYLES = path.join(SITE_DIR, 'styles.css')
+const SCRIPT = path.join(SITE_DIR, 'app.js')
 
 const problems = []
 const notes = []
 
-if (!fs.existsSync(INDEX)) {
-  console.error('缺少 website/index.html')
-  process.exit(1)
+for (const [file, label] of [
+  [INDEX, 'website/index.html'],
+  [STYLES, 'website/styles.css'],
+  [SCRIPT, 'website/app.js'],
+]) {
+  if (!fs.existsSync(file)) {
+    console.error('缺少 ' + label)
+    process.exit(1)
+  }
 }
 
 const html = fs.readFileSync(INDEX, 'utf8')
+const css = fs.readFileSync(STYLES, 'utf8')
+const js = fs.readFileSync(SCRIPT, 'utf8')
+const all = [html, css, js].join('\n')
 const rel = (p) => path.relative(ROOT, p)
 
 // 刷新版本号的脚本：它的 VERSION_RE 是「版本号占位」的唯一判据，第 7c 项直接复用
@@ -55,37 +66,43 @@ const owner = sharedApp.match(/owner:\s*'([^']+)'/)?.[1]
 const repo = sharedApp.match(/repo:\s*'([^']+)'/)?.[1]
 if (!owner || !repo) problems.push('shared/app.ts 未能解析出 owner/repo')
 
-// ===== 1. 单文件约定 =====
+// ===== 1. 无构建 / 多文件约定 =====
+const ALLOWED_FILES = ['index.html', 'styles.css', 'app.js', 'README.md']
 for (const file of fs.readdirSync(SITE_DIR)) {
-  if (!['index.html', 'README.md'].includes(file)) {
-    notes.push(`website/ 下多了 ${file}——官网约定为单文件，多文件不会被打包/发布`)
+  if (!ALLOWED_FILES.includes(file)) {
+    problems.push(`website/ 下出现了 ${file}——官网只允许 index.html / styles.css / app.js，多出来的文件不会被构建流程处理`)
   }
 }
 for (const m of html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["']/g)) {
-  problems.push(`index.html 引用了外部脚本 ${m[1]}；官网约定零依赖，请内联`)
+  if (m[1] !== 'app.js') problems.push(`index.html 引用了 ${m[1]}；官网只允许本地 app.js 脚本`)
 }
-// 字体 CDN 是刻意的例外（官网自己声明并预连接）
+// 字体 CDN 是刻意的例外（官网自己声明并预连接）；本地 styles.css 是唯一允许的站点样式表
 const ALLOWED_STYLE_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com']
 for (const m of html.matchAll(/<link\b[^>]*\brel=["']stylesheet["'][^>]*\bhref=["']([^"']+)["']/g)) {
   const href = m[1]
-  if (/^https?:\/\//.test(href) && !ALLOWED_STYLE_HOSTS.some(h => href.includes(h))) {
-    problems.push(`index.html 引用了外部样式表 ${href}；除字体外请内联`)
+  if (href === 'styles.css') continue
+  if (!/^https?:\/\//.test(href) || !ALLOWED_STYLE_HOSTS.some((h) => href.includes(h))) {
+    problems.push(`index.html 引用了外部样式表 ${href}；官网只允许本地 styles.css 与字体 CDN`)
   }
 }
+if (!html.includes('<link rel="stylesheet" href="styles.css">')) problems.push('index.html 没有引用 styles.css')
+if (!html.includes('<script src="app.js"></script>')) problems.push('index.html 没有引用 app.js')
+if (/<style\b[^>]*>/.test(html)) problems.push('index.html 不应再内联 <style>（样式已拆到 styles.css）')
+if (/<script\b(?![^>]*\bsrc=)[^>]*>/.test(html)) problems.push('index.html 不应再内联 <script>（脚本已拆到 app.js）')
 
 // ===== 2. 引用的仓库资源必须存在 =====
 const rawPrefix = owner && repo ? `https://raw.githubusercontent.com/${owner}/${repo}/main/` : null
 const assetRefs = new Set()
-for (const m of html.matchAll(/https:\/\/raw\.githubusercontent\.com\/([^/\s"'<>]+)\/([^/\s"'<>]+)\/([^/\s"'<>]+)\/([^\s"'<>)]+)/g)) {
+for (const m of all.matchAll(/https:\/\/raw\.githubusercontent\.com\/([^/\s"'<>]+)\/([^/\s"'<>]+)\/([^/\s"'<>]+)\/([^\s"'<>)]+)/g)) {
   const [, refOwner, refRepo, ref, asset] = m
   assetRefs.add(asset)
   if (rawPrefix && `${refOwner}/${refRepo}/${ref}/` !== `${owner}/${repo}/main/`) {
-    problems.push(`index.html 引用的 raw 地址指向 ${refOwner}/${refRepo}@${ref}，与仓库坐标 ${owner}/${repo}@main 不一致`)
+    problems.push(`官网引用的 raw 地址指向 ${refOwner}/${refRepo}@${ref}，与仓库坐标 ${owner}/${repo}@main 不一致`)
   }
 }
 for (const asset of assetRefs) {
   if (!fs.existsSync(path.join(ROOT, asset))) {
-    problems.push(`index.html 引用了不存在的文件：${asset}（线上会裂图）`)
+    problems.push(`官网引用了不存在的文件：${asset}（线上会裂图）`)
   }
 }
 
@@ -106,12 +123,12 @@ for (const m of html.matchAll(/data-i18n-subject=["']([^"']+)["']/g)) {
   used.add(m[1])
   placeholderKeys.add(m[1])
 }
-for (const m of html.matchAll(/\bt\(\s*'([^']+)'\s*\)/g)) used.add(m[1])
-for (const m of html.matchAll(/\bkey:\s*'([^']+)'/g)) used.add(m[1])
+for (const m of js.matchAll(/\bt\(\s*'([^']+)'\s*\)/g)) used.add(m[1])
+for (const m of js.matchAll(/\bkey:\s*'([^']+)'/g)) used.add(m[1])
 
-const enBlock = html.match(/en:\s*\{(.*?)\n\s*\},/s)?.[1]
+const enBlock = js.match(/en:\s*\{(.*?)\n\s*\},/s)?.[1]
 if (!enBlock) {
-  problems.push('未能从 index.html 解析出 I18N.en 词条表（结构改了？）')
+  problems.push('未能从 app.js 解析出 I18N.en 词条表（结构改了？）')
 } else {
   const en = new Set()
   for (const m of enBlock.matchAll(/'([a-z0-9.]+)':/g)) {
@@ -131,9 +148,9 @@ if (!enBlock) {
 //
 // 中文默认值可以写在 HTML 的 data-i18n 原文里（占位符那份），但下载区的文案是
 // 脚本拼出来的，HTML 里没有落点——只能在 I18N.zh 里写。漏了会显示成 key 本身。
-const zhBlock = html.match(/zh:\s*\{(.*?)\n\s*\},/s)?.[1]
+const zhBlock = js.match(/zh:\s*\{(.*?)\n\s*\},/s)?.[1]
 if (!zhBlock) {
-  problems.push('未能从 index.html 解析出 I18N.zh 词条表（结构改了？）')
+  problems.push('未能从 app.js 解析出 I18N.zh 词条表（结构改了？）')
 } else {
   const zh = new Set()
   for (const m of zhBlock.matchAll(/'([a-z0-9.]+)':/g)) {
@@ -198,7 +215,7 @@ const THEME_PAIRS = [
   ['--outline', '--color-outline'],
 ]
 const styleCss = fs.readFileSync(path.join(ROOT, 'src/style.css'), 'utf8')
-const siteRoot = html.match(/:root\s*\{(.*?)\}/s)?.[1] ?? ''
+const siteRoot = css.match(/:root\s*\{(.*?)\}/s)?.[1] ?? ''
 for (const [siteVar, appVar] of THEME_PAIRS) {
   const siteValue = siteRoot.match(new RegExp(`${siteVar}\\s*:\\s*([^;]+);`))?.[1]?.trim().toLowerCase()
   const appValue = styleCss.match(new RegExp(`${appVar}\\s*:\\s*([^;]+);`))?.[1]?.trim().toLowerCase()
@@ -219,7 +236,7 @@ for (const [siteVar, appVar] of THEME_PAIRS) {
 //
 // 下载按钮是**运行时**拼 github.com / api.github.com 地址的，第 2 项那种
 // raw 链接检查覆盖不到；换仓库时漏改这里 = 按钮指向别人的仓库。
-const pageRepo = html.match(/const REPO = \{\s*owner:\s*'([^']+)',\s*repo:\s*'([^']+)'\s*\}/)
+const pageRepo = js.match(/const REPO = \{\s*owner:\s*'([^']+)',\s*repo:\s*'([^']+)'\s*\}/)
 if (!pageRepo) {
   problems.push('index.html 里找不到 const REPO = { owner, repo }（下载按钮靠它拼地址）')
 } else if (pageRepo[1] !== owner || pageRepo[2] !== repo) {
@@ -239,7 +256,7 @@ if (!pageRepo) {
 const builderConfig = fs.readFileSync(path.join(ROOT, 'electron-builder.json5'), 'utf8')
 const productName = builderConfig.match(/"productName"\s*:\s*"([^"]+)"/)?.[1]
 const artifactNames = [...builderConfig.matchAll(/"artifactName"\s*:\s*"([^"]+)"/g)].map((m) => m[1])
-const pageTemplates = [...new Set([...html.matchAll(/'([^']*DownVid[^']*\{version\}[^']*)'/g)].map((m) => m[1]))]
+const pageTemplates = [...new Set([...js.matchAll(/'([^']*DownVid[^']*\{version\}[^']*)'/g)].map((m) => m[1]))]
 if (!productName || artifactNames.length === 0) {
   problems.push('未能从 electron-builder.json5 解析出 productName / artifactName')
 } else if (pageTemplates.length === 0) {
@@ -278,7 +295,7 @@ if (!productName || artifactNames.length === 0) {
 // 只会静默地没有图标——所以这里让图标表与脚本里的 PLATFORMS 双向对上。
 const iconHost = html.match(/<div id="osIcons"[^>]*>([\s\S]*?)<\/div>/)?.[1] ?? ''
 const iconKeys = [...iconHost.matchAll(/<svg data-os="([a-z]+)"/g)].map((m) => m[1])
-const scriptPlatforms = [...html.matchAll(/\{ os: '([a-z]+)', key: 'plat\.[a-z]+' \}/g)].map((m) => m[1])
+const scriptPlatforms = [...js.matchAll(/\{ os: '([a-z]+)', key: 'plat\.[a-z]+' \}/g)].map((m) => m[1])
 if (iconKeys.length === 0) {
   problems.push('index.html 的 #osIcons 里找不到平台图标（或容器/属性被改名）')
 } else if (scriptPlatforms.length === 0) {
@@ -355,4 +372,4 @@ if (problems.length) {
 }
 
 for (const n of notes) console.log(`  · ${n}`)
-console.log(`✓ 官网校验通过（${rel(INDEX)}，引用资源 ${assetRefs.size} 个）`)
+console.log(`✓ 官网校验通过（${rel(INDEX)} + styles.css + app.js，引用资源 ${assetRefs.size} 个）`)

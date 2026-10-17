@@ -77,3 +77,6 @@ Thumbs.db
 docker/dist-web/
 docker/dist-server/
 docker/node_modules/
+
+# 一次性 QA 脚本（本机截图/抓取用，硬编码了本机浏览器路径，不入库）
+.qa/

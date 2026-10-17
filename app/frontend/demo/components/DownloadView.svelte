@@ -3,87 +3,186 @@
   import CaptureBar from './CaptureBar.svelte'
   import ParsePanel from './ParsePanel.svelte'
   import ParseResult from './ParseResult.svelte'
+  import ActivityPanel from './ActivityPanel.svelte'
+  import EffortSlider from './EffortSlider.svelte'
   import { app } from '../lib/store.svelte'
   import { t } from '../lib/i18n.svelte'
-  import { SAMPLE_URL, type HistoryItem } from '../lib/mock'
+  import { SAMPLE_URL } from '../lib/mock'
   import { formatClock } from '../lib/format'
 
-  const recent = $derived(app.history.slice(0, 3))
+  const recent = $derived(app.history.slice(0, 4))
+
+  let dragging = $state(false)
+  let dragDepth = 0
+
+  function isLinkDrag(event: DragEvent): boolean {
+    const types = event.dataTransfer?.types
+    if (!types) return false
+    return Array.from(types).some((type) => type === 'text/uri-list' || type === 'text/plain')
+  }
+
+  function onDragEnter(event: DragEvent): void {
+    if (!isLinkDrag(event)) return
+    event.preventDefault()
+    dragDepth += 1
+    dragging = true
+  }
+
+  function onDragOver(event: DragEvent): void {
+    if (!isLinkDrag(event)) return
+    event.preventDefault()
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'copy'
+  }
+
+  function onDragLeave(event: DragEvent): void {
+    if (!isLinkDrag(event)) return
+    dragDepth = Math.max(0, dragDepth - 1)
+    if (dragDepth === 0) dragging = false
+  }
+
+  function onDrop(event: DragEvent): void {
+    event.preventDefault()
+    dragDepth = 0
+    dragging = false
+    const text =
+      event.dataTransfer?.getData('text/uri-list') || event.dataTransfer?.getData('text/plain') || ''
+    if (!text.trim()) return
+    app.url = text.trim()
+    app.parse()
+  }
+
+  function onWindowDragOver(event: DragEvent): void {
+    if (isLinkDrag(event)) event.preventDefault()
+  }
+
+  function onWindowDrop(event: DragEvent): void {
+    if (isLinkDrag(event)) event.preventDefault()
+  }
+
+  function endDrag(): void {
+    dragging = false
+    dragDepth = 0
+  }
 
   function useSample(): void {
     app.url = SAMPLE_URL
     app.parse()
   }
 
-  function openRecent(item: HistoryItem): void {
-    app.reparse(item)
+  function openRecent(): void {
+    app.setTab('history')
   }
 
   function openCookieSettings(): void {
     app.setTab('settings')
     app.settingsSection = 'network'
   }
+
 </script>
 
-<div class="download-view">
+<svelte:window
+  ondragover={onWindowDragOver}
+  ondrop={onWindowDrop}
+  ondragend={endDrag}
+/>
+
+<div
+  class="download-view"
+  ondragenter={onDragEnter}
+  ondragover={onDragOver}
+  ondragleave={onDragLeave}
+  ondrop={onDrop}
+>
+  {#if dragging}
+    <div class="drop-overlay" aria-hidden="true">
+      <div class="drop-frame">
+        <Icon name="move_to_inbox" size={26} />
+        <strong>{t('drop.title')}</strong>
+        <span>{t('drop.hint')}</span>
+      </div>
+    </div>
+  {/if}
+
   {#if app.parseState === 'idle'}
-    <section class="hero">
-      <div class="hero-copy">
+    <section class="home">
+      <h1 class="sr-only">{t('hero.eyebrow')}</h1>
+
+      <header class="home-head">
         <span class="eyebrow">{t('hero.eyebrow')}</span>
-        <h1 class="display hero-title">
-          {t('hero.title1')}<br />
-          <span class="hero-accent">{t('hero.title2')}</span>
-        </h1>
-        <p class="hero-lede">{t('hero.lede')}</p>
-      </div>
-
-      <div class="capture-wrap">
-        <CaptureBar />
-      </div>
-
-      <div class="hero-meta">
-        <div class="keys">
-          <span class="kbd">⌘V</span>
-          <span class="key-hint">{t('capture.paste')}</span>
-          <span class="kbd">↵</span>
-          <span class="key-hint">{t('capture.parse')}</span>
-        </div>
         <button class="link-btn" onclick={useSample}>
           {t('hero.sample')}
           <Icon name="arrow_forward" size={13} />
         </button>
+      </header>
+
+      <div class="capture-block">
+        <CaptureBar />
+        <EffortSlider
+          compact
+          label={t('settings.accel')}
+          value={app.settings.maxConnections}
+          onchange={(value) => app.updateSetting('maxConnections', value)}
+        />
       </div>
 
-      {#if recent.length > 0}
-        <section class="recent">
-          <div class="section-head">
+      <ActivityPanel />
+
+      <section class="recent">
+        <div class="section-head">
+          <div class="section-title">
             <span class="section-label">{t('hero.recent')}</span>
-            <button class="link-btn section-more" onclick={() => app.setTab('history')}>
-              {t('hero.recentAll')}
-              <Icon name="arrow_forward" size={13} />
-            </button>
+            <span class="section-count num">{String(recent.length).padStart(2, '0')}</span>
           </div>
-          <div class="recent-grid">
-            {#each recent as item (item.id)}
-              <button class="recent-card" onclick={() => openRecent(item)}>
-                <span class="recent-thumb" style="background-image:url({item.thumbnail})">
-                  <span class="recent-quality num">{item.quality}</span>
+          <button class="link-btn" onclick={() => app.setTab('history')}>
+            {t('hero.recentAll')}
+            <Icon name="arrow_forward" size={13} />
+          </button>
+        </div>
+
+        <div class="recent-bento">
+          {#if recent[0]}
+            <button
+              class="feature"
+              title={t('history.view')}
+              onclick={openRecent}
+            >
+              <span class="feature-frame">
+                <span
+                  class="feature-thumb"
+                  style="background-image:url({recent[0].thumbnail})"
+                ></span>
+                <span class="feature-shade"></span>
+                <span class="feature-index num">01</span>
+                <span class="feature-quality num">{recent[0].quality}</span>
+                <span class="feature-copy">
+                  <span class="feature-title">{recent[0].title}</span>
+                  <span class="feature-meta num">
+                    {recent[0].ext} · {app.formatBytes(recent[0].sizeBytes)} · {formatClock(recent[0].createdAt)}
+                  </span>
                 </span>
-                <span class="recent-title">{item.title}</span>
-                <span class="recent-meta num">
-                  {item.ext} · {app.formatBytes(item.sizeBytes)}
-                  <span class="recent-time">{formatClock(item.createdAt)}</span>
+                <span class="feature-action"><Icon name="history" size={16} /></span>
+              </span>
+            </button>
+          {/if}
+
+          <div class="recent-list">
+            {#each recent.slice(1) as item, index (item.id)}
+              <button class="recent-row" onclick={openRecent}>
+                <span class="row-index num">{String(index + 2).padStart(2, '0')}</span>
+                <span class="row-thumb" style="background-image:url({item.thumbnail})"></span>
+                <span class="row-main">
+                  <span class="row-title">{item.title}</span>
+                  <span class="row-meta num">
+                    {item.quality} · {item.ext} · {app.formatBytes(item.sizeBytes)}
+                  </span>
                 </span>
+                <span class="row-time num">{formatClock(item.createdAt)}</span>
+                <span class="row-arrow"><Icon name="north_east" size={13} /></span>
               </button>
             {/each}
           </div>
-        </section>
-      {/if}
-
-      <p class="trust">
-        <Icon name="lock" size={13} />
-        <span>{t('hero.trust')}</span>
-      </p>
+        </div>
+      </section>
     </section>
   {:else if app.parseState === 'parsing'}
     <section class="working">
@@ -135,11 +234,13 @@
   {:else if app.parseState === 'done' && app.video}
     <section class="working working--result">
       <div class="working-head">
-        <span class="eyebrow">{t('result.eyebrow')}</span>
-        <button class="link-btn back-link" onclick={() => app.clearResult()}>
-          {t('result.change')}
-          <Icon name="close" size={13} />
-        </button>
+        <div class="result-nav">
+          <button class="btn btn-ghost btn-sm back-btn" onclick={() => app.clearResult()}>
+            <Icon name="arrow_back" size={15} />
+            <span>{t('result.back')}</span>
+          </button>
+          <span class="eyebrow">{t('result.eyebrow')}</span>
+        </div>
       </div>
       <CaptureBar compact />
       <ParseResult />
@@ -149,57 +250,57 @@
 
 <style>
   .download-view {
-    max-width: 860px;
+    position: relative;
+    min-height: 100%;
+    max-width: 900px;
     margin: 0 auto;
   }
-  .working--result {
-    max-width: 900px;
-  }
-
-  /* ---------- 空态 ---------- */
-  .hero {
-    padding-top: 20px;
-  }
-  .hero-copy {
+  .working {
+    max-width: 760px;
+    margin: 0 auto;
+    padding-top: 14px;
     display: flex;
     flex-direction: column;
     gap: 14px;
   }
-  .hero-title {
-    margin: 0;
-    font-size: clamp(34px, 4.4vw, 46px);
+  .working--result {
+    max-width: 900px;
   }
-  .hero-accent {
-    color: var(--accent-deep);
+  .working-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 22px;
   }
-  .hero-lede {
-    margin: 0;
-    max-width: 52ch;
-    font-size: 13.5px;
-    line-height: 1.7;
-    color: var(--color-on-surface-variant);
+  .result-nav {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .back-btn {
+    padding: 0 9px;
   }
 
-  .capture-wrap {
-    margin: 30px 0 14px;
+  /* ---------- 首屏 ---------- */
+  .home {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding-top: 0;
   }
-
-  .hero-meta {
+  .home-head {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 18px;
-    flex-wrap: wrap;
+    min-height: 18px;
   }
-  .keys {
+
+  .capture-block {
     display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 10.5px;
-    color: var(--color-on-surface-variant);
-  }
-  .key-hint {
-    margin-right: 4px;
+    flex-direction: column;
+    gap: 10px;
   }
 
   .link-btn {
@@ -221,17 +322,20 @@
     text-decoration-color: currentColor;
   }
 
-  .recent {
-    margin-top: 40px;
-  }
+  /* ---------- 区块标题 ---------- */
   .section-head {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
     gap: 12px;
-    padding-bottom: 10px;
+    padding-bottom: 9px;
     border-bottom: 1px solid var(--rule);
-    margin-bottom: 14px;
+    margin-bottom: 10px;
+  }
+  .section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
   .section-label {
     font-family: var(--font-code);
@@ -241,102 +345,238 @@
     text-transform: uppercase;
     color: var(--color-on-surface-variant);
   }
-  .section-more {
-    font-size: 10.5px;
+  .section-count {
+    font-size: 9.5px;
+    color: var(--color-on-surface-variant);
+    opacity: 0.65;
   }
 
-  .recent-grid {
+  /* ---------- 最近下载：主卡 + 列表 ---------- */
+  .recent-bento {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
+    grid-template-columns: minmax(0, 1.22fr) minmax(0, 1fr);
+    gap: 14px;
+    align-items: stretch;
   }
-  .recent-card {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+
+  .feature {
+    display: block;
     padding: 0;
     border: 0;
     background: none;
     text-align: left;
   }
-  .recent-thumb {
+  .feature-frame {
     position: relative;
-    aspect-ratio: 16 / 9;
-    width: 100%;
-    border-radius: 8px;
+    display: block;
+    aspect-ratio: 21 / 9;
+    border-radius: var(--radius-card);
     border: 1px solid var(--rule);
-    background-color: var(--paper-sunk);
+    background: var(--paper-sunk);
+    overflow: hidden;
+  }
+  .feature-shade {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      to top,
+      color-mix(in oklab, var(--panel-dark) 88%, transparent) 0%,
+      color-mix(in oklab, var(--panel-dark) 34%, transparent) 46%,
+      transparent 72%
+    );
+  }
+  .feature-thumb {
+    position: absolute;
+    inset: 0;
     background-size: cover;
     background-position: center;
-    overflow: hidden;
-    transition:
-      border-color var(--dur-base) var(--ease-out),
-      transform var(--dur-base) var(--ease-out);
+    transition: transform 420ms var(--ease-out);
   }
-  .recent-card:hover .recent-thumb {
-    border-color: color-mix(in oklab, var(--accent-deep) 45%, transparent);
-    transform: translateY(-1px);
+  .feature:hover .feature-thumb {
+    transform: scale(1.035);
   }
-  .recent-quality {
+  .feature-index {
     position: absolute;
-    left: 6px;
-    bottom: 6px;
+    top: 8px;
+    left: 9px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: color-mix(in oklab, var(--panel-dark) 70%, transparent);
+    color: var(--panel-dark-fg);
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .feature-quality {
+    position: absolute;
+    top: 8px;
+    right: 9px;
     padding: 1px 5px;
     border-radius: 3px;
-    background: color-mix(in oklab, var(--ink-strong) 80%, transparent);
-    color: var(--paper);
+    background: color-mix(in oklab, var(--panel-dark) 62%, transparent);
+    color: var(--panel-dark-fg);
     font-size: 9px;
   }
-  .recent-title {
-    font-size: 12px;
+  .feature-action {
+    position: absolute;
+    inset: 0;
+    display: grid;
+    place-items: center;
+    opacity: 0;
+    transition: opacity var(--dur-base) var(--ease-out);
+  }
+  .feature-action :global(.msi) {
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: color-mix(in oklab, var(--panel-dark) 74%, transparent);
+    color: var(--panel-dark-fg);
+    font-size: 16px !important;
+  }
+  .feature:hover .feature-action {
+    opacity: 1;
+  }
+  .feature-copy {
+    position: absolute;
+    left: 12px;
+    right: 44px;
+    bottom: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    color: var(--panel-dark-fg);
+  }
+  .feature-title {
+    font-family: var(--font-display);
+    font-size: 17px;
     font-weight: 600;
-    line-height: 1.45;
-    color: var(--ink);
+    line-height: 1.3;
+    letter-spacing: -0.02em;
+    color: var(--panel-dark-fg);
+    text-shadow: 0 1px 8px rgba(0, 0, 0, 0.25);
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
-  .recent-meta {
-    display: flex;
-    align-items: center;
-    gap: 5px;
+  .feature-meta {
     font-size: 9.5px;
-    color: var(--color-on-surface-variant);
-  }
-  .recent-time {
-    margin-left: auto;
+    color: color-mix(in oklab, var(--panel-dark-fg) 72%, transparent);
   }
 
-  .trust {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin: 40px 0 0;
-    padding-top: 14px;
-    border-top: 1px solid var(--rule-soft);
-    font-size: 10.5px;
-    color: var(--color-on-surface-variant);
-  }
-
-  /* ---------- 解析中 / 结果 ---------- */
-  .working {
-    max-width: 760px;
-    margin: 0 auto;
-    padding-top: 14px;
+  .recent-list {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    border-top: 1px solid var(--rule);
   }
-  .working-head {
-    display: flex;
+  .recent-row {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 22px 58px minmax(0, 1fr) auto 16px;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    min-height: 22px;
+    gap: 10px;
+    min-width: 0;
+    padding: 8px 6px;
+    border: 0;
+    border-bottom: 1px solid var(--rule);
+    background: none;
+    text-align: left;
+    transition: background-color var(--dur-fast) var(--ease-out);
   }
-  .back-link {
-    font-size: 10.5px;
+  .recent-row:last-child {
+    border-bottom: 0;
+  }
+  .recent-row:hover {
+    background: color-mix(in oklab, var(--accent-wash) 40%, transparent);
+  }
+  .row-index {
+    font-size: 10px;
+    color: var(--accent-deep);
+  }
+  .row-thumb {
+    display: block;
+    width: 58px;
+    height: 33px;
+    border-radius: var(--radius-small);
+    border: 1px solid var(--rule);
+    background-color: var(--paper-sunk);
+    background-size: cover;
+    background-position: center;
+  }
+  .row-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .row-title {
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .row-meta {
+    font-size: 9px;
+    color: var(--color-on-surface-variant);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .row-time {
+    font-size: 9px;
+    color: var(--color-on-surface-variant);
+  }
+  .row-arrow {
+    display: grid;
+    place-items: center;
+    color: var(--color-on-surface-variant);
+    opacity: 0;
+    transition: opacity var(--dur-base) var(--ease-out);
+  }
+  .recent-row:hover .row-arrow {
+    opacity: 1;
+    color: var(--accent-deep);
+  }
+
+  /* ---------- 拖放区 ---------- */
+  .drop-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 20;
+    display: grid;
+    place-items: center;
+    border: 1px dashed color-mix(in oklab, var(--accent-deep) 48%, transparent);
+    border-radius: 12px;
+    background: color-mix(in oklab, var(--paper) 88%, transparent);
+  }
+  .drop-frame {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+    padding: 26px 42px;
+    border: 1px dashed color-mix(in oklab, var(--accent-deep) 35%, transparent);
+    border-radius: 10px;
+    background: var(--paper-raised);
+    box-shadow: var(--shadow-sheet);
+  }
+  .drop-frame :global(.msi) {
+    color: var(--accent-deep);
+  }
+  .drop-frame strong {
+    font-family: var(--font-display);
+    font-size: 15px;
+    letter-spacing: -0.02em;
+    color: var(--ink-strong);
+  }
+  .drop-frame span {
+    font-size: 11.5px;
+    color: var(--color-on-surface-variant);
   }
 
   /* ---------- 解析失败 ---------- */
@@ -414,33 +654,49 @@
     margin-top: 4px;
   }
 
+  /* 桌面最小窗口 1000×700：首页必须一屏看完 */
+  @media (max-height: 820px) and (min-width: 821px) {
+    .home {
+      gap: 7px;
+    }
+    .capture-block {
+      gap: 6px;
+    }
+    .section-head {
+      padding-bottom: 6px;
+      margin-bottom: 8px;
+    }
+    .feature-frame {
+      aspect-ratio: 3.15 / 1;
+    }
+    .feature-title {
+      font-size: 14px;
+    }
+    .feature-meta {
+      font-size: 9px;
+    }
+    .recent-row {
+      padding: 4px 6px;
+    }
+    .recent-row .row-thumb {
+      width: 48px;
+      height: 27px;
+    }
+    .row-title {
+      font-size: 11px;
+    }
+  }
+
   @media (max-width: 760px) {
-    .recent-grid {
-      grid-template-columns: 1fr;
+    .recent-bento {
+      grid-template-columns: minmax(0, 1fr);
     }
-    .recent-card {
-      flex-direction: row;
-      align-items: center;
-      gap: 12px;
+    .recent-list {
+      border-top: 0;
     }
-    .recent-thumb {
-      width: 120px;
-      flex: none;
-    }
-    .recent-title {
-      flex: 1;
-    }
-    .recent-meta {
-      flex-direction: column;
-      align-items: flex-end;
-    }
-    .recent-time {
-      margin: 0;
-    }
-    .hero-meta {
-      align-items: flex-start;
-      flex-direction: column;
-      gap: 10px;
+    .recent-row {
+      min-height: 62px;
+      border-top: 1px solid var(--rule);
     }
   }
 </style>

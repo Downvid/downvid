@@ -160,13 +160,13 @@ describe('官网版本号刷新', () => {
 
 describe('官网只有一处版本号字面量', () => {
   const html = fs.readFileSync(path.resolve(import.meta.dirname, '../website/index.html'), 'utf8')
+  const script = fs.readFileSync(path.resolve(import.meta.dirname, '../website/app.js'), 'utf8')
 
   it('页面脚本不得再写一份版本号字面量', () => {
     // 真实踩过：HTML 里是 `data-version>v1.3.4`，而脚本里另有一份 `'v1.3.4'` 兜底。
     // 刷新脚本只改 HTML，脚本那份会在每次切到「关于软件」标签页或切语言时把它覆盖回去，
     // 于是「发了新版，官网显示的还是旧版号」，且**没有任何报错**。
-    // 现在脚本必须读占位里的值，而不是自带一份。
-    const script = html.slice(html.indexOf('<script>'))
+    // 现在脚本必须读占位里的值，而不是自带一份。脚本已拆到 app.js，所以这里读 app.js。
     expect(script).not.toMatch(/release\s*\?\s*release\.tag\s*:\s*'v[0-9]/)
     expect(script).toContain('aboutVersionFallback')
     expect(script).toMatch(/aboutVersion\.textContent\s*=\s*release\s*\?\s*release\.tag\s*:\s*aboutVersionFallback/)

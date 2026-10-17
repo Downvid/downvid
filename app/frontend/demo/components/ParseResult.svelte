@@ -5,6 +5,7 @@
   import { formatBytes, formatDuration } from '../lib/format'
 
   const video = $derived(app.video)
+  const existing = $derived(app.alreadyDownloaded)
 
   const modes = $derived(
     video
@@ -50,6 +51,17 @@
         <Icon name="close" size={18} />
       </button>
     </header>
+
+    {#if existing}
+      <div class="dedupe-note">
+        <Icon name="check_circle" size={16} />
+        <span>{t('result.already')}</span>
+        <button class="link-btn" onclick={() => app.setTab('history')}>
+          {t('result.openHistory')}
+          <Icon name="arrow_forward" size={12} />
+        </button>
+      </div>
+    {/if}
 
     {#if video.needsCookies}
       <div class="cookie-note">
@@ -188,14 +200,25 @@
     </div>
 
     <footer class="result-foot">
-      <div class="summary">
-        <span class="summary-label">{app.canDownload ? app.selectionSummary : app.selectionHint}</span>
-        <span class="summary-path num">{t('format.downloadTo')} {app.settings.downloadDir}</span>
-      </div>
-      <button class="btn btn-primary btn-lg download-btn" disabled={!app.canDownload} onclick={() => app.addDownload()}>
-        <Icon name="download" size={18} />
-        <span>{t('format.download')}</span>
-      </button>
+      {#if existing}
+        <div class="summary">
+          <span class="summary-label">{t('result.alreadyHint')}</span>
+          <span class="summary-path num">{existing.filePath}</span>
+        </div>
+        <button class="btn btn-ghost btn-lg download-btn" onclick={() => app.setTab('history')}>
+          <Icon name="history" size={18} />
+          <span>{t('result.openHistory')}</span>
+        </button>
+      {:else}
+        <div class="summary">
+          <span class="summary-label">{app.canDownload ? app.selectionSummary : app.selectionHint}</span>
+          <span class="summary-path num">{t('format.downloadTo')} {app.settings.downloadDir}</span>
+        </div>
+        <button class="btn btn-primary btn-lg download-btn" disabled={!app.canDownload} onclick={() => app.addDownload()}>
+          <Icon name="download" size={18} />
+          <span>{t('format.download')}</span>
+        </button>
+      {/if}
     </footer>
   </article>
 {/if}
@@ -203,7 +226,7 @@
 <style>
   .result {
     border: 1px solid var(--rule);
-    border-radius: 12px;
+    border-radius: var(--radius-panel);
     background: var(--paper-raised);
     box-shadow: var(--shadow-sheet);
     overflow: hidden;
@@ -220,7 +243,7 @@
     width: 168px;
     height: 94px;
     flex: none;
-    border-radius: 8px;
+    border-radius: var(--radius-media);
     border: 1px solid var(--rule);
     background-color: var(--paper-sunk);
     background-size: cover;
@@ -294,18 +317,26 @@
     opacity: 0.45;
   }
 
-  .cookie-note {
+  .cookie-note,
+  .dedupe-note {
     display: flex;
     align-items: center;
     gap: 8px;
     margin: 0 18px;
     padding: 9px 12px;
     border: 1px solid color-mix(in oklab, var(--accent-deep) 22%, transparent);
-    border-radius: 7px;
+    border-radius: var(--radius-control);
     background: var(--accent-wash);
     color: var(--accent-deep);
     font-size: 11.5px;
     line-height: 1.5;
+  }
+  .dedupe-note {
+    margin-bottom: 12px;
+  }
+  .dedupe-note span {
+    flex: 1;
+    min-width: 0;
   }
   .cookie-note span {
     flex: 1;
