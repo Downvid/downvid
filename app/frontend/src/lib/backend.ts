@@ -210,6 +210,9 @@ export function toVideoInfo(info: BackendVideoInfo, url: string): VideoInfo {
     id: tk.id,
     name: tk.name,
     lang: tk.language,
+    // 这两个字段决定后端能不能真的选中这条音轨，漏了就是「选了没用」
+    formatId: tk.formatId,
+    isM3u8: tk.isM3u8,
   }))
 
   const subtitles: SubtitleOption[] = (info.subtitles ?? []).map((s) => ({
@@ -288,6 +291,8 @@ export interface StartDownloadParams {
   hasAudio: boolean
   subtitles: string[]
   outputDir: string
+  /** 选中的音轨（仅 YouTube 多音轨） */
+  audioTrack?: { formatId: string; language: string; isM3u8?: boolean }
 }
 
 /**
@@ -311,6 +316,7 @@ export async function startDownload(
       hasAudio: p.hasAudio,
       subtitles: p.subtitles,
       outputDir: p.outputDir,
+      audioTrack: p.audioTrack,
       // 用**用户设置**里的模板。早先这里写死 `'%(title)s.%(ext)s'`,
       // 于是设置页改了文件名模板对下载毫无影响——用户改完再下载，
       // 文件名还是老样子。

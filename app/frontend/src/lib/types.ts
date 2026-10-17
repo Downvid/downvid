@@ -50,6 +50,16 @@ export interface TrackOption {
   id: string
   name: string
   lang: string
+  /**
+   * 该音轨对应的 yt-dlp format id。
+   *
+   * **必须带**：后端要靠它把格式选择器拼成 `bestaudio[language^=xx]`，
+   * 或者（m3u8 音轨）直接用这个 format id。少了它，用户在界面上选的语言
+   * 完全不起作用——下下来的还是默认音轨，而且没有任何提示。
+   */
+  formatId: string
+  /** m3u8 音轨要单独处理（不能走 `bestaudio` 选择器） */
+  isM3u8?: boolean
 }
 
 /** 字幕 */
@@ -120,6 +130,33 @@ export interface TaskItem {
   status: TaskStatus
   createdAt: number
   startedAt: number
+  /**
+   * 这个任务实际下载的格式 / 音轨 / 字幕。
+   *
+   * **必须存在任务上，不能从解析面板现取**：暂停后点「继续」时，用户很可能
+   * 已经解析了另一个视频（甚至清空了结果），此时 `currentPick()` 拿到的是
+   * 完全不相干的格式——续传会下成另一个清晰度，而界面上的任务标题还是旧的。
+   * 这个 bug 的表现是「继续之后进度从头开始、文件名也变了」。
+   */
+  formatId: string
+  /**
+   * 这个格式是否**自带音轨**。
+   *
+   * 它决定后端拼出的格式选择器：`hasAudio` 时是 `<id>/bv*+ba/b`
+   * （单文件带音频），否则是 `<id>+bestaudio`（视频流 + 单独音轨）。
+   * 猜错的结果是「下到没有声音的视频」，而这一点在进度条上完全看不出来。
+   * 所以必须随任务一起保存，续传时原样用。
+   */
+  hasAudio: boolean
+  /**
+   * 选中的音轨快照（仅 YouTube 多音轨）。
+   *
+   * 存完整对象而不是只存 id：后端要的是 `formatId` + `language` + `isM3u8`
+   * 三样，只存 id 的话续传时还得回去查解析结果——而那份结果可能已经被
+   * 用户换成别的视频了。
+   */
+  audioTrack?: { formatId: string; language: string; isM3u8?: boolean }
+  subtitles: string[]
   /** 最近 24 次采样的速度（画迷你折线用） */
   speedHistory: number[]
   filePath: string

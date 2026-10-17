@@ -81,6 +81,7 @@ import type {
 import { detectPlatform, extractUrl, hostOf, platformName } from './url'
 import { findExistingDownload } from './dedupe'
 import { applyQualityDisambiguation } from './filename'
+import { snapshotForRun } from './snapshot'
 import { dayGroup, formatBytes as formatBytesUtil } from './format'
 
 export type ParseState = 'idle' | 'parsing' | 'done' | 'error'
@@ -550,6 +551,20 @@ class AppStore {
     })
   }
 
+  /**
+   * 把当前选中的音轨转成下载用的快照。
+   *
+   * 返回 undefined 表示「不指定音轨」（走后端默认的 `bestaudio`）。
+   * 注意 `formatId` 为空时**也要**带上 language：后端会退化成
+   * `bestaudio[language^=xx]`，这比丢掉选择要好。
+   */
+  private currentTrackSnapshot(): { formatId: string; language: string; isM3u8?: boolean } | undefined {
+    if (!this.selectedTrackId) return undefined
+    const track = this.video?.tracks.find((x) => x.id === this.selectedTrackId)
+    if (!track) return undefined
+    return { formatId: track.formatId, language: track.lang, isM3u8: track.isM3u8 }
+  }
+
   /** 是否可下载（界面的按钮 enable 条件） */
   get canDownload(): boolean {
     if (!this.video) return false
@@ -584,6 +599,12 @@ class AppStore {
       mode: this.mode,
       quality: pick.quality,
       ext: pick.ext,
+      // 把选择**固化到任务上**：暂停后「继续」要用它，而不是读解析面板。
+      // 详见 TaskItem.formatId 的注释（读面板会把续传变成「按当前格式重下」）。
+      formatId: pick.formatId,
+      hasAudio: pick.hasAudio,
+      audioTrack: this.currentTrackSnapshot(),
+      subtitles: [...this.subtitles],
       totalBytes: pick.totalBytes,
       bytesDone: 0,
       progress: 0,
@@ -598,31 +619,33 @@ class AppStore {
     this.tasks = [task, ...this.tasks]
     this.railOpen = true
 
-    await this.launch(task, pick)
+    await this.launch(task, pick.height)
   }
 
   /** 真正发起一次下载（也用于重试） */
-  private async launch(
-    task: TaskItem,
-    pick: { formatId: string; hasAudio: boolean; height?: number },
-  ): Promise<void> {
+  private async launch(task: TaskItem, height?: number): Promise<void> {
+    // 走 `snapshotForRun`：有任务就用任务的快照，只在首次发起时读界面选择。
+    // 这条规则被 7 条用例钉住（见 lib/snapshot.test.ts）。
+    const snap = snapshotForRun(task, null)
+    if (!snap) return
     const res = await startDownload({
       taskId: task.id,
       url: task.url,
-      formatId: pick.formatId,
+      // 用**任务上**的 formatId，而不是解析面板当前选中的
+      formatId: snap.formatId,
       mode: task.mode,
-      hasAudio: pick.hasAudio,
-      subtitles: this.subtitles,
+      // 全部从任务上读：任务是一次下载的**完整快照**，
+      // 界面上的「当前选中」随时会被用户改掉，不能作为续传依据。
+      hasAudio: snap.hasAudio,
+      subtitles: snap.subtitles,
+      audioTrack: snap.audioTrack,
       outputDir: this.settings.downloadDir,
       // 有分辨率才让它进文件名。
       //
       // 纯音频/直链这类没有高度的格式，`%(height)s` 会渲染成 `NA`，
       // 产物名就成了 `标题 [NAp].mp4`。这里提前删掉那个占位符，
       // 比让 yt-dlp 事后回退到 format_id（`[mp4]`）更干净。
-      filenameTemplate: applyQualityDisambiguation(
-        this.settings.filenameTemplate,
-        pick.height,
-      ),
+      filenameTemplate: applyQualityDisambiguation(this.settings.filenameTemplate, height),
     })
 
     if (!res.ok) {
@@ -762,10 +785,14 @@ class AppStore {
 
     if (task.status === 'paused') {
       // 继续 = 重新发起一次下载（yt-dlp 会从 .part 续传）。
+      //
+      // 用**任务自己**的 formatId / subtitles（`launch` 内部从 task 读）。
+      // 早先这里取 `this.currentPick()`——即解析面板当前选中的格式，
+      // 而用户暂停后很可能已经解析了别的视频：续传会下成另一个清晰度，
+      // 甚至下成另一个视频的格式，而任务标题还是旧的。
+      //
       // **没有跨重启恢复**：任务列表只活在内存里，重启后已暂停的任务不会自己回来。
-      const pick = this.currentPick()
-      if (!pick) return
-      await this.launch(task, pick)
+      await this.launch(task)
     }
   }
 
@@ -781,10 +808,10 @@ class AppStore {
   async retryTask(id: string): Promise<void> {
     const task = this.tasks.find((x) => x.id === id)
     if (!task) return
-    const pick = this.currentPick()
-    if (!pick) return
+    // 重试同样用任务自己的格式：失败的那个任务与「当前选中的格式」
+    // 完全可能是两回事（用户已经往下操作了）。
     this.patchTask(id, { status: 'queued', progress: 0, bytesDone: 0, speedBps: 0, etaSec: 0, error: undefined, speedHistory: [] })
-    await this.launch(task, pick)
+    await this.launch(task)
   }
 
   clearCompleted(): void {

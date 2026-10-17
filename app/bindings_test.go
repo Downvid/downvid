@@ -304,3 +304,57 @@ func TestPlatformKeyMatchesElectronNaming(t *testing.T) {
 		}
 	}
 }
+
+// TestAudioTrackReachesBuildArgs 音轨选择必须真的进到 yt-dlp 参数里。
+//
+// 回归背景：前端一直有「音轨」选择器，`download.Options.AudioTrack` 也支持，
+// 但 `DownloadRequest` 里**没有这个字段**——断点在中间那一层映射上。
+// 表现是「选了日语，下下来还是默认音轨」，而且没有任何提示，
+// 因为后端压根没收到这个选择。
+func TestAudioTrackReachesBuildArgs(t *testing.T) {
+	// 1) nil 保持不变（走默认 bestaudio）
+	if got := toDownloadAudioTrack(nil); got != nil {
+		t.Fatalf("nil 应原样返回 nil，实际 %+v", got)
+	}
+
+	// 2) 字段逐个传过去。这里刻意用**非 m3u8**：m3u8 分支会直接用自己的
+	//    format id、根本不看语言，用它验不出「语言有没有传过去」。
+	got := toDownloadAudioTrack(&DownloadAudioTrack{
+		FormatID: "251-3", Language: "ja", IsM3U8: false,
+	})
+	if got == nil {
+		t.Fatal("非 nil 输入不该得到 nil")
+	}
+	if got.FormatID != "251-3" || got.Language != "ja" || got.IsM3U8 {
+		t.Fatalf("字段没传全：%+v", got)
+	}
+
+	// 3) 走**真实入口**：`buildArgs` 是 StartDownload 用的那一段映射。
+	//
+	// 早先这段用例直接调 `download.BuildArgs(... AudioTrack: got)`，
+	// 于是它只验证了 download 包——把 `StartDownload` 里的
+	// `toDownloadAudioTrack(...)` 改成 nil，用例照样通过（变异验证抓到的）。
+	// 现在从 DownloadRequest 进、到参数出，中间不能有断点。
+	app := NewApp()
+	app.dataDir = t.TempDir()
+
+	args := app.buildArgs(DownloadRequest{
+		TaskID: "t", URL: "https://youtu.be/x", FormatID: "137", DownloadMode: "video",
+		OutputDir:  t.TempDir(),
+		AudioTrack: &DownloadAudioTrack{FormatID: "251-3", Language: "ja"},
+	})
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "language^=ja") {
+		t.Fatalf("音轨语言没有进到格式选择器（请求里的音轨没被传下去）：%s", joined)
+	}
+
+	// 4) m3u8 音轨要**直接**用它的 format id，而不是走 bestaudio 选择器
+	argsM3U8 := app.buildArgs(DownloadRequest{
+		TaskID: "t", URL: "https://youtu.be/x", FormatID: "137", DownloadMode: "video",
+		OutputDir:  t.TempDir(),
+		AudioTrack: &DownloadAudioTrack{FormatID: "hls-audio", Language: "ja", IsM3U8: true},
+	})
+	if !strings.Contains(strings.Join(argsM3U8, " "), "hls-audio") {
+		t.Fatalf("m3u8 音轨应直接用自己的 format id：%s", strings.Join(argsM3U8, " "))
+	}
+}

@@ -150,6 +150,30 @@ func invalidateDepsCache() {
 	depsCacheMu.Unlock()
 }
 
+// buildArgs 把请求翻译成 yt-dlp 参数。
+//
+// 抽成方法是为了**能被测试**：`StartDownload` 会真的起进程，没法在单测里
+// 断言参数；而这条映射恰恰出过 bug（`DownloadRequest` 少了 AudioTrack 字段，
+// 于是界面上的音轨选择器完全不起作用，且没有任何报错）。
+func (a *App) buildArgs(opts DownloadRequest) []string {
+	return download.BuildArgs(download.Options{
+		TaskID:       opts.TaskID,
+		URL:          opts.URL,
+		FormatID:     opts.FormatID,
+		DownloadMode: opts.DownloadMode,
+		HasAudio:     opts.HasAudio,
+		Subtitles:    opts.Subtitles,
+		AudioTrack:   toDownloadAudioTrack(opts.AudioTrack),
+		Proxy:        a.currentProxy(),
+		FilenameTmpl: opts.FilenameTemplate,
+		Acceleration: a.acceleration(),
+	}, opts.OutputDir, download.BuildArgsContext{
+		FfmpegLocation: a.ffmpegLocation(),
+		Aria2Path:      a.resolveAria2(),
+		JSRuntime:      a.jsRuntime(),
+	})
+}
+
 // StartDownload 启动一次下载（异步：立即返回，进度走 download:progress 事件）。
 //
 // 参数用一个结构体而不是长参数列表：Wails 会把结构体生成 TS 类型，
@@ -165,21 +189,7 @@ func (a *App) StartDownload(opts DownloadRequest) StartDownloadResult {
 			MissingKind: "yt-dlp"}
 	}
 
-	args := download.BuildArgs(download.Options{
-		TaskID:       opts.TaskID,
-		URL:          opts.URL,
-		FormatID:     opts.FormatID,
-		DownloadMode: opts.DownloadMode,
-		HasAudio:     opts.HasAudio,
-		Subtitles:    opts.Subtitles,
-		Proxy:        a.currentProxy(),
-		FilenameTmpl: opts.FilenameTemplate,
-		Acceleration: a.acceleration(),
-	}, opts.OutputDir, download.BuildArgsContext{
-		FfmpegLocation: a.ffmpegLocation(),
-		Aria2Path:      a.resolveAria2(),
-		JSRuntime:      a.jsRuntime(),
-	})
+	args := a.buildArgs(opts)
 
 	// 异步：Wails 的绑定方法若阻塞整个下载，界面会卡住
 	go func() {
@@ -224,6 +234,22 @@ func (a *App) PauseDownload(taskID string) bool {
 	return a.runner.Pause(taskID)
 }
 
+// toDownloadAudioTrack 把请求里的音轨转成 download 包的结构。
+//
+// 抽出来的理由：nil 与「空字段」必须区分开——nil 表示用户没选音轨
+// （走默认 `bestaudio`），而非 nil 但 FormatID 为空则是前端传错了，
+// 那种情况交给后端按语言匹配，别当成「没选」。
+func toDownloadAudioTrack(t *DownloadAudioTrack) *download.AudioTrack {
+	if t == nil {
+		return nil
+	}
+	return &download.AudioTrack{
+		FormatID: t.FormatID,
+		Language: t.Language,
+		IsM3U8:   t.IsM3U8,
+	}
+}
+
 // DownloadRequest 是一次下载的参数。
 type DownloadRequest struct {
 	TaskID           string   `json:"taskId"`
@@ -234,6 +260,20 @@ type DownloadRequest struct {
 	Subtitles        []string `json:"subtitles"`
 	OutputDir        string   `json:"outputDir"`
 	FilenameTemplate string   `json:"filenameTemplate"`
+	// AudioTrack 是选中的音轨（仅 YouTube 多音轨）。
+	//
+	// 早先这个字段根本不存在，于是界面上的「音轨」选择器**完全不起作用**：
+	// 用户选了日语，下下来还是默认音轨，而且没有任何提示——因为后端
+	// 压根没收到这个选择。download.Options.AudioTrack 早就支持了，
+	// 断点只在这一次映射上。
+	AudioTrack *DownloadAudioTrack `json:"audioTrack,omitempty"`
+}
+
+// DownloadAudioTrack 是前端传来的音轨选择。
+type DownloadAudioTrack struct {
+	FormatID string `json:"formatId"`
+	Language string `json:"language"`
+	IsM3U8   bool   `json:"isM3u8,omitempty"`
 }
 
 // StartDownloadResult 是启动结果。
