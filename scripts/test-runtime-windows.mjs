@@ -213,7 +213,7 @@ try {
           return tsTranspiledModule(path.join(root, 'electron', 'download', 'process-tree.ts'))
         }
         if (name.startsWith('.')) return {}
-        return require(name)
+        return nodeRequire(name)
       },
     })
     let timer
