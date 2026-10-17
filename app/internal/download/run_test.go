@@ -78,8 +78,29 @@ exit 0
 	if !containsAll(kinds, []string{"progress", "progress", "file", "merging"}) {
 		t.Fatalf("事件应包含 2 条 progress + file + merging，got %v", kinds)
 	}
-	if events[0].Percent < 49.9 || events[0].Percent > 50.1 {
-		t.Errorf("第一条进度应约 50%%，got %v", events[0].Percent)
+
+	// **不能假设 events[0] 是第一条进度**：stdout 与 stderr 是两个协程并行读的，
+	// 事件到达顺序不保证（实测 file 事件会插到进度前面，而且在并行跑全量测试时
+	// 才会暴露——单独跑这个包永远通过）。
+	// 按内容断言，而不是按位置。
+	var percents []float64
+	for _, ev := range events {
+		if ev.Kind == "progress" {
+			percents = append(percents, ev.Percent)
+		}
+	}
+	if len(percents) != 2 {
+		t.Fatalf("应有 2 条进度，got %v", percents)
+	}
+	// 一条是 ~50%，一条是 100%（顺序不保证）
+	has50 := false
+	for _, pct := range percents {
+		if pct > 49.9 && pct < 50.1 {
+			has50 = true
+		}
+	}
+	if !has50 {
+		t.Errorf("应有一条约 50%% 的进度，got %v", percents)
 	}
 }
 

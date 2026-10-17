@@ -36,6 +36,7 @@ import (
 	"github.com/Downvid/downvid/app/internal/download"
 	"github.com/Downvid/downvid/app/internal/history"
 	"github.com/Downvid/downvid/app/internal/parse"
+	"github.com/Downvid/downvid/app/internal/shell"
 	"github.com/Downvid/downvid/app/internal/update"
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -270,10 +271,15 @@ func (a *App) CheckUpdate(source string) map[string]any {
 // ===== 前端用得到的辅助 =====
 
 // OpenExternal 用系统浏览器打开链接。
-func (a *App) OpenExternal(url string) {
-	if a.ctx != nil {
-		wruntime.BrowserOpenURL(a.ctx, url)
+//
+// 走 shell 包而不是 Wails 的 BrowserOpenURL：前者会校验协议，
+// 只允许 http/https——历史记录里的 URL 是可被手工编辑的 JSON，
+// 能打开任意 scheme 就等于给了一个「执行系统命令」的入口。
+func (a *App) OpenExternal(url string) OpenPathResult {
+	if err := shell.OpenExternal(url); err != nil {
+		return OpenPathResult{Error: err.Error()}
 	}
+	return OpenPathResult{OK: true}
 }
 
 // emit 发事件给前端。

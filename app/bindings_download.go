@@ -27,6 +27,7 @@ import (
 	"github.com/Downvid/downvid/app/internal/deps"
 	"github.com/Downvid/downvid/app/internal/download"
 	"github.com/Downvid/downvid/app/internal/parse"
+	"github.com/Downvid/downvid/app/internal/shell"
 )
 
 // Dependency 是一次探测结果。
@@ -517,4 +518,52 @@ func (a *App) depsManager() *deps.Manager {
 		a.deps = deps.NewManager(a.sidecarPath(), filepath.Join(a.dataDir, "runtime", "bin"))
 	}
 	return a.deps
+}
+
+// ===== 系统集成（打开文件 / 目录 / 链接 / 磁盘空间）=====
+
+// OpenPathResult 是打开操作的结果。
+//
+// 用结构体而不是单个 bool：失败时前端要显示原因
+// （「文件已被删除」与「没有权限」的处理方式完全不同）。
+type OpenPathResult struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+}
+
+// OpenPath 用系统默认程序打开文件或目录。
+func (a *App) OpenPath(path string) OpenPathResult {
+	if err := shell.OpenPath(path); err != nil {
+		return OpenPathResult{Error: err.Error()}
+	}
+	return OpenPathResult{OK: true}
+}
+
+// ShowInFolder 在文件管理器里定位到该文件。
+func (a *App) ShowInFolder(path string) OpenPathResult {
+	if err := shell.ShowInFolder(path); err != nil {
+		return OpenPathResult{Error: err.Error()}
+	}
+	return OpenPathResult{OK: true}
+}
+
+// DiskSpaceResult 是磁盘空间查询结果。
+type DiskSpaceResult struct {
+	Free  int64  `json:"free"`
+	Total int64  `json:"total"`
+	Error string `json:"error,omitempty"`
+}
+
+// GetDiskSpace 返回指定目录所在磁盘的剩余/总空间（字节）。
+//
+// 目录为空时用默认下载目录——前端不该为了查空间而先问一次下载目录在哪。
+func (a *App) GetDiskSpace(dir string) DiskSpaceResult {
+	if dir == "" {
+		dir = a.downloadsDir
+	}
+	free, total, err := shell.DiskSpace(dir)
+	if err != nil {
+		return DiskSpaceResult{Error: err.Error()}
+	}
+	return DiskSpaceResult{Free: free, Total: total}
 }
