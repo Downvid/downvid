@@ -107,19 +107,73 @@ Validating YAML syntax is not enough.
 Three components: **renderer** (Vue 3 UI), **main process** (Node — downloading, parsing, updates),
 and a **Go sidecar** (detects and installs yt-dlp / ffmpeg). They talk over IPC and NDJSON.
 
+> **Two architectures coexist during the transition.** The new one (Wails) lives in
+> `app/`, the old one (Electron) in `electron/` + `src/`. They are **released in parallel**:
+> existing users stay on Electron's auto-update channel, the new build ships as a separate
+> artifact for manual download. See "Architecture transition" below.
+
+### New architecture (`app/`, Go + Wails + Svelte)
+
 | Path | Contents | Output |
 |------|----------|--------|
-| `backend/` | Go dependency sidecar | `backend/build/<platform>-<arch>/` |
+| `app/internal/*` | **Go core, 14 packages, zero cross-imports** (download / parse / deps / update / history / settings …) | — |
+| `app/main.go` / `app/app.go` / `app/bindings_*.go` | Wails shell: plumbing only, no business rules | `app/build/bin/` |
+| `app/frontend/` | Svelte 5 + Vite renderer | embedded into the binary (`go:embed`) |
+| `app/scripts/build.sh` | **build entry point**: compiles the sidecar, then builds with `-tags withsidecar` | single file ~18 MB |
+
+Packages under `app/internal/*` **must not import each other** (enforced by
+`pnpm lint:boundaries`, rule G1). It is the property most worth protecting: every package
+stays independently testable and replaceable, so swapping the transport
+(Wails bindings → container WebSocket) stays cheap.
+
+### Old architecture (Electron, kept during the transition)
+
+| Path | Contents | Output |
+|------|----------|--------|
 | `electron/` | main process | `dist-electron/` |
-| `src/` | Vue 3 renderer (`<script setup>`, Tailwind v4, Pinia) | `dist/` |
+| `src/` | Vue 3 renderer | `dist/` |
+
+Both Electron processes are built by `vite-plugin-electron/simple` from one `vite.config.ts`.
+`vitest.config.ts` is **separate** from `vite.config.ts` because the latter runs `go build`
+at buildStart and tests must not trigger that.
+
+### Shared and peripheral
+
+| Path | Contents | Output |
+|------|----------|--------|
+| `backend/` | Go dependency sidecar (detects and installs yt-dlp / ffmpeg); compiled into the Wails binary by `build.sh` | `backend/build/<platform>-<arch>/` |
 | `shared/app.ts` | **single source** of repo coordinates and external links | imported by all three |
 | `tests/` | Vitest pure-logic tests | — |
 | `docker/` | container image (entrypoint, virtual display and VNC orchestration; see `docs/docker.md`) | OCI image |
-| `website/` | landing page (index.html + styles.css + app.js, no build; published by Vercel's Git integration) | — |
-| `scripts/` | manifest generation, sidecar build, IPC / website lint, release notes | — |
+| `website/` | landing page (no build; published by Vercel's Git integration) | — |
+| `scripts/` | manifest generation, all lints, release notes | — |
 
-Both Electron processes are built by `vite-plugin-electron/simple` from one `vite.config.ts`;
-the Go sidecar comes from the `goBackend()` plugin in that same file.
+### Architecture transition (Electron → Wails)
+
+Three stages, **no skipping**:
+
+| Stage | Status | Notes |
+|---|---|---|
+| 1. Parallel release | **now** | Electron and Wails ship together. Existing users' auto-update is untouched; the Wails build uses a separate name (`DownVid-Wails-*`) for manual download |
+| 2. Wails self-update | TODO | Go only has `CheckUpdate` — no download/install yet. Required before the new build can update itself |
+| 3. Migrator | TODO | Package the Wails build inside NSIS/dmg (same shapes as the old one) so existing users are migrated on their next auto-update |
+
+**Why we cannot switch directly**: existing users rely on `electron-updater`, which reads
+`latest*.yml` plus NSIS/dmg. Wails produces bare `.app`/`.exe`, which does not fit. Replacing
+the artifacts directly leaves users seeing "update available" but unable to install —
+worse than "no update detected", and that channel **can never be repaired once broken**.
+
+Two constraints that must hold (both have tests):
+
+1. **`latest*.yml` may only list Electron artifacts.** A Wails package in there makes existing
+   users download something they cannot install (`scripts/test-updater.mjs` guards this).
+2. **`arch` defaults to `electron`.** If it defaulted to `wails`, the transitional build would
+   mistake itself for the new architecture and skip the electron-updater channel
+   (`bindings_test.go` guards this).
+
+The transitional build **detects** new-architecture releases and surfaces a hint in Settings
+(`app/internal/update/migration.go`), but migration stays manual — it is a one-way door:
+once on the new architecture there is no path back to Electron.
 
 ### Change-impact checklist
 

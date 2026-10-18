@@ -110,24 +110,70 @@ Dependabot 已忽略其大版本升级。
 
 ## 项目结构
 
+> **当前是两套架构并存的过渡期。** 新架构（Wails）在 `app/`，旧架构（Electron）
+> 在 `electron/` + `src/`。两者**并行发布**：老用户走 Electron 的自动更新通道，
+> 新架构作为独立产物供手动下载。切换计划见「架构过渡」一节。
+
+### 新架构（`app/`，Go + Wails + Svelte）
+
 | 路径 | 内容 | 输出 |
 |------|------|------|
-| `backend/` | Go 依赖边车（探测 + 下载 yt-dlp/ffmpeg） | `backend/build/<platform>-<arch>/` |
+| `app/internal/*` | **Go 核心，14 个包，互相零依赖**（下载 / 解析 / 依赖 / 更新 / 历史 / 设置 …） | — |
+| `app/main.go` / `app/app.go` / `app/bindings_*.go` | Wails 壳：只做「搬运」，不含业务规则 | `app/build/bin/` |
+| `app/frontend/` | Svelte 5 + Vite 渲染进程 | 打进二进制（`go:embed`） |
+| `app/scripts/build.sh` | **构建入口**：先编依赖边车 → 再带 `-tags withsidecar` 构建 | 单文件约 18 MB |
+
+`app/internal/*` 之间**不得互相 import**（`pnpm lint:boundaries` 规则 G1 校验）。
+这是架构上最值得守住的性质：每个包都能独立测试、独立替换，
+「换个传输层」（Wails 绑定 → 容器 WebSocket）才不会变成大工程。
+
+### 旧架构（Electron，过渡期保留）
+
+| 路径 | 内容 | 输出 |
+|------|------|------|
 | `electron/` | 主进程 | `dist-electron/` |
-| `src/` | Vue 3 渲染进程（`<script setup>`、Tailwind v4、Pinia） | `dist/` |
+| `src/` | Vue 3 渲染进程 | `dist/` |
+
+两个 Electron 进程由 `vite-plugin-electron/simple` 从**同一个** `vite.config.ts` 构建。
+`vitest.config.ts` 与 `vite.config.ts` **分开**，因为后者会在 buildStart 时调 `go build`，
+跑测试不该触发。
+
+### 共用与周边
+
+| 路径 | 内容 | 输出 |
+|------|------|------|
+| `backend/` | Go 依赖边车（探测 + 下载 yt-dlp/ffmpeg），由 `app/scripts/build.sh` 编入 Wails 二进制 | `backend/build/<platform>-<arch>/` |
 | `shared/app.ts` | 仓库坐标与外部链接的**唯一来源** | 被三方共同引用 |
 | `tests/` | Vitest 纯逻辑单测 | — |
 | `docker/` | 容器镜像（原生 WebUI，见 `docs/docker.md` 与 `docker/README.md`） | GHCR 多架构镜像 |
-| `website/` | 产品落地页（index.html + styles.css + app.js，无构建，由 Vercel 的 Git 集成发布） | — |
-| `scripts/` | 清单生成、构建边车、IPC / 官网校验、Release 正文 | — |
+| `website/` | 产品落地页（无构建，由 Vercel 的 Git 集成发布） | — |
+| `scripts/` | 清单生成、各类 lint、Release 正文 | — |
 
-两个 Electron 进程由 `vite-plugin-electron/simple` 从**同一个** `vite.config.ts` 构建；
-Go 边车由同文件的 `goBackend()` 插件构建。`vitest.config.ts` 与 `vite.config.ts` **分开**，
-因为后者会在 buildStart 时调 `go build`，跑测试不该触发。
+---
 
-规模较大的目录（有注释说明职责）：
-`electron/ipc/`（按域拆分）、`electron/download/`（direct / ytdlp / progress）、
-`electron/parsers/`（douyin / kuaishou / ytdlp / formats / shared）。
+## 架构过渡（Electron → Wails）
+
+三段式，**不能跳步**：
+
+| 阶段 | 状态 | 说明 |
+|---|---|---|
+| 1. 并行发布 | **现在** | Electron 与 Wails 同时发。老用户自动更新不受影响；Wails 版独立命名（`DownVid-Wails-*`）供手动下载 |
+| 2. 补齐 Wails 自更新 | 待做 | Go 侧只有 `CheckUpdate`，没有下载/安装。做完才能让新架构自己更新 |
+| 3. 迁移器 | 待做 | Wails 产物打进 NSIS/dmg 外壳（格式与老版一致），老用户下次自动更新时被换成新版 |
+
+**为什么不能直接切换**：老用户靠 `electron-updater` 读 `latest*.yml` + NSIS/dmg。
+Wails 产出裸 `.app`/`.exe`，格式对不上。直接替换的话，用户会看到「有新版本」
+但点了装不上 —— 比「检测不到」更糟，而且那条通道**一旦坏掉就再也修不好**。
+
+两个必须守住的约束（都有用例）：
+
+1. **`latest*.yml` 只能列 Electron 产物**。Wails 包混进去会让老用户下载到装不上的
+   文件（`scripts/test-updater.mjs` 有专门用例）。
+2. **`arch` 默认 `electron`**。若默认 `wails`，过渡版会误判自己是新架构、跳过
+   electron 更新通道（`bindings_test.go` 有用例）。
+
+过渡版能**检测**新架构版本并在设置页提示（`app/internal/update/migration.go`），
+但迁移动作由用户手动确认 —— 迁移是单向门，装上新架构后回不到 Electron。
 
 ---
 

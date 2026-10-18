@@ -1,4 +1,22 @@
-# DownVid 目标架构
+# DownVid 目标架构（历史方案）
+
+> ## ⚠️ 本文描述的 `core/` 方案已被 Wails 方案取代（2026-10）
+>
+> 这份文档是 issue #74「阶段二」的产物，当时的目标是「纯 Node 的 core +
+> 三个薄适配层」。实际落地时选了另一条路：
+>
+> | 当时设想 | 实际采用 |
+> | --- | --- |
+> | `core/`（纯 Node 业务核心） | **`app/internal/*`**（Go，14 个包，互相零依赖） |
+> | Electron / HTTP+WS / 浏览器 三适配层 | **Wails 绑定 / 容器 WebSocket**（共用 Go 核心） |
+> | `src/`（Vue） | **`app/frontend/`**（Svelte 5） |
+>
+> `core/` 目录在 2026-10-18 删除 —— 它从建立起就没被任何代码 import 过，
+> 是个空壳。真正可复用的核心是 Go 的 `app/internal/*`，
+> 边界由 `pnpm lint:boundaries` 的规则 G1 / G2 机械校验。
+>
+> **保留本文的理由**：它是 issue #74 的可追溯记录，能解释「为什么最后没走
+> 这条路」。下面关于 `core/*` 的具体模块划分请当作历史方案阅读，不要照着实现。
 
 > 阶段二产物，对应 [issue #74](https://github.com/yxxbc/downvid/issues/74) §「二、制定 DownVid 自身的目标架构」。
 >

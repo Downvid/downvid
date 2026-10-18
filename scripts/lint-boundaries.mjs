@@ -1,43 +1,54 @@
 #!/usr/bin/env node
 /**
- * 架构边界静态校验（docs/provenance/architecture.md §3.2 的七条规则）。
+ * 架构边界静态校验。
  *
  * ## 为什么需要它
  *
- * 本仓库最擅长把「静默失败」变成 CI 红叉：IPC 三处同步（lint:ipc）、图标名（lint:icons）、
- * 官网词条（lint:website）、文档数字（lint:docs）、代码来源（audit:provenance）。
- * 唯独**架构边界**一直只写在文档里靠自觉维持。
+ * 本仓库擅长把「静默失败」变成 CI 红叉（lint:ipc / lint:icons / lint:website /
+ * lint:docs / audit:provenance），唯独**架构边界**一直只写在文档里靠自觉维持。
  *
- * 而边界恰恰是最容易悄悄腐化的东西：随手 `import { app } from 'electron'` 到本该纯净的
- * 模块里，类型检查通过、单测通过、桌面端跑得好好的 —— 只有容器镜像会在运行时炸，
- * 而容器 CI 要几分钟才跑到那一步。等发现时，往往已经有十几个模块这么写了。
+ * 而边界恰恰最容易悄悄腐化：随手 import 'electron' 到本该纯净的模块里，
+ * 类型检查通过、单测通过、桌面端跑得好好的 —— 只有容器镜像会在运行时炸，
+ * 而容器 CI 要几分钟才跑到那一步。
  *
- * ## 七条规则（与架构文档一一对应）
+ * ## 校验对象在 2026-10 变了
+ *
+ * 早先这套规则守护的是 core/（一个「桌面端与容器端共用纯 Node 核心」的目录）。
+ * 但 Wails 方案落地后，**真正可复用的核心是 Go 的 app/internal/**——
+ * 那个 core/ 从来没被任何代码 import 过，是个空壳，已删除。
+ *
+ * 所以现在做两类校验。
+ *
+ * ### A. Go 侧分层（新的主要职责）
  *
  * | # | 规则 | 违规后果 |
  * |---|---|---|
- * | 1 | `core/**` 不得 import 'electron' | core 不再可在无 Electron 环境复用 |
- * | 2 | `core/**` 不得 import `src/**` / `docker/**` / `electron/**` | core 依赖了界面或适配层 |
- * | 3 | `src/**` 不得 import `docker/**` | 前端感知到部署形态 |
- * | 4 | `src/**` 不得 import `electron/**`（类型除外） | 前端耦合主进程实现 |
- * | 5 | `electron/**` 不得 import `docker/**` | 桌面端被镜像改动牵连 |
- * | 6 | `docker/server/**` 只能 import core/shared/node/三方 | 容器端依赖 Electron 适配层 |
- * | 7 | 只有 `electron/**` 可以 import 'electron' | 出现第二个 shim |
+ * | G1 | internal 包之间**不得互相 import** | 单包不再能独立测试/替换，锁死成泥球 |
+ * | G2 | internal 不得 import cmd | 核心耦合具体入口，桌面端与容器端分不开 |
  *
- * ## 为什么规则 6 / 7 默认是 warning
+ * G1 是最值得守住的性质：14 个包现在互相零依赖，破坏它**不会有任何编译错误**，
+ * 只会让「换个传输层」（Wails 绑定 → 容器 WebSocket）越来越难。
  *
- * 当前 `docker/server/index.ts` 还有 13 处 `electron/*` import（靠 electron-shim.ts 兜住），
- * 规则 7 也因为 shim 而破例。迁移计划 C4–C6 做完才能收紧。
- * 若一上来就报错，CI 从第一天就是红的 —— 那等于没有校验。
+ * ### B. TS 侧旧边界（Electron 退役前仍需守住）
  *
- *   默认：规则 1–5 为 error，规则 6–7 为 warning
- *   `--strict`：全部为 error（C6 完成后开启）
+ * | # | 规则 | 违规后果 |
+ * |---|---|---|
+ * | 3 | src 不得 import docker | 前端感知到部署形态 |
+ * | 4 | src 不得 import electron（类型除外） | 前端耦合主进程实现 |
+ * | 5 | electron 不得 import docker | 桌面端被镜像改动牵连 |
+ * | 6 | docker/server 只能 import shared/node/三方 | 容器端依赖 Electron 适配层 |
+ * | 7 | 只有 electron 可以 import 'electron' | 出现第二个 shim |
+ *
+ * 规则 6 / 7 默认 warning：docker/server/index.ts 还有 13 处 electron import
+ * （靠 electron-shim.ts 兜住）。一上来就报错等于没有校验。
+ *
+ *   默认：Go 两条 + TS 规则 3-5 为 error，规则 6-7 为 warning
+ *   --strict：全部为 error
  *
  * 用法：
  *   node scripts/lint-boundaries.mjs
  *   node scripts/lint-boundaries.mjs --strict
  */
-
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -116,20 +127,6 @@ for (const [rel, raw] of files) {
   const specs = importSpecifiers(source)
 
   for (const spec of specs) {
-    // ---- 规则 1：core 不得 import electron ----
-    if (isUnder(rel, 'core') && isElectronModule(spec)) {
-      addIssue(rel, spec, 'core 必须是纯 Node（规则 1），Electron 能力请通过端口注入', true)
-      continue
-    }
-
-    // ---- 规则 2：core 不得依赖界面 / 适配层 / 部署层 ----
-    if (isUnder(rel, 'core')) {
-      const target = spec.startsWith('.') ? toPosix(path.posix.normalize(path.posix.join(path.posix.dirname(rel), spec))) : spec
-      if (isUnder(target, 'src') || isUnder(target, 'docker') || isUnder(target, 'electron')) {
-        addIssue(rel, spec, `core 不能依赖 ${target.split('/')[0]}/（规则 2）`, true)
-      }
-    }
-
     // ---- 规则 3 / 4：前端不得依赖部署形态，也不得直接用 Electron ----
     //
     // 规则 4 有两种形态，都要拦：
@@ -157,11 +154,11 @@ for (const [rel, raw] of files) {
     // ---- 规则 6：容器服务端只能依赖 core / shared / node / 三方 ----
     if (isUnder(rel, 'docker/server') && spec.startsWith('.')) {
       const target = toPosix(path.posix.normalize(path.posix.join(path.posix.dirname(rel), spec)))
-      const allowed = isUnder(target, 'core') || isUnder(target, 'shared') || isUnder(target, 'docker/server')
+      const allowed = isUnder(target, 'shared') || isUnder(target, 'docker/server')
       if (!allowed && (isUnder(target, 'electron') || isUnder(target, 'src'))) {
         addIssue(
           rel, spec,
-          `容器端只能依赖 core/ 与 shared/（规则 6，迁移计划 C6 完成后收紧为 error）`,
+          `容器端只能依赖 shared/（规则 6，Electron 退役后收紧为 error）`,
           STRICT,
         )
       }
@@ -173,6 +170,74 @@ for (const [rel, raw] of files) {
       const isShim = rel === 'docker/server/electron-shim.ts'
       if (!isShim) {
         addIssue(rel, spec, `只有 electron/** 可以 import 'electron'（规则 7）`, STRICT)
+      }
+    }
+  }
+}
+
+// ===== A. Go 侧分层（新的主要职责）=====
+//
+// 校验的是 `app/internal/*` 之间**不得互相 import**。
+//
+// 为什么这条值得守：14 个包现在互相零依赖，这是当前的真实状态，也是
+// 最容易被无意识破坏的性质 —— 破坏它不会有任何编译错误，只会让
+// 「换个传输层」（Wails 绑定 → 容器 WebSocket）变得越来越难。
+// 每个包都能独立测试、独立替换，正是这个架构最大的价值。
+
+const GO_INTERNAL = path.join(ROOT, 'app', 'internal')
+const GO_MODULE = 'github.com/Downvid/downvid/app'
+
+/** 读一个目录下的所有 .go 文件（不含子目录） */
+function goFiles(dir) {
+  if (!fs.existsSync(dir)) return []
+  return fs.readdirSync(dir, { withFileTypes: true })
+    .filter((e) => e.isFile() && e.name.endsWith('.go'))
+    .map((e) => path.join(dir, e.name))
+}
+
+/** 从一个 .go 文件里抽出全部 `github.com/Downvid/downvid/app/...` import */
+function goImports(file) {
+  const source = fs.readFileSync(file, 'utf8')
+  const out = []
+  // 只认 import 块和单行 import，不认注释（Go 的注释里常举例写路径）
+  const importBlock = source.match(/import\s*\(([\s\S]*?)\)/g) || []
+  const single = source.match(/import\s+(?:\w+\s+)?"([^"]+)"/g) || []
+  for (const chunk of [...importBlock, ...single]) {
+    for (const m of chunk.matchAll(/"([^"]+)"/g)) out.push(m[1])
+  }
+  return out.filter((p) => p.startsWith(GO_MODULE))
+}
+
+let goPackageCount = 0
+if (fs.existsSync(GO_INTERNAL)) {
+  const packages = fs.readdirSync(GO_INTERNAL, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name)
+  goPackageCount = packages.length
+
+  for (const pkg of packages) {
+    const dir = path.join(GO_INTERNAL, pkg)
+    for (const file of goFiles(dir)) {
+      const relFile = toPosix(path.relative(ROOT, file))
+      for (const spec of goImports(file)) {
+        const rest = spec.slice(GO_MODULE.length + 1) // 'internal/xxx' / 'cmd/xxx'
+        const parts = rest.split('/')
+
+        // ---- G1：internal 包之间不得互相 import ----
+        if (parts[0] === 'internal' && parts[1] && parts[1] !== pkg) {
+          problems.push(
+            `${relFile} → '${spec}'：internal 包之间不得互相依赖（规则 G1）。` +
+              `每个包都要能独立测试、独立替换 —— 需要共享的代码请下沉成新包或复制少量逻辑。`,
+          )
+        }
+
+        // ---- G2：internal 不得反向依赖入口 ----
+        if (parts[0] === 'cmd') {
+          problems.push(
+            `${relFile} → '${spec}'：internal 不得依赖 cmd（规则 G2）。` +
+              `反向依赖会让核心耦合具体入口，容器端与桌面端就分不开了。`,
+          )
+        }
       }
     }
   }
@@ -204,8 +269,7 @@ if (problems.length) {
   process.exit(1)
 }
 
-const coreFiles = [...files.keys()].filter((f) => isUnder(f, 'core')).length
 console.log(
-  `架构边界校验通过：扫描 ${files.size} 个源文件（core/ ${coreFiles} 个）` +
+  `架构边界校验通过：扫描 ${files.size} 个 TS 源文件 + ${goPackageCount} 个 Go 内部包` +
     `${warnings.length ? `，${warnings.length} 处待收紧的提示` : ''}。`,
 )

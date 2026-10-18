@@ -215,8 +215,8 @@ ENTRYPOINT ["downvid-deps"]
 
 - HTTP 层：`/api/parse`、`/api/download`、`/api/tasks`、`/api/deps`、`/api/history`
 - SSE：进度广播（复用 `download/progress.ts` 的节流逻辑）
-- 把 `electron/download/*` 与 `electron/parsers/*` 从 `electron/` 移到一个共享目录
-  （建议 `core/`），两边共同引用 —— **不要复制一份**
+- 共享代码：**已经解决了** —— 桌面端与容器端共用 `app/internal/*`（Go），
+  只换传输层（Wails 绑定 / WebSocket）。不再需要「把 TS 搬进共享目录」这一步
 - 设置存储：`localStorage` → `/config/settings.json`
 - Cookie：上传 `cookies.txt` → `/config/cookies.txt`，喂给现有手动文件模式
 
@@ -257,8 +257,8 @@ ENTRYPOINT ["downvid-deps"]
 
 1. **HTTP 框架**：用 Node 内置 `node:http`（零依赖，但手写路由/SSE 略啰嗦），
    还是引 Fastify / Hono（体验好，但违背「零依赖」的既有倾向）？
-2. **核心代码搬到哪**：`core/` 还是保持在 `electron/` 下、由 `server/` 反向引用？
-   前者更干净，但会动大量 import 路径（需要一次性的机械重构）。
+2. ~~**核心代码搬到哪**~~ —— **已决定**：`app/internal/*`（Go，14 个包，互相零依赖）。
+   桌面端与容器端引用的是同一批包，差异只在传输层。
 3. **镜像发布**：跟着 GitHub Release 发（每次发版构建镜像），
    还是单独发（镜像 tag 与 app 版本解耦）？
 4. **是否需要「无 WebUI 的纯 API 模式」**：有人可能只想拿它当下载后端，
