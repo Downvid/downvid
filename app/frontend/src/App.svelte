@@ -53,7 +53,15 @@
 <div class="shell">
   <TopBar />
 
-  <div class="workarea" class:with-rail={app.railOpen}>
+  <!--
+    窄窗口下 rail 是 `position: fixed` 的浮层，会盖住正文。没有任务时
+    它只有一句「暂无下载任务」——让它挡住关于页/设置页完全是净损失
+    （真机上曾因此以为「关于页打不开」，实际内容在浮层底下）。
+
+    所以两侧共用一个条件：**有任务且用户没手动收起**。
+    `with-rail` 必须同步，否则 rail 没渲染、主区仍被让出 340px，右边留一条空白。
+  -->
+  <div class="workarea" class:with-rail={app.railOpen && app.hasTasks}>
     <main class="main">
       <div class="main-scroll scroll">
         {#key app.tab}
@@ -72,7 +80,7 @@
       </div>
     </main>
 
-    {#if app.railOpen}
+    {#if app.railOpen && app.hasTasks}
       <TransferRail />
     {/if}
   </div>

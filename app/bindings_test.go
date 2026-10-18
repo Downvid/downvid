@@ -5,6 +5,7 @@ package main
 // 窗口渲染由前端构建产物 + 手动启动验证；这里验证**业务侧**——
 // 绑定方法签名改了或被误改时，编译期就红，比等人工点一遍可靠。
 import (
+	"encoding/json"
 	"net"
 	"os"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Downvid/downvid/app/internal/changelog"
 	"github.com/Downvid/downvid/app/internal/download"
 	"github.com/Downvid/downvid/app/internal/history"
 )
@@ -480,4 +482,57 @@ func closedPortURL(t *testing.T) string {
 	addr := ln.Addr().String()
 	_ = ln.Close()
 	return "http://" + addr + "/"
+}
+
+// TestChangelogBindingsNeverNil 绑定方法**不能返回 nil 切片**。
+//
+// Go 的 nil 切片 JSON 序列化成 `null`，而前端的 `.map()` / `.length` 对
+// null 会直接抛 TypeError。真实故障：真机上点开「关于」页一片空白，
+// 控制台是 `Cannot read properties of null (reading 'length')` ——
+// 因为 `ChangelogHistory()` 在出错路径上 `return nil`。
+//
+// 类型检查看不出这条：Go 的 `[]Entry` 和 `nil` 是同一个类型。
+func TestChangelogBindingsNeverNil(t *testing.T) {
+	app := NewApp()
+
+	if got := app.ChangelogList(); got == nil {
+		t.Error("ChangelogList 返回 nil（JSON 会是 null，前端崩）")
+	}
+	if got := app.ChangelogHistory(); got == nil {
+		t.Error("ChangelogHistory 返回 nil（JSON 会是 null，前端崩）")
+	}
+	// Current 返回指针，nil 是合法语义（前端有 currentChangelog 兜底），
+	// 但内容读得出来时必须给出对象
+	cur := app.ChangelogCurrent()
+	if cur == nil {
+		t.Skip("当前构建读不到内嵌 CHANGELOG，跳过内容断言")
+	}
+	if cur.Version == "" && !cur.Unreleased {
+		t.Error("ChangelogCurrent 返回的条目既没有 version 也不是 unreleased")
+	}
+}
+
+// 序列化后必须真的是 JSON 数组，而不是 `null`。
+//
+// 上面那条只测了 Go 侧的 nil，这条测**前端实际收到的字节**。
+func TestChangelogJSONIsArray(t *testing.T) {
+	app := NewApp()
+	// 先验证「nil 切片会序列化成 null」这个前提本身成立——
+	// 否则下面那条断言在没有内嵌 CHANGELOG 的构建里会假通过。
+	var nilSlice []changelog.Entry
+	rawNil, _ := json.Marshal(nilSlice)
+	if string(rawNil) != "null" {
+		t.Fatalf("前提不成立：nil 切片序列化成了 %q（期望 null）", rawNil)
+	}
+
+	raw, err := json.Marshal(app.ChangelogHistory())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) == "null" {
+		t.Fatal("序列化结果是 null，前端 .map() 会崩")
+	}
+	if !strings.HasPrefix(string(raw), "[") {
+		t.Fatalf("序列化结果不是数组：%.40s", raw)
+	}
 }

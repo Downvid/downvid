@@ -30,6 +30,7 @@ import type {
   SubtitleOption,
 } from './types'
 import { detectPlatform, platformName, hostOf } from './url'
+import { t } from './i18n.svelte'
 
 /** 后端是否可用（浏览器里为 false） */
 export const hasBackend = (): boolean =>
@@ -143,6 +144,7 @@ type Bindings = {
   IsInstallingDeps(): Promise<boolean>
   OpenManagedDir(): Promise<string>
   TestProxy(proxy: string): Promise<{ ok: boolean; latencyMs?: number; status?: number; error?: string; kind?: string }>
+  ReadClipboard(): Promise<{ text: string; error?: string }>
   PickDirectory(title: string): Promise<string>
   PickFile(title: string, extensions: string[]): Promise<string>
   ChangelogList(): Promise<ChangelogEntry[]>
@@ -635,6 +637,33 @@ export async function platform(): Promise<string> {
     return await b.GetPlatform()
   } catch {
     return ''
+  }
+}
+
+/**
+ * 读剪贴板。
+ *
+ * 桌面端走 Go（`pbpaste` / `Get-Clipboard` / `wl-paste`），**不碰**
+ * `navigator.clipboard` —— 那个在 WebView 里要剪贴板权限，macOS 上会弹
+ * 系统授权框，用户点「粘贴」看到的是权限菜单而不是真的粘贴。
+ *
+ * 浏览器预览没有后端时才回退到 `navigator.clipboard`。
+ */
+export async function readClipboard(): Promise<{ text: string; error?: string }> {
+  const b = await backend()
+  if (b) {
+    try {
+      return await b.ReadClipboard()
+    } catch (e) {
+      return { text: '', error: String((e as Error)?.message ?? e) }
+    }
+  }
+  // 浏览器预览：只能用 Web API（可能被权限拒绝，那是预期行为）
+  try {
+    const text = await navigator.clipboard.readText()
+    return { text }
+  } catch {
+    return { text: '', error: t('toast.pasteNoPermission') }
   }
 }
 

@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/Downvid/downvid/app/internal/changelog"
+	"github.com/Downvid/downvid/app/internal/clipboard"
 	"github.com/Downvid/downvid/app/internal/deps"
 	"github.com/Downvid/downvid/app/internal/download"
 	"github.com/Downvid/downvid/app/internal/fetch"
@@ -910,6 +911,31 @@ func (a *App) GetDiskSpace(dir string) DiskSpaceResult {
 	return DiskSpaceResult{Free: free, Total: total}
 }
 
+// ReadClipboard 返回系统剪贴板里的文本。
+//
+// ## 为什么由 Go 读而不是 navigator.clipboard
+//
+// WebView 里 `navigator.clipboard.readText()` 需要剪贴板权限，macOS 上会弹
+// 系统授权对话框。用户点「粘贴」，看到的是一个权限菜单而不是真的粘贴，
+// 还得再点一次「允许」——体验上就是「这个按钮没用」。
+//
+// 桌面程序读本机剪贴板是天经地义的，也不需要授权。失败时返回空串 +
+// 错误信息，前端据此提示（而不是静默当成"剪贴板是空的"）。
+func (a *App) ReadClipboard() ClipboardResult {
+	text, err := clipboard.Read()
+	if err != nil {
+		return ClipboardResult{Error: err.Error()}
+	}
+	return ClipboardResult{Text: text}
+}
+
+// ClipboardResult 是读取剪贴板的结果。
+type ClipboardResult struct {
+	Text string `json:"text"`
+	// Error 是给人看的原因（"剪贴板里没有文本" / "找不到命令 wl-paste"）
+	Error string `json:"error,omitempty"`
+}
+
 // PickDirectory 弹系统目录选择框，返回用户选的目录（取消时返回空串）。
 //
 // ## 为什么必须是系统对话框
@@ -970,11 +996,19 @@ func (a *App) PickFile(title string, extensions []string) string {
 // 分了两个用途：
 //   - 「关于」页展示历史版本
 //   - 更新弹窗里，若 Release 没带 body（Gitee / 部分镜像不给），退回本地记录
+//
+// **出错时返回空切片而不是 nil**：Go 的 nil 切片会被 JSON 序列化成 `null`，
+// 而前端的 `.map()` / `.length` 对 null 会直接抛 TypeError，整个「关于」页白屏。
+// 空切片序列化成 `[]`，前端无需额外判空——这条是「后端把数据形状收紧」，
+// 比让每个调用点都记得判空更可靠。
 func (a *App) ChangelogList() []changelog.Entry {
 	entries, err := changelog.Local()
 	if err != nil {
 		log.Printf("[downvid] 读取更新日志失败：%v", err)
-		return nil
+		return []changelog.Entry{}
+	}
+	if entries == nil {
+		return []changelog.Entry{}
 	}
 	return entries
 }
@@ -1005,9 +1039,13 @@ func (a *App) ChangelogCurrent() *changelog.Entry {
 func (a *App) ChangelogHistory() []changelog.Entry {
 	entries, err := changelog.Local()
 	if err != nil {
-		return nil
+		return []changelog.Entry{}
 	}
-	return changelog.History(entries, version)
+	out := changelog.History(entries, version)
+	if out == nil {
+		return []changelog.Entry{}
+	}
+	return out
 }
 
 // TestProxy 实际测一次代理连通性。

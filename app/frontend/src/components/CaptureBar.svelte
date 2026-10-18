@@ -2,27 +2,41 @@
   import Icon from './Icon.svelte'
   import { app } from '../lib/store.svelte'
   import { t } from '../lib/i18n.svelte'
+  import { readClipboard } from '../lib/backend'
 
   let { compact = false }: { compact?: boolean } = $props()
 
   let inputEl = $state<HTMLInputElement | null>(null)
   let pasting = $state(false)
 
+  /**
+   * 粘贴。
+   *
+   * **走 Go 侧读剪贴板**，不用 `navigator.clipboard`。
+   *
+   * 早先用的是后者，而 WebView 里读剪贴板要权限：macOS 上点「粘贴」
+   * 会先弹一个系统授权对话框（"允许 DownVid 访问剪贴板？"），
+   * 用户得再点一次「允许」才真的粘贴 —— 体验上就是「这个按钮没用，
+   * 只是冒出一个菜单」。
+   *
+   * 桌面程序读本机剪贴板不需要授权，`pbpaste` / `Get-Clipboard` /
+   * `wl-paste` 一条命令搞定。
+   */
   async function paste(): Promise<void> {
     if (pasting) return
     pasting = true
     try {
-      const text = await navigator.clipboard.readText()
-      if (text.trim()) {
-        app.url = text.trim()
+      const res = await readClipboard()
+      const text = res.text.trim()
+      if (text) {
+        app.url = text
         inputEl?.focus()
-      } else {
-        app.toast(t('toast.parseFirst'), 'error')
+        return
       }
-    } catch {
-      // 浏览器没给剪贴板权限（用户拒绝，或非安全上下文）。
       // **不要填假数据**——那会让用户以为粘贴成功了，然后解析一个不存在的视频。
-      app.toast(t('toast.pasteFailed'), 'error')
+      // 空剪贴板与读取失败要分开提示：前者用户自己知道怎么处理，
+      // 后者需要告诉他为什么（比如 Linux 上没装 wl-paste/xclip）。
+      app.toast(res.error || t('toast.clipboardEmpty'), 'error')
     } finally {
       pasting = false
     }

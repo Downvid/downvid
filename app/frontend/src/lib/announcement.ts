@@ -114,19 +114,40 @@ function mirrorSources(locale: Locale): string[] {
  * 真实接入：按镜像链拉取公告，全失败才退回本地。
  * 演示没有调用它（避免首屏被网络拖慢/离线时干等）。
  */
+/**
+ * 拉取公告，并**如实报告内容来自哪里**。
+ *
+ * 返回 `source: 'remote'` 说明拿到的是远端最新内容；`'local'` 说明
+ * 三级镜像全挂、用了打包时那份副本。
+ *
+ * ## 为什么要返回来源而不是只返回文档
+ *
+ * 早先只返回 `AnnouncementDoc`，调用方**无法区分**「远端拿到的」
+ * 与「本地兜底」——两者都是合法的文档对象。于是界面没法如实告诉用户
+ * 「你看到的是离线副本，作者可能更新了」，用户会以为作者很久没写东西。
+ */
+export interface AnnouncementFetchResult {
+  doc: AnnouncementDoc
+  source: 'remote' | 'local'
+  /** 命中的镜像 URL（source 为 local 时为空） */
+  via?: string
+}
+
 export async function fetchAnnouncement(
   locale: Locale,
   fetcher: typeof fetch = fetch,
-): Promise<AnnouncementDoc> {
+): Promise<AnnouncementFetchResult> {
   for (const url of mirrorSources(locale)) {
     try {
       const response = await fetcher(url, { signal: AbortSignal.timeout(4000) })
       if (!response.ok) continue
       const text = await response.text()
-      if (text.trim()) return parseAnnouncement(text)
+      if (text.trim()) {
+        return { doc: parseAnnouncement(text), source: 'remote', via: url }
+      }
     } catch {
       // 这一跳失败，继续下一跳；最后用本地文件兜底
     }
   }
-  return loadLocalAnnouncement(locale)
+  return { doc: loadLocalAnnouncement(locale), source: 'local' }
 }

@@ -60,8 +60,20 @@
    * 「关于」页的「更新内容」因此与真实发布毫无关系——而这恰恰是用户
    * 想确认「我这版修了什么」时唯一的入口。
    */
+  /**
+   * 永远按数组读。
+   *
+   * store 里的 `changelog` 类型是数组，但**运行时**可能是 null（后端出错时
+   * Go 返回 nil 切片 → JSON `null`）。类型检查管不到这条路径，而后果是整个
+   * 关于页白屏（`Cannot read properties of null (reading 'length')`）。
+   *
+   * 这一层是给「将来又有人在别处给它赋了 null」兜底——界面正确性不该
+   * 依赖上游每个赋值点都记得判空。
+   */
+  const changelogList = $derived(Array.isArray(app.changelog) ? app.changelog : [])
+
   const releases = $derived(
-    app.changelog.map((entry) => ({
+    changelogList.map((entry) => ({
       version: `v${entry.version}`,
       date: entry.date,
       // 每条小标题下的条目拍平成一行，并解析行内 Markdown。
@@ -70,10 +82,11 @@
       //   1. `reflowMarkdown` —— CHANGELOG 按 80 列硬换行，直接渲染会在句中
       //      断开、中文之间多出空格（真机上就是这样）
       //   2. `parseInline` —— 不解析的话 `**粗体**` 的星号会原样显示
-      notes: entry.sections
-        .filter((section) => section.items.length > 0)
+      // `sections` / `items` 同样可能是 null（Go 的 omitempty + nil 切片）
+      notes: (entry.sections ?? [])
+        .filter((section) => (section.items ?? []).length > 0)
         .flatMap((section) =>
-          section.items.map((item) => ({
+          (section.items ?? []).map((item) => ({
             section: section.title,
             tokens: parseInline(reflowMarkdown(item)),
           })),
@@ -81,12 +94,41 @@
     })),
   )
 
-  let selectedVersion = $state('')
-  // 默认选中**当前运行版本**（列表为空时退回第一条）
+  /**
+   * 组件自己保证有数据。
+   *
+   * store 的 `init()` 会在启动时拉一次 changelog，但那是**异步**的，
+   * 而且 init 可能在关于页之外的地方失败。这里在挂载时兜一次：
+   * store 里已有就不重复请求。
+   *
+   * 为什么不能只靠 init：真机上曾出现「关于页打开了但更新日志一条都没有」，
+   * 而 store 里的数据是否到位取决于一次早于组件挂载的异步调用——
+   * 这种「谁先谁后」的依赖非常脆，不该让界面正确性建立在时序上。
+   */
+  let askedChangelog = false
   $effect(() => {
-    if (!selectedVersion && releases.length > 0) {
-      selectedVersion = `v${app.version.replace(/^v/, '')}`
-    }
+    // `askedChangelog` 是**必须的**：没有它，下面这行会自我循环——
+    // effect 读 `changelog.length`，`loadChangelog()` 改它，于是 effect 再跑，
+    // 而只要后端返回空（浏览器预览 / 后端异常），条件永远成立 → 无限请求。
+    if (askedChangelog || changelogList.length > 0) return
+    askedChangelog = true
+    void app.loadChangelog()
+  })
+
+  let selectedVersion = $state('')
+  // 默认选中**当前运行版本**；当前版本不在列表里时退回第一条。
+  //
+  // 这里必须处理「选中值不在 options 里」的情况：`<select value=...>` 在
+  // 值不存在时会渲染成空白（浏览器行为），用户看到的是一个没有选中项的
+  // 下拉框。早先的实现只在 selectedVersion 为空时才赋值，一旦它被设成
+  // 一个不存在的版本（比如开发构建的 0.0.0-dev），下拉框就永远空白。
+  $effect(() => {
+    if (releases.length === 0) return
+    const wanted = `v${app.version.replace(/^v/, '')}`
+    const exists = releases.some((r) => r.version === wanted)
+    const fallback = releases[0].version
+    const next = exists ? wanted : fallback
+    if (selectedVersion !== next) selectedVersion = next
   })
 
   const selectedRelease = $derived(

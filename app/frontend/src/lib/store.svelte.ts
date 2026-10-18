@@ -1178,7 +1178,14 @@ class AppStore {
   /** 读更新日志。失败不弹错：它只是展示内容，缺了不该拦住用户干活。 */
   async loadChangelog(): Promise<void> {
     const list = await backendChangelogHistory()
-    if (list) this.changelog = list
+    // `list` 可能是 null（后端出错时 Go 返回 nil 切片，JSON 成了 `null`）。
+    // 必须**用 Array.isArray 判断**而不是 `if (list)`：
+    //   - `if (list)` 对 null 是 falsy，看起来没问题
+    //   - 但如果有人把判断写成 `if (list !== undefined)`（很自然的写法），
+    //     null 就会被赋进 changelog，随后 `app.changelog.map(...)` 直接抛
+    //     `Cannot read properties of null (reading 'length')`，整个关于页白屏。
+    // 真机上就是这么崩的：页面点开后一片空白，控制台才有一行 TypeError。
+    this.changelog = Array.isArray(list) ? list : []
   }
 
   /** 当前运行版本对应的更新日志（找不到时退回最新一条已发布版本） */
@@ -1395,12 +1402,11 @@ class AppStore {
     if (this.announcementSource === 'loading') return
     this.announcementSource = 'loading'
     try {
-      const doc = await fetchAnnouncement(getLocale())
-      this.announcement = doc
-      // `fetchAnnouncement` 内部已经把「全挂」处理成本地兜底，
-      // 这里只能按「拿到的内容与本地是否相同」判断来源
-      const local = loadLocalAnnouncement(getLocale())
-      this.announcementSource = doc.blocks.length >= local.blocks.length ? 'remote' : 'local'
+      // 用**返回值里的 source**，不再靠「内容长度猜」。
+      // 猜的写法在「远端内容比本地短」时会错判成本地（作者删改过内容时就会）。
+      const result = await fetchAnnouncement(getLocale())
+      this.announcement = result.doc
+      this.announcementSource = result.source
     } catch {
       this.announcement = loadLocalAnnouncement(getLocale())
       this.announcementSource = 'local'

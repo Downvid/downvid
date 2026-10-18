@@ -1040,6 +1040,7 @@ select.field {
   .statusbar {
     display: none;
   }
+  /* 底部有 54px 的手机式导航，内容要给它让位 */
   .main-scroll {
     padding-bottom: 62px;
   }
@@ -1050,13 +1051,25 @@ select.field {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  /* 窄屏不再把 rail 压成 0 宽，而是做成底部浮层；顶部任务按钮负责重新打开 */
+  /* 窄屏不再把 rail 压成 0 宽，而是做成底部浮层；顶部任务按钮负责重新打开。
+   *
+   * ## 这里出过一个「页面打不开」的 bug
+   *
+   * 浮层默认是展开的（`railOpen` 初始值 true），而窄窗口下它占 56vh、
+   * `position: fixed`、`z-index: 45` —— 于是**整块内容被盖住**。
+   * 用户看到的是「关于页点开了但一片空白」，实际内容在浮层底下。
+   *
+   * 修法两条：
+   *   1. 高度压到 46vh（留出更多可见内容）
+   *   2. 只有真的存在任务时才占位——没有任务时这个面板没有任何信息，
+   *      让它挡住正文毫无道理（组件侧见 TransferRail 的 `hasTasks` 判断）
+   */
   .rail {
     position: fixed;
     left: 0;
     right: 0;
     bottom: 54px;
-    height: min(56vh, 430px);
+    height: min(46vh, 360px);
     z-index: 45;
     border-left: 0;
     border-top: 1px solid var(--rule);
