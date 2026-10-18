@@ -114,17 +114,17 @@ const REPO_PATH = REPO_URL.replace(/^https:\/\/github\.com\//, '').replace(/\/$/
  * `response.ok`（200）成立 —— 于是代码会把首页 HTML 当成公告正文解析，
  * 得到一个「标题是一堆标签」的垃圾文档。
  *
- * 换成实测可用的三个：
+ * 换成实测可用的三个（2026-10-18 逐个 curl 验证过）：
  *
  *	gh-proxy.com   200 + 正确内容
  *	ghfast.top     200 + 正确内容
- *	ghproxy.net    200 + 正确内容
+ *	ghproxy.net    200 + 正确内容（返回 `---` frontmatter，确认是原文）
  *
  * 但**不能只靠换域名**解决：公共代理随时会像 ghproxy.com 一样失效，
  * 而失效方式恰好是「200 + 错误内容」。所以下面 `looksLikeMarkdown` 才是
  * 真正的防线 —— 内容不像公告就跳过这一跳。
  */
-function mirrorSources(locale: Locale): string[] {
+export function mirrorSources(locale: Locale): string[] {
   const lang = locale === 'zh-CN' ? 'zh' : 'en'
   const path = 'app/frontend/src/announcements/author.' + lang + '.md'
   const raw = 'https://raw.githubusercontent.com/' + REPO_PATH + '/main/' + path
@@ -133,6 +133,7 @@ function mirrorSources(locale: Locale): string[] {
     'https://cdn.jsdelivr.net/gh/' + REPO_PATH + '@main/' + path,
     'https://gh-proxy.com/' + raw,
     'https://ghfast.top/' + raw,
+    'https://ghproxy.net/' + raw,
   ]
 }
 

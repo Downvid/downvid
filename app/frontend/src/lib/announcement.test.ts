@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fetchAnnouncement, parseAnnouncement } from './announcement'
+import { fetchAnnouncement, mirrorSources, parseAnnouncement } from './announcement'
 
 /**
  * 公告（作者的话）的远端读取与降级。
@@ -140,5 +140,47 @@ describe('fetchAnnouncement 对代理错误页的防御', () => {
     )
     expect(res.source).toBe('remote')
     expect(res.via).toContain('jsdelivr')
+  })
+})
+
+// ===== 镜像链本身 =====
+//
+// 这组断言的是**配置**而不是逻辑，但同样必要：镜像失效过一次
+// （ghproxy.com 变成 301 跳首页），而那次失效的表现是「200 + 错误内容」，
+// 逻辑层看不出来。至少要把「链路上有哪些域名」钉住，改的时候能看见 diff。
+describe('mirrorSources', () => {
+  it('中文与英文指向不同的文件', () => {
+    const zh = mirrorSources('zh-CN')
+    const en = mirrorSources('en-US')
+    expect(zh[0]).toContain('author.zh.md')
+    expect(en[0]).toContain('author.en.md')
+  })
+
+  it('第一跳是 GitHub raw（最快、最权威）', () => {
+    expect(mirrorSources('zh-CN')[0]).toMatch(/^https:\/\/raw\.githubusercontent\.com\//)
+  })
+
+  it('包含 jsDelivr 与至少两个 gh 反代', () => {
+    const urls = mirrorSources('zh-CN')
+    expect(urls.some((u) => u.includes('cdn.jsdelivr.net'))).toBe(true)
+    // 反代 URL 形如 `https://gh-proxy.com/https://raw.githubusercontent.com/...`
+    // —— 它们**也包含** raw 地址，所以不能按「含不含 raw」过滤。
+    // 正确判据：不以 `https://raw.` 开头的都不是直连
+    const proxies = urls.filter((u) => !u.startsWith('https://raw.githubusercontent.com/'))
+    expect(proxies.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('不含已知失效的 ghproxy.com', () => {
+    // 2026-10 实测：它对任何路径返回 301 跳自己的首页，
+    // 而 fetch 跟随跳转后 response.ok 成立 → 会把 HTML 当公告
+    for (const u of mirrorSources('zh-CN')) {
+      expect(u).not.toContain('ghproxy.com/')
+    }
+  })
+
+  it('每一条都是 https（明文会让公告被中间人篡改）', () => {
+    for (const u of mirrorSources('zh-CN')) {
+      expect(u.startsWith('https://')).toBe(true)
+    }
   })
 })
