@@ -507,6 +507,16 @@ jobs:
         working-directory: app/frontend
         run: pnpm install --frozen-lockfile
 
+      # wailsjs/ 是 `wails generate module` 生成的、不入库。
+      # 不生成就直接构建，前端会因为找不到 `../../wailsjs/go/main/App` 而失败：
+      #   Could not resolve "../../wailsjs/go/main/App" from "src/lib/backend.ts"
+      #
+      # `build.sh` 里不会替我们生成它 —— 那是 `wails build` 的职责，
+      # 但它要等到编译阶段才跑，而前端在这之前就已经构建完了。
+      - name: 生成 Wails 绑定（wailsjs）
+        working-directory: app
+        run: wails generate module
+
       # 必须用 build.sh：它先把依赖边车编译好再带 `-tags withsidecar` 构建。
       # 直接 `wails build` 出来的应用**没有依赖探测能力**（边车不在包里），
       # 用户看到的是「依赖页只剩一条」——这个故障真实发生过。
