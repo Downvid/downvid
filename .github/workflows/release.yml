@@ -16,6 +16,10 @@ on:
         type: boolean
         required: false
         default: false
+      migrate_to_wails:
+        description: '把哪些平台的自动更新切到新架构（逗号分隔：macos,linux,windows；留空=不切）'
+        required: false
+        default: ''
 
 permissions:
   contents: write
@@ -337,7 +341,19 @@ jobs:
           node-version: 22
 
       # 各 job 生成的 latest*.yml 汇总时会互相覆盖，按最终上传的文件重新生成
+      #
+      # `MIGRATE_TO_WAILS` 控制哪些平台的自动更新指向新架构产物。
+      # **默认留空 = 一个都不切**，老用户继续拿 Electron 版。
+      #
+      # 按平台逐个切（workflow_dispatch 的输入，或改这里的默认值）：
+      #   macos  → 已可切（安装由我们自己的代码完成，不依赖 NSIS）
+      #   linux  → 需先确认 AppImage 产物存在
+      #   windows→ 需先让 NSIS 脚本支持 --updated / --force-run
+      #
+      # 这是单向门：切了以后老用户会被换成新架构且回不到 Electron。
       - name: Generate update manifests
+        env:
+          MIGRATE_TO_WAILS: ${{ inputs.migrate_to_wails }}
         run: node scripts/gen-update-manifests.mjs artifacts "$VERSION"
 
       # 正文顶部生成「点徽章即下载」的引导区：Release 里 CHANGELOG 内容较长，

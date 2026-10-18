@@ -9,7 +9,12 @@
     "preview": "vite preview",
     "test": "vitest run",
     "check": "svelte-check --threshold error",
-    "check:warn": "svelte-check"
+    "check:warn": "svelte-check",
+    "check:about": "node scripts/check-about.mjs",
+    "check:slider": "node scripts/check-slider.mjs",
+    "check:drag": "node scripts/check-drag.mjs",
+    "check:migration": "node scripts/check-migration.mjs",
+    "check:settings": "node scripts/check-settings-write.mjs"
   },
   "devDependencies": {
     "@material-symbols/font-400": "^0.48.0",
