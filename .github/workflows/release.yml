@@ -513,6 +513,14 @@ jobs:
       #
       # `build.sh` 里不会替我们生成它 —— 那是 `wails build` 的职责，
       # 但它要等到编译阶段才跑，而前端在这之前就已经构建完了。
+      #
+      # **顺序不能反**：`wails generate module` 会先把 Go 包编译一遍，
+      # 而 main.go 里有 `//go:embed all:frontend/dist` —— dist 不存在时
+      # 直接报 `pattern all:frontend/dist: no matching files found`。
+      # 所以要先准备 embed 目录，再生成绑定。
+      - name: 准备 embed 目录
+        run: bash app/scripts/prepare-embed-dir.sh
+
       - name: 生成 Wails 绑定（wailsjs）
         working-directory: app
         run: wails generate module
