@@ -492,12 +492,33 @@ jobs:
 
       # Linux 构建 Wails 需要 GTK / WebKit 开发包，运行需要它们的运行时库。
       # 这两组包名在不同发行版上不同，这里按 Ubuntu 22.04 写。
+      # Linux 构建 Wails 需要 cgo 链接 GTK / WebKit。
+      #
+      # ## 为什么是 4.0 而不是 4.1
+      #
+      # Wails v2.16 的 cgo 指令默认要 `webkit2gtk-4.0`：
+      #
+      #     #cgo !webkit2_41 pkg-config: webkit2gtk-4.0
+      #     #cgo  webkit2_41 pkg-config: webkit2gtk-4.1
+      #
+      # 只有加 `-tags webkit2_41` 才用 4.1。我第一版装了 4.1 却没加 tag，
+      # 于是 pkg-config 找不到 4.0 —— 而报错信息只说「Package webkit2gtk-4.0
+      # was not found」，不会告诉你是 tag 的问题。
+      #
+      # 这里选 4.0：它是 Wails 的默认路径，不需要额外 tag，少一个变量。
+      #
+      # ## 全部依赖（grep 出所有 pkg-config 指令后去重得到）
+      #
+      #   gtk+-3.0  gio-unix-2.0  webkit2gtk-4.0  libsoup-2.4
+      #
+      # libsoup-2.4 由 libwebkit2gtk-4.0-dev 传递引入，不必单列。
       - name: Install Linux build deps
         if: matrix.os == 'ubuntu-22.04'
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libgtk-3-dev libwebkit2gtk-4.1-dev \
+            build-essential pkg-config \
+            libgtk-3-dev libwebkit2gtk-4.0-dev \
             libayatana-appindicator3-dev
 
       - name: Install Wails CLI
