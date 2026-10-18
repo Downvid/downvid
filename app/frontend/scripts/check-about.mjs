@@ -133,19 +133,27 @@ if (errors.length) {
   for (const e of errors.slice(0, 5)) console.log(e.slice(0, 300))
 }
 
-// ===== 折叠与版本切换 =====
+// ===== 折叠：每条默认只显示标题行 =====
 const collapse = await page.evaluate(() => {
   const notes = document.querySelectorAll('.note').length
-  const more = document.querySelector('.notes-more')
-  return { visibleNotes: notes, hasMoreButton: !!more, moreText: more?.textContent?.trim() ?? '' }
+  const summaries = document.querySelectorAll('.note-summary').length
+  const details = document.querySelectorAll('.note-detail').length
+  const firstSummary = document.querySelector('.note-summary-text')?.textContent?.trim() ?? ''
+  // 首条标题不该带展开说明（否则等于没折叠）
+  const summaryLen = firstSummary.length
+  const cardH = document.querySelector('.changelog')?.getBoundingClientRect().height ?? 0
+  return { notes, summaries, details, summaryLen, firstSummary: firstSummary.slice(0, 40), cardH: Math.round(cardH) }
 })
 console.log('折叠:', JSON.stringify(collapse))
 
-// 展开全部
-await page.evaluate(() => document.querySelector('.notes-more')?.click())
+// 展开第一条
+await page.evaluate(() => document.querySelector('.note-summary')?.click())
 await new Promise((r) => setTimeout(r, 300))
-const expandedCount = await page.evaluate(() => document.querySelectorAll('.note').length)
-console.log(`展开后条目数: ${expandedCount}`)
+const afterExpand = await page.evaluate(() => ({
+  details: document.querySelectorAll('.note-detail').length,
+  detailLen: document.querySelector('.note-detail')?.textContent?.trim().length ?? 0,
+}))
+console.log('展开首条:', JSON.stringify(afterExpand))
 
 // 切到历史版本 —— 这是之前**完全失效**的操作
 const switched = await page.evaluate(() => {
@@ -169,9 +177,12 @@ if (!switched.ok) fails.push('无法切换版本：' + switched.reason)
 if (switched.ok && afterSwitch.value !== switched.target) {
   fails.push(`切到 ${switched.target} 又被弹回 ${afterSwitch.value}（$effect 覆盖了用户选择）`)
 }
-if (!collapse.hasMoreButton) fails.push('没有折叠按钮（条目会拉长整页）')
-if (collapse.visibleNotes > 4) fails.push(`默认显示了 ${collapse.visibleNotes} 条，应折叠到 4 条`)
-if (expandedCount <= collapse.visibleNotes) fails.push('展开没有生效')
+if (collapse.details > 0) fails.push(`默认展开了 ${collapse.details} 条说明（应全部收起，只显示标题）`)
+if (collapse.summaryLen > 40) fails.push(`标题行太长（${collapse.summaryLen} 字），说明没拆出摘要`)
+if (afterExpand.details !== 1) fails.push('点标题没有展开说明')
+if (afterExpand.detailLen < 10) fails.push('展开的说明是空的')
+// 卡片高度：真机上 3 条就要占满一屏。折叠后应当明显更矮。
+if (collapse.cardH > 500) fails.push(`更新日志卡片高 ${collapse.cardH}px，仍然太长`)
 if (!state.hasAbout) fails.push('关于页没渲染')
 if (state.optionCount < 1) fails.push('版本下拉是空的')
 if (state.noteCount < 1) fails.push('更新日志没有条目')

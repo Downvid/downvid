@@ -144,3 +144,37 @@ export function reflowMarkdown(input: string): string {
       return acc + glue + line
     }, '')
 }
+
+/**
+ * 取出一条 CHANGELOG 条目的「摘要」——也就是它开头那句加粗的标题。
+ *
+ * ## 为什么需要它
+ *
+ * CHANGELOG 的每一条都是「**一句话标题**：然后是 8~10 行展开说明」。
+ * 在「关于」页里全部铺开时，**3 条就占满一整屏**（真机截图确认过），
+ * 用户得滑很久才看到下面的内容。
+ *
+ * 而用户扫列表时真正需要的是那**一句标题**——展开说明只在想深究时才有用。
+ *
+ * 返回 `{ summary, detail }`：
+ *   - `summary` 是标题部分（原样，未解析；调用方自己 parseInline）
+ *   - `detail` 是剩下的展开说明；为空表示这条本来就只有一句话
+ */
+export function splitSummary(item: string): { summary: string; detail: string } {
+  const line = reflowMarkdown(item)
+
+  // 首选：以 `**加粗**` 开头的条目，标题就是那段加粗内容
+  const bold = line.match(/^\*\*([^*]+)\*\*/)
+  if (bold) {
+    const summary = bold[1]
+    // 去掉紧随其后的中英文冒号（`**标题**：展开` 与 `**标题**: 展开`）
+    const rest = line.slice(bold[0].length).replace(/^\s*[:：]\s*/, '')
+    return { summary, detail: rest }
+  }
+
+  // 没有加粗标题：退回到第一句（中文句号 / 英文句点 / 分号）
+  const sentence = line.match(/^[^。；;.]*[。；;.]?/)
+  const summary = (sentence?.[0] ?? line).trim()
+  const detail = line.slice(summary.length).trim()
+  return { summary, detail }
+}

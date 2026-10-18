@@ -8,7 +8,7 @@
   import svelteIcon from '../assets/tech/svelte.svg'
   import typescriptIcon from '../assets/tech/typescript.svg'
   import { app } from '../lib/store.svelte'
-  import { parseInline, reflowMarkdown } from '../lib/markdown'
+  import { parseInline, splitSummary } from '../lib/markdown'
   import { t } from '../lib/i18n.svelte'
   import { APP_VERSION, REPO_URL, WEBSITE_URL } from '../lib/constants'
   // 邮箱与 mailto 拼装沿用应用现有的唯一来源，避免在演示里复制一份
@@ -86,10 +86,17 @@
       notes: (entry.sections ?? [])
         .filter((section) => (section.items ?? []).length > 0)
         .flatMap((section) =>
-          (section.items ?? []).map((item) => ({
-            section: section.title,
-            tokens: parseInline(reflowMarkdown(item)),
-          })),
+          (section.items ?? []).map((item) => {
+            // 拆成「标题 + 展开说明」：CHANGELOG 每条都是
+            // `**一句话标题**：8~10 行展开说明`，全铺开会把页面拉得很长
+            // （真机上一屏只放得下 3 条）。
+            const { summary, detail } = splitSummary(item)
+            return {
+              section: section.title,
+              summary: parseInline(summary),
+              detail: detail ? parseInline(detail) : null,
+            }
+          }),
         ),
     })),
   )
@@ -160,24 +167,44 @@
    * 切换版本时**重置折叠状态**：否则在第 1.4.0 展开了、切到 1.3.4
    * 仍然处于展开态，用户会以为那一版也很长。
    */
-  const DEFAULT_VISIBLE = 3
-  let expanded = $state(false)
-  // 版本一变就收起（`selectedVersion` 是唯一入口）
+  /**
+   * 哪几条被展开（按条目下标）。
+   *
+   * 用「逐条展开」而不是「全部展开」：用户通常只关心其中一两条，
+   * 一次全展开等于没解决「太长」。默认全部收起，只看得到标题。
+   */
+  let openNotes = $state<Record<number, boolean>>({})
+  // 版本一变就全部收起（`selectedVersion` 是唯一入口）
   $effect(() => {
     void selectedVersion
-    expanded = false
+    openNotes = {}
   })
 
+  function toggleNote(index: number): void {
+    openNotes = { ...openNotes, [index]: !openNotes[index] }
+  }
+
+  /**
+   * 一屏最多列几条。
+   *
+   * 两条措施缺一不可：
+   *   1. **每条只显示标题**（8~10 行的展开说明折起来）
+   *   2. **列表本身限长**（标题再短，20 条仍然占满两屏）
+   *
+   * 真机上只做第 1 条时，卡片仍有 824px —— 一屏放不下。
+   */
+  const MAX_LISTED = 6
+  let showAllNotes = $state(false)
+  $effect(() => {
+    void selectedVersion
+    showAllNotes = false
+  })
+
+  const allNotes = $derived(selectedRelease ? selectedRelease.notes : [])
   const visibleNotes = $derived(
-    selectedRelease
-      ? expanded
-        ? selectedRelease.notes
-        : selectedRelease.notes.slice(0, DEFAULT_VISIBLE)
-      : [],
+    showAllNotes ? allNotes : allNotes.slice(0, MAX_LISTED),
   )
-  const hiddenCount = $derived(
-    selectedRelease ? Math.max(0, selectedRelease.notes.length - DEFAULT_VISIBLE) : 0,
-  )
+  const hiddenCount = $derived(Math.max(0, allNotes.length - MAX_LISTED))
 
   function onVersionChange(event: Event): void {
     selectedVersion = (event.currentTarget as HTMLSelectElement).value
@@ -286,27 +313,57 @@
       {#if selectedRelease}
         <ol class="notes">
           {#each visibleNotes as note, index (index)}
-            <li class="note">
+            <li class="note" class:is-open={openNotes[index]}>
               <span class="note-index num">{String(index + 1).padStart(2, '0')}</span>
               <span class="note-text">
                 <!--
+                  默认只显示**标题那一句**，其余折起来。
+                  CHANGELOG 每条都是「**一句话标题**：8~10 行展开说明」，
+                  全部铺开时一屏只放得下 3 条（真机截图确认过）。
+
                   逐 token 渲染而不是 `{@html}`：CHANGELOG 是可编辑的文本，
                   直接注入 HTML 会让 `<script>` / `<img onerror>` 变成执行入口。
-                  走 Svelte 的普通插值，文本会自动转义。
                 -->
-                {#each note.tokens as token, tIndex (tIndex)}
-                  {#if token.kind === 'strong'}
-                    <strong>{token.text}</strong>
-                  {:else if token.kind === 'code'}
-                    <code>{token.text}</code>
-                  {:else if token.kind === 'link'}
-                    <button type="button" class="inline-link" onclick={() => openExternal(token.href)}>
-                      {token.text}
-                    </button>
-                  {:else}
-                    {token.text}
+                <button
+                  type="button"
+                  class="note-summary"
+                  onclick={() => toggleNote(index)}
+                  aria-expanded={Boolean(openNotes[index])}
+                  disabled={!note.detail}
+                >
+                  <span class="note-summary-text">
+                    {#each note.summary as token, tIndex (tIndex)}
+                      {#if token.kind === 'code'}
+                        <code>{token.text}</code>
+                      {:else if token.kind === 'link'}
+                        <span class="inline-link-text">{token.text}</span>
+                      {:else}
+                        {token.text}
+                      {/if}
+                    {/each}
+                  </span>
+                  {#if note.detail}
+                    <Icon name={openNotes[index] ? 'expand_less' : 'expand_more'} size={13} />
                   {/if}
-                {/each}
+                </button>
+
+                {#if note.detail && openNotes[index]}
+                  <div class="note-detail">
+                    {#each note.detail as token, tIndex (tIndex)}
+                      {#if token.kind === 'strong'}
+                        <strong>{token.text}</strong>
+                      {:else if token.kind === 'code'}
+                        <code>{token.text}</code>
+                      {:else if token.kind === 'link'}
+                        <button type="button" class="inline-link" onclick={() => openExternal(token.href)}>
+                          {token.text}
+                        </button>
+                      {:else}
+                        {token.text}
+                      {/if}
+                    {/each}
+                  </div>
+                {/if}
               </span>
             </li>
           {/each}
@@ -315,11 +372,11 @@
           <button
             type="button"
             class="notes-more"
-            onclick={() => (expanded = !expanded)}
-            aria-expanded={expanded}
+            onclick={() => (showAllNotes = !showAllNotes)}
+            aria-expanded={showAllNotes}
           >
-            <span>{expanded ? t('about.collapseNotes') : t('about.showAllNotes', { count: hiddenCount })}</span>
-            <Icon name={expanded ? 'expand_less' : 'expand_more'} size={14} />
+            <span>{showAllNotes ? t('about.collapseNotes') : t('about.showAllNotes', { count: hiddenCount })}</span>
+            <Icon name={showAllNotes ? 'expand_less' : 'expand_more'} size={14} />
           </button>
         {/if}
       {:else}

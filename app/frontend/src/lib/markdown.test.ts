@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseInline, reflowMarkdown } from './markdown'
+import { parseInline, reflowMarkdown, splitSummary } from './markdown'
 
 /**
  * CHANGELOG 的内联 Markdown 渲染。
@@ -96,5 +96,39 @@ describe('reflowMarkdown', () => {
 
   it('单行原样返回', () => {
     expect(reflowMarkdown('只有一行')).toBe('只有一行')
+  })
+})
+
+describe('splitSummary', () => {
+  it('加粗标题：标题取出，展开说明留下', () => {
+    const { summary, detail } = splitSummary(
+      '**关于页新增官网入口**：关于页原来只有 GitHub 与「问题反馈」两个入口，\n想找官网或谈合作只能去翻 README。',
+    )
+    expect(summary).toBe('关于页新增官网入口')
+    // 换行要已被合并，中文之间不留空格
+    expect(detail).toBe('关于页原来只有 GitHub 与「问题反馈」两个入口，想找官网或谈合作只能去翻 README。')
+  })
+
+  it('英文冒号同样被去掉', () => {
+    const { summary, detail } = splitSummary('**Fix crash**: the app exited on start')
+    expect(summary).toBe('Fix crash')
+    expect(detail).toBe('the app exited on start')
+  })
+
+  it('没有加粗标题时退回第一句', () => {
+    const { summary, detail } = splitSummary('修掉一个崩溃。另外还有两处小改动。')
+    expect(summary).toBe('修掉一个崩溃。')
+    expect(detail).toBe('另外还有两处小改动。')
+  })
+
+  it('只有一句话时 detail 为空', () => {
+    const { summary, detail } = splitSummary('**一句话标题**')
+    expect(summary).toBe('一句话标题')
+    expect(detail).toBe('')
+  })
+
+  it('标题里的行内代码保留原样（由调用方 parseInline 处理）', () => {
+    const { summary } = splitSummary('**新增 `pnpm lint:i18n`**：拦下四类失效')
+    expect(summary).toBe('新增 `pnpm lint:i18n`')
   })
 })
