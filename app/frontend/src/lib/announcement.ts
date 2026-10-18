@@ -99,6 +99,31 @@ export function loadLocalAnnouncement(locale: Locale): AnnouncementDoc {
 
 const REPO_PATH = REPO_URL.replace(/^https:\/\/github\.com\//, '').replace(/\/$/, '')
 
+/**
+ * 三级镜像链。
+ *
+ * ## 为什么需要镜像
+ *
+ * 国内直连 raw.githubusercontent.com 经常超时或 404。只有这一条路的话，
+ * 用户会**永远**看不到作者写了什么 —— 与「更新通道坏掉」是同一类问题：
+ * 修好的内容走的就是那条坏掉的通道。
+ *
+ * ## `ghproxy.com` 已失效（2026-10 实测）
+ *
+ * 它现在对任何路径都返回 **301 跳转到自己的首页**，而 `fetch` 默认跟随跳转、
+ * `response.ok`（200）成立 —— 于是代码会把首页 HTML 当成公告正文解析，
+ * 得到一个「标题是一堆标签」的垃圾文档。
+ *
+ * 换成实测可用的三个：
+ *
+ *	gh-proxy.com   200 + 正确内容
+ *	ghfast.top     200 + 正确内容
+ *	ghproxy.net    200 + 正确内容
+ *
+ * 但**不能只靠换域名**解决：公共代理随时会像 ghproxy.com 一样失效，
+ * 而失效方式恰好是「200 + 错误内容」。所以下面 `looksLikeMarkdown` 才是
+ * 真正的防线 —— 内容不像公告就跳过这一跳。
+ */
 function mirrorSources(locale: Locale): string[] {
   const lang = locale === 'zh-CN' ? 'zh' : 'en'
   const path = 'app/frontend/src/announcements/author.' + lang + '.md'
@@ -106,16 +131,30 @@ function mirrorSources(locale: Locale): string[] {
   return [
     raw,
     'https://cdn.jsdelivr.net/gh/' + REPO_PATH + '@main/' + path,
-    'https://ghproxy.com/' + raw,
+    'https://gh-proxy.com/' + raw,
+    'https://ghfast.top/' + raw,
   ]
 }
 
 /**
- * 真实接入：按镜像链拉取公告，全失败才退回本地。
- * 演示没有调用它（避免首屏被网络拖慢/离线时干等）。
+ * 判断拿到的是不是一篇公告，而不是代理的错误页 / 首页 HTML。
+ *
+ * 必须有这条：公共代理失效时**不会报错**，而是返回 200 + 一段 HTML。
+ * 只看 `response.ok` 的话，用户会看到「标题是 `<html lang="">`」的公告，
+ * 而且那个结果还会被当成「远端成功」缓存下来，不显示离线标记。
+ *
+ * 判据刻意宽松（公告是 Markdown，可能以 `---` frontmatter 或 `#` 开头）：
+ *   - 出现 HTML 文档特征（`<!doctype` / `<html`）→ 不是公告
+ *   - 长度太短（< 20 字符）→ 基本是错误页
  */
+function looksLikeMarkdown(text: string): boolean {
+  const head = text.trimStart().slice(0, 200).toLowerCase()
+  if (head.startsWith('<!doctype') || head.startsWith('<html')) return false
+  return text.trim().length >= 20
+}
+
 /**
- * 拉取公告，并**如实报告内容来自哪里**。
+ * 按镜像链拉取公告，全失败才退回本地；并**如实报告内容来自哪里**。
  *
  * 返回 `source: 'remote'` 说明拿到的是远端最新内容；`'local'` 说明
  * 三级镜像全挂、用了打包时那份副本。
@@ -142,7 +181,8 @@ export async function fetchAnnouncement(
       const response = await fetcher(url, { signal: AbortSignal.timeout(4000) })
       if (!response.ok) continue
       const text = await response.text()
-      if (text.trim()) {
+      // 内容不像公告就跳过这一跳（代理可能返回 200 + 首页 HTML）
+      if (looksLikeMarkdown(text)) {
         return { doc: parseAnnouncement(text), source: 'remote', via: url }
       }
     } catch {

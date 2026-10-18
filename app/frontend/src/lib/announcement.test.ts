@@ -96,3 +96,49 @@ describe('parseAnnouncement', () => {
     expect(doc.blocks[0]).toEqual({ type: 'p', text: '就是一段话' })
   })
 })
+
+// ===== 代理返回 HTML 的情况 =====
+//
+// 真实背景：公共镜像 `ghproxy.com` 在 2026-10 之后对任何路径都返回
+// **301 跳转到自己的首页**。`fetch` 默认跟随跳转、`response.ok` 成立，
+// 于是代码会把首页 HTML 当成公告正文 —— 用户看到「标题是 <html lang="">」，
+// 而且那个结果被当成「远端成功」，连离线标记都不显示。
+describe('fetchAnnouncement 对代理错误页的防御', () => {
+  const html = '<!DOCTYPE html>\n<html lang="">\n<head><title>301</title></head></html>'
+
+  it('返回 HTML 的一跳被跳过，继续下一跳', async () => {
+    const res = await fetchAnnouncement(
+      'zh-CN',
+      fakeFetch(async (url) =>
+        url.includes('raw.githubusercontent.com')
+          ? new Response(html, { status: 200 })
+          : new Response(md, { status: 200 }),
+      ),
+    )
+    expect(res.source).toBe('remote')
+    expect(res.doc.title).toBe('测试')
+    expect(res.via).toContain('jsdelivr')
+  })
+
+  it('所有镜像都返回 HTML 时退回本地', async () => {
+    const res = await fetchAnnouncement(
+      'zh-CN',
+      fakeFetch(async () => new Response(html, { status: 200 })),
+    )
+    expect(res.source).toBe('local')
+    expect(res.doc.blocks.length).toBeGreaterThan(0)
+  })
+
+  it('过短的内容（错误页）同样被跳过', async () => {
+    const res = await fetchAnnouncement(
+      'zh-CN',
+      fakeFetch(async (url) =>
+        url.includes('raw.githubusercontent.com')
+          ? new Response('404', { status: 200 })
+          : new Response(md, { status: 200 }),
+      ),
+    )
+    expect(res.source).toBe('remote')
+    expect(res.via).toContain('jsdelivr')
+  })
+})
