@@ -40,8 +40,18 @@ else
   GOARCH="${TARGET_PLATFORM##*/}"
 fi
 
-# wails 用 `darwin/arm64` 这种写法；Go 的 GOARCH 就是 arm64 / amd64
-echo "→ 目标平台：${GOOS}/${GOARCH}"
+# `universal` 是 **macOS 的 lipo 概念**，不是 Go 的 GOARCH ——
+# `go build` 会直接报 `unsupported GOOS/GOARCH pair darwin/universal`。
+# Wails 自己处理 universal（分别编 arm64 / amd64 再用 lipo 合并），
+# 但边车是我们自己编的，必须在这也处理：**两个架构各编一份**。
+# 运行时 GOARCH 只会是 arm64 或 amd64，提取逻辑按那个找，所以两份都要在。
+ARCH_LIST=("${GOARCH}")
+if [[ "${GOARCH}" == "universal" ]]; then
+  ARCH_LIST=("arm64" "amd64")
+  echo "→ 目标平台：${GOOS}/universal（将为 arm64 + amd64 各编一份边车）"
+else
+  echo "→ 目标平台：${GOOS}/${GOARCH}"
+fi
 
 # ===== 1. 编译边车 =====
 #
@@ -51,45 +61,48 @@ SIDECAR_NAME="downvid-deps"
 if [[ "${GOOS}" == "windows" ]]; then
   SIDECAR_NAME="downvid-deps.exe"
 fi
-SIDECAR_DIR="${APP_DIR}/internal/sidecar/bin/${GOOS}-${GOARCH}"
-mkdir -p "${SIDECAR_DIR}"
 
-echo "→ 编译依赖边车（${GOOS}/${GOARCH}）"
-# 边车源码在**仓库根**的 `backend/cmd/downvid-deps`，不在 app/cmd/ 下。
+build_sidecar() {
+  local arch="$1"
+  local dir="${APP_DIR}/internal/sidecar/bin/${GOOS}-${arch}"
+  mkdir -p "${dir}"
+  echo "→ 编译依赖边车（${GOOS}/${arch}）"
+  (
+    cd "${REPO_DIR}/backend"
+    CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${arch}" \
+      go build -trimpath -ldflags "-s -w" \
+      -o "${dir}/${SIDECAR_NAME}" ./cmd/downvid-deps
+  )
+  if [[ ! -x "${dir}/${SIDECAR_NAME}" ]]; then
+    echo "✗ 边车编译失败：${dir}/${SIDECAR_NAME} 不存在" >&2
+    return 1
+  fi
+  local size
+  size="$(wc -c < "${dir}/${SIDECAR_NAME}" | tr -d ' ')"
+  echo "  ✓ ${dir#${APP_DIR}/}/${SIDECAR_NAME}（${size} 字节）"
+}
+
+for arch in "${ARCH_LIST[@]}"; do
+  build_sidecar "${arch}"
+done
+# 冒烟：边车必须能应答 detect 并输出 JSON。
 #
-# 这里必须点名到具体包。第一版写的是 `./cmd/...`（在 app/ 目录下执行），
-# 于是匹配到了 `app/cmd/downvid-server`——那是**容器端的 Web 服务**，
-# 结果把「监听 6080 的 HTTP 服务」当成依赖探测器嵌了进去。
-# 症状在运行时才出现：设置页的「重新检测」永远失败，日志里是
-# 「服务退出：listen tcp 127.0.0.1:6080: bind: address already in use」。
-# 只有「边车文件存在」这一条校验不够——存在不等于**是对的**那个程序。
-(
-  cd "${REPO_DIR}/backend"
-  CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${GOARCH}" \
-    go build -trimpath -ldflags "-s -w" \
-    -o "${SIDECAR_DIR}/${SIDECAR_NAME}" ./cmd/downvid-deps
-)
-
-if [[ ! -x "${SIDECAR_DIR}/${SIDECAR_NAME}" ]]; then
-  echo "✗ 边车编译失败：${SIDECAR_DIR}/${SIDECAR_NAME} 不存在" >&2
-  exit 1
-fi
-SIZE="$(wc -c < "${SIDECAR_DIR}/${SIDECAR_NAME}" | tr -d ' ')"
-echo "  ✓ ${SIDECAR_DIR#${APP_DIR}/}/${SIDECAR_NAME}（${SIZE} 字节）"
-
-# 冒烟：边车必须能应答 `detect`，并且输出是 JSON。
+# 「文件存在且可执行」说明不了任何事 —— 编错程序（比如嵌成了容器端的
+# Web 服务）同样满足这两条。只有本机架构才跑得了。
 #
-# 「文件存在且可执行」说明不了任何事——编错程序（比如嵌成了容器端的
-# Web 服务）同样满足这两条。这条断言直接问它一句话。
-if [[ "${GOOS}" == "$(go env GOOS)" && "${GOARCH}" == "$(go env GOARCH)" ]]; then
+# 注意判据用的是**宿主**架构，不是目标架构：universal 构建在这里
+# 会同时编 arm64 与 amd64，只有与宿主一致的那份能执行。
+SMOKE_ARCH="$(go env GOARCH)"
+if [[ "${GOOS}" == "$(go env GOOS)" && " ${ARCH_LIST[*]} " == *" ${SMOKE_ARCH} "* ]]; then
+  SMOKE_BIN="${APP_DIR}/internal/sidecar/bin/${GOOS}-${SMOKE_ARCH}/${SIDECAR_NAME}"
   SMOKE_DIR="$(mktemp -d)"
-  if ! "${SIDECAR_DIR}/${SIDECAR_NAME}" detect --managed-dir "${SMOKE_DIR}" --json 2>/dev/null | head -c 1 | grep -q '{'; then
+  if ! "${SMOKE_BIN}" detect --managed-dir "${SMOKE_DIR}" --json 2>/dev/null | head -c 1 | grep -q '{'; then
     echo "  ✗ 边车冒烟失败：detect 没有输出 JSON（编错程序了？）" >&2
     rm -rf "${SMOKE_DIR}"
     exit 1
   fi
   rm -rf "${SMOKE_DIR}"
-  echo "  ✓ 边车能应答 detect"
+  echo "  ✓ 边车能应答 detect（${SMOKE_ARCH}）"
 else
   echo "  · 交叉编译，跳过冒烟（在目标平台上验证）"
 fi
