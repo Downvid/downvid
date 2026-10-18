@@ -115,6 +115,28 @@ for (const [manifest, platform] of REQUIRED_MANIFESTS) {
 const hasArtifacts = assetNames.some((n) => /\.(dmg|zip|exe|AppImage|deb|rpm|tar\.gz)$/.test(n))
 if (!hasArtifacts) problems.push('该 Release 没有任何安装产物')
 
+// ===== Wails 版（新架构）的产物 =====
+//
+// 与 Electron 版**并行发布**，用独立命名 `DownVid-Wails-*`。
+// 这一节只做**提示级**校验（缺了不判红）：Wails 版目前是预览产物，
+// 某个平台的构建失败不该让整个发布失败——那会把 Electron 版的修复
+// 也一起堵住，而后者才是存量 9600+ 用户的更新通道。
+const wailsAssets = assetNames.filter((n) => n.startsWith('DownVid-Wails-'))
+const EXPECTED_WAILS = [
+  ['mac-universal', 'macOS'],
+  ['windows-x64', 'Windows'],
+  ['linux-x64', 'Linux'],
+]
+if (wailsAssets.length === 0) {
+  console.log('提示：本次没有 Wails 版产物（新架构预览可单独构建）')
+} else {
+  for (const [suffix, platform] of EXPECTED_WAILS) {
+    if (!wailsAssets.some((n) => n.includes(suffix))) {
+      console.log(`提示：Wails 版缺少 ${platform} 产物（${suffix}）`)
+    }
+  }
+}
+
 if (problems.length) {
   console.error(`发布不完整：${tag}`)
   for (const p of problems) console.error(`  ✗ ${p}`)
@@ -125,5 +147,5 @@ if (problems.length) {
 console.log(
   // GitHub API 返回的是 snake_case（published_at），这里两个都兜一下
   `发布校验通过：${tag} 已发布（${(release.published_at || release.publishedAt || release.created_at || '').slice(0, 10) || '时间未知'}），` +
-    `${assetNames.length} 个产物，更新清单齐全。`,
+    `${assetNames.length} 个产物（其中 Wails 版 ${wailsAssets.length} 个），更新清单齐全。`,
 )
