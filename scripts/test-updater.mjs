@@ -397,6 +397,45 @@ suite.case('发布产物清单：latest*.yml 覆盖全部平台，且每个产�
   }
 })
 
+// 并行发布的**安全边界**：Wails 产物绝不能进 latest*.yml。
+//
+// 为什么这条必须有：Wails 版（新架构）与 Electron 版同时挂在同一个 Release 上。
+// 如果 `DownVid-Wails-mac-universal-*.zip` 被写进 `latest-mac.yml`，
+// 存量用户的 electron-updater 会把它当成更新包去下载 —— 而那个 zip 里是
+// 一个裸 `.app`，**装不上**。
+//
+// 表现就是：用户看到「有新版本」，点了下载，最后失败。比「检测不到」更糟。
+// 而这一切不会让任何测试变红 —— 除非这条用例存在。
+suite.case('Wails 产物不得进入 electron-updater 清单', async (t) => {
+  const { execFileSync } = await import('node:child_process')
+  const dir = suite.tempDir('downvid-wails-exclude-')
+  const mixed = [
+    // Electron 版（老用户的更新通道）
+    'DownVid-Setup-9.9.9.exe',
+    'DownVid-arm64-Mac-9.9.9.zip',
+    'DownVid-x86_64-Linux-9.9.9.AppImage',
+    // Wails 版（新架构，独立下载，不过自动更新）
+    'DownVid-Wails-mac-universal-9.9.9.zip',
+    'DownVid-Wails-windows-x64-9.9.9.zip',
+    'DownVid-Wails-linux-x64-9.9.9.tar.gz',
+  ]
+  for (const f of mixed) fs.writeFileSync(path.join(dir, f), `content of ${f}`)
+  execFileSync('node', ['scripts/gen-update-manifests.mjs', dir, '9.9.9'], { cwd: root })
+
+  for (const file of ['latest.yml', 'latest-mac.yml', 'latest-linux.yml']) {
+    const body = fs.readFileSync(path.join(dir, file), 'utf8')
+    if (body.includes('DownVid-Wails-')) {
+      t.fail(`${file} 混进了 Wails 产物 —— 老用户的自动更新会下载到装不上的包`)
+    }
+    // 反向断言：Electron 产物必须还在（否则等于把老用户的通道也弄没了）
+    t.ok(body.length > 0, `${file} 不能是空的`)
+  }
+  t.ok(
+    fs.readFileSync(path.join(dir, 'latest-mac.yml'), 'utf8').includes('DownVid-arm64-Mac-9.9.9.zip'),
+    'Electron 的 mac 产物必须仍在清单里（老用户的更新通道）',
+  )
+})
+
 suite.case('Release 正文按实际产物生成，不出现死链', async (t) => {
   const { execFileSync } = await import('node:child_process')
   const dir = suite.tempDir('downvid-notes-')

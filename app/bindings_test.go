@@ -16,6 +16,7 @@ import (
 	"github.com/Downvid/downvid/app/internal/changelog"
 	"github.com/Downvid/downvid/app/internal/download"
 	"github.com/Downvid/downvid/app/internal/history"
+	"github.com/Downvid/downvid/app/internal/update"
 )
 
 // newTestApp 造一个指向临时目录的 App，不启动 Wails。
@@ -534,5 +535,44 @@ func TestChangelogJSONIsArray(t *testing.T) {
 	}
 	if !strings.HasPrefix(string(raw), "[") {
 		t.Fatalf("序列化结果不是数组：%.40s", raw)
+	}
+}
+
+// TestArchitectureDefaultsToElectron 未注入时必须是 electron。
+//
+// 这个默认值是**安全方向**：
+//   - 若默认 wails，过渡版（Electron 外壳）会误判自己是新架构，
+//     从而跳过 electron-updater 的 `latest*.yml` —— 存量用户直接失去更新
+//   - 若默认 electron，最坏情况只是新版不提示「你已经迁移过」，
+//     不影响任何人的更新通道
+func TestArchitectureDefaultsToElectron(t *testing.T) {
+	// `go test` 不带 -ldflags，所以这里就是「未注入」的场景
+	if arch != string(update.ArchElectron) {
+		t.Errorf("未注入时 arch 应为 electron，实际 %q", arch)
+	}
+	if update.CurrentArchitecture != update.ArchElectron {
+		t.Errorf("update.CurrentArchitecture 应为 electron，实际 %q", update.CurrentArchitecture)
+	}
+}
+
+// TestCheckUpdateReportsArchitecture CheckUpdate 必须如实报告当前架构，
+// 并给出迁移判定。
+//
+// 这条不依赖网络：全挂时也要有 `architecture` 与 `migration` 两个键，
+// 否则前端读不到会当成「没有新架构版本」，永远不提示。
+func TestCheckUpdateReportsArchitecture(t *testing.T) {
+	app := NewApp()
+	app.dataDir = t.TempDir()
+	// 用一个必然失败的源避免测试依赖网络；重点是有没有这两个键
+	out := app.CheckUpdate("website")
+
+	if _, ok := out["architecture"]; !ok {
+		t.Error("CheckUpdate 必须返回 architecture（前端据此判断该读哪套通道）")
+	}
+	if _, ok := out["migration"]; !ok {
+		t.Error("CheckUpdate 必须返回 migration（否则界面永远不提示新架构）")
+	}
+	if out["architecture"] != string(update.ArchElectron) {
+		t.Errorf("architecture = %v，期望 electron", out["architecture"])
 	}
 }

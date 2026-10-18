@@ -60,6 +60,7 @@ import {
   platform as backendPlatform,
   changelogHistory as backendChangelogHistory,
   type ChangelogEntry,
+  type MigrationHint,
   startDownload,
   stripMarker,
   testProxy as backendTestProxy,
@@ -213,6 +214,10 @@ class AppStore {
     summary?: string
     /** Release 发布时间（ISO），仅用于展示 */
     date?: string
+    /** 当前二进制属于哪个架构（electron 过渡版 / wails 新架构） */
+    architecture?: 'electron' | 'wails'
+    /** 新架构迁移判定：这一版有没有发布适合本机的 Wails 包 */
+    migration?: MigrationHint
   }>({ status: 'idle', progress: 0 })
 
   // ===== 公告 =====
@@ -1210,7 +1215,15 @@ class AppStore {
     }
 
     if (!res.hasUpdate) {
-      this.updateInfo = { status: 'latest', progress: 0, version: res.currentVersion }
+      this.updateInfo = {
+        status: 'latest',
+        progress: 0,
+        version: res.currentVersion,
+        architecture: res.architecture,
+        // 即使「已是最新」也保留迁移判定：用户可能停在旧版本，
+        // 而最新版已经提供了新架构的包
+        migration: res.migration,
+      }
       if (!silent) this.toast(t('toast.upToDate'), 'info')
       return
     }
@@ -1224,6 +1237,8 @@ class AppStore {
       // 发布时间来自 Release 的 releaseDate：更新弹窗里要显示「这版是哪天的」，
       // 早先模板读 `date`、快照里却没有这个字段，于是永远渲染成空串。
       date: res.date,
+      architecture: res.architecture,
+      migration: res.migration,
     }
     this.dialog = 'update'
   }
@@ -1243,6 +1258,19 @@ class AppStore {
    * 这里**如实打开 Releases 页面**，不假装安装成功——假装会让用户
    * 以为已经升级，然后继续用旧版本。
    */
+  /**
+   * 打开新架构（Wails）包的下载页。
+   *
+   * 只打开 Releases 页、不自动下载安装：迁移是单向门（装上新架构后
+   * 没有 electron-updater 可用，回不到 Electron 版），所以这一步必须
+   * 由用户自己确认。
+   */
+  async openMigrationDownload(): Promise<void> {
+    const v = this.updateInfo.migration?.version || this.updateInfo.version
+    await openExternal(v ? `${REPO_RELEASES}/tag/v${v}` : REPO_RELEASES)
+    this.toast(t('update.migrationManual'), 'info')
+  }
+
   async installUpdate(): Promise<void> {
     await openExternal(REPO_RELEASES)
     this.dialog = 'none'

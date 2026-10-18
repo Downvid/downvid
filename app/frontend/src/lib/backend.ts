@@ -607,6 +607,26 @@ export interface UpdateCheckResult {
   notes?: string
   /** 发布日期 */
   date?: string
+  /** 当前这个二进制属于哪个架构：electron（过渡） / wails（新架构） */
+  architecture?: 'electron' | 'wails'
+  /** 新架构迁移判定（后端的 EvaluateMigration） */
+  migration?: MigrationHint
+}
+
+/**
+ * 「可以迁移到新架构」的判定结果（对应 Go 的 `update.MigrationHint`）。
+ *
+ * 为什么只做成**提示**、不做自动迁移：迁移是单向门——装上新架构后
+ * 没有 electron-updater 可用，回不到 Electron 版。在新架构稳定之前，
+ * 把不可逆操作做成自动的，风险远大于收益。
+ */
+export interface MigrationHint {
+  available: boolean
+  /** 适合本机的新架构包文件名（界面显示给用户） */
+  assetName?: string
+  version?: string
+  /** 不可用的原因（含「这个更新源查不到产物清单」这种） */
+  reason?: string
 }
 
 export async function checkUpdate(source = 'auto'): Promise<UpdateCheckResult | null> {
@@ -623,6 +643,8 @@ export async function checkUpdate(source = 'auto'): Promise<UpdateCheckResult | 
       summary: raw.summary as string | undefined,
       notes: release?.releaseNotes,
       date: release?.releaseDate,
+      architecture: raw.architecture as 'electron' | 'wails' | undefined,
+      migration: raw.migration as MigrationHint | undefined,
     }
   } catch {
     return null

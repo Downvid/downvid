@@ -194,6 +194,12 @@ type Release struct {
 	ReleaseNote string   `json:"releaseNotes"`
 	ReleaseDate string   `json:"releaseDate"`
 	Source      SourceID `json:"source"`
+	// Assets 是这次 Release 挂的全部文件名。
+	//
+	// 需要它来判断「这一版有没有发布新架构（Wails）的产物」。
+	// 只有 GitHub / Gitee 的 API 会给这个字段；jsDelivr / 官网只报版本号，
+	// 此时 Assets 为空 —— 调用方据此区分「确定没有」与「不知道」。
+	Assets []string `json:"assets,omitempty"`
 }
 
 // versionPattern 与 TS 的 `/^\d+(\.\d+)*([.-][0-9A-Za-z.-]+)?$/` 对应。
@@ -295,7 +301,19 @@ func ParseLatestPayload(source SourceID, payload any) (Release, bool) {
 		date = d
 	}
 
-	return Release{Version: version, ReleaseNote: notes, ReleaseDate: date, Source: source}, true
+	// GitHub / Gitee 都叫 `assets`，每项里有 `name`
+	var assets []string
+	if list, ok := obj["assets"].([]any); ok {
+		for _, raw := range list {
+			if a, ok := raw.(map[string]any); ok {
+				if name, ok := a["name"].(string); ok && name != "" {
+					assets = append(assets, name)
+				}
+			}
+		}
+	}
+
+	return Release{Version: version, ReleaseNote: notes, ReleaseDate: date, Source: source, Assets: assets}, true
 }
 
 // CompareVersions 按「数字段逐个比较」判断 a 与 b 的先后，返回 -1 / 0 / 1。

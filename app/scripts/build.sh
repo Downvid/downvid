@@ -102,9 +102,25 @@ bash "${APP_DIR}/scripts/prepare-embed-dir.sh"
 # `-tags "withsidecar"` 让 internal/sidecar 走嵌入分支。
 # 不加 tag 时会走 stub，构建能过但**运行时没有依赖探测**——所以这个
 # tag 是必须的，不是可选的优化。
-echo "→ wails build -tags withsidecar ${WAILS_ARGS[*]:-}"
+# 版本号与架构标识由**构建期注入**：
+#   - version：从 package.json 读（与 electron 版同一个来源，不能两边不一致）
+#   - arch：**必须是 wails**，否则新版认不出自己是新架构，
+#           会去读 electron-updater 的 latest*.yml（那份只描述 Electron 产物）
+#
+# 写成 `-X main.arch=wails` 而不是在代码里硬编码：Electron 版也有同一份
+# 代码路径，靠注入区分两者。
+VERSION="$(node -p "require('${REPO_DIR}/package.json').version" 2>/dev/null || echo 0.0.0-dev)"
+ARCH_TAG="wails"
+if [[ " ${WAILS_ARGS[*]} " == *" --electron "* ]]; then
+  ARCH_TAG="electron"
+fi
+LDFLAGS="-s -w -X main.version=${VERSION}"
+# `main.arch` 由 app.go 的 init() 转给 update.CurrentArchitecture
+LDFLAGS="${LDFLAGS} -X main.arch=${ARCH_TAG}"
+
+echo "→ wails build -tags withsidecar（version=${VERSION} arch=${ARCH_TAG}）"
 cd "${APP_DIR}"
-wails build -tags "withsidecar" "${WAILS_ARGS[@]}"
+wails build -tags "withsidecar" -ldflags "${LDFLAGS}" "${WAILS_ARGS[@]}"
 
 echo
 echo "✓ 完成。验证边车已内嵌："

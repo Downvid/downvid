@@ -46,6 +46,20 @@ import (
 // version 由构建期注入：-ldflags "-X main.version=1.5.0"
 var version = "0.0.0-dev"
 
+// arch 由构建期注入：-ldflags "-X main.arch=wails"
+//
+// 决定**这个二进制属于哪个架构**（electron / wails）。用途：
+//   - 新架构版要知道自己已经是新架构，不去读 electron-updater 的清单
+//   - 过渡版（electron）要能被提示「可以迁移到新架构」
+//
+// 默认值必须是 electron：未注入时（比如手动 `go run`）按老架构处理最保守。
+// 反过来若默认 wails，过渡版会误判自己是新架构、跳过 electron 更新通道。
+var arch = string(update.ArchElectron)
+
+func init() {
+	update.CurrentArchitecture = update.Architecture(arch)
+}
+
 // App 是暴露给前端的绑定对象。
 //
 // Wails 会把它的**导出方法**生成到 `frontend/wailsjs/go/main/App.js`。
@@ -282,13 +296,22 @@ func (a *App) CheckUpdate(source string) map[string]any {
 		"attempts": result.Attempts,
 		"summary":  update.SummarizeFailures(result.Attempts),
 		"version":  version,
+		// 当前这个二进制是哪个架构（electron / wails）。前端据此决定
+		// 「要不要提示迁移到新架构」以及「该读哪套更新通道」。
+		"architecture": string(update.CurrentArchitecture),
 	}
 	if result.Release != nil {
 		out["release"] = result.Release
 		out["hasUpdate"] = update.CompareVersions(result.Release.Version, version) > 0
+		// 新架构迁移检测：这一版有没有发布适合本机的 Wails 包。
+		//
+		// 刻意只**告知**、不自动迁移 —— 迁移是单向门：装上新架构后
+		// 没有 electron-updater 可用，回不到 Electron 版。
+		out["migration"] = update.EvaluateMigration(update.CurrentArchitecture, result.Release)
 	} else {
 		out["release"] = nil
 		out["hasUpdate"] = false
+		out["migration"] = update.MigrationHint{Reason: "检查更新失败，无法判断新架构版本"}
 	}
 	return out
 }

@@ -494,6 +494,31 @@
           </div>
         </div>
 
+        <!--
+          新架构（Wails）迁移提示。
+          
+          只在**过渡版**（electron）检测到这一版发布了适合本机的 Wails 包时出现。
+          刻意做成「告知 + 手动下载」而不是自动迁移：迁移是单向门 ——
+          装上新架构后没有 electron-updater 可用，回不到 Electron 版。
+        -->
+        {#if app.updateInfo.architecture === 'electron' && app.updateInfo.migration?.available}
+          <div class="row row--migration">
+            <div class="row-label">
+              <span class="row-title">{t('settings.migrationTitle')}</span>
+              <span class="row-hint">
+                {t('settings.migrationHint', { version: app.updateInfo.migration.version ?? '' })}
+              </span>
+              <span class="migration-asset num">{app.updateInfo.migration.assetName}</span>
+            </div>
+            <div class="row-control">
+              <button type="button" class="btn btn-ghost btn-sm" onclick={() => app.openMigrationDownload()}>
+                <Icon name="download" size={14} />
+                <span>{t('settings.migrationDownload')}</span>
+              </button>
+            </div>
+          </div>
+        {/if}
+
         <div class="action-bar">
           <button
             type="button"
@@ -803,6 +828,23 @@
     white-space: nowrap;
   }
 
+  /* 新架构迁移提示：用强调色描边，但不用主色填充——
+     它是一个「可选建议」，不该抢走「检查更新」主按钮的注意力 */
+  .row--migration {
+    border: 1px solid color-mix(in oklab, var(--accent) 35%, var(--rule));
+    border-radius: var(--radius-control);
+    background: color-mix(in oklab, var(--accent) 6%, transparent);
+    padding: 12px 14px;
+    margin: 12px 0;
+  }
+  .migration-asset {
+    display: block;
+    margin-top: 4px;
+    font-size: 9.5px;
+    color: var(--color-on-surface-variant);
+    word-break: break-all;
+  }
+
   .action-bar {
     display: flex;
     align-items: center;
@@ -1041,7 +1083,24 @@
       max-width: none;
       text-align: left;
     }
-    .action-bar {
+    /* 新架构迁移提示：用强调色描边，但不用主色填充——
+     它是一个「可选建议」，不该抢走「检查更新」主按钮的注意力 */
+  .row--migration {
+    border: 1px solid color-mix(in oklab, var(--accent) 35%, var(--rule));
+    border-radius: var(--radius-control);
+    background: color-mix(in oklab, var(--accent) 6%, transparent);
+    padding: 12px 14px;
+    margin: 12px 0;
+  }
+  .migration-asset {
+    display: block;
+    margin-top: 4px;
+    font-size: 9.5px;
+    color: var(--color-on-surface-variant);
+    word-break: break-all;
+  }
+
+  .action-bar {
       justify-content: stretch;
     }
     .action-bar .btn {
