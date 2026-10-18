@@ -341,6 +341,7 @@ func (a *App) DownloadUpdate(version string, source string) StartDownloadResult 
 	shaOf := map[string]string{}
 	sizeOf := map[string]int64{}
 	urlOf := map[string]string{}
+	digestOf := map[string]string{}
 	names := make([]string, 0, len(release.AssetDetails))
 	for _, asset := range release.AssetDetails {
 		names = append(names, asset.Name)
@@ -348,6 +349,9 @@ func (a *App) DownloadUpdate(version string, source string) StartDownloadResult 
 		sizeOf[asset.Name] = asset.Size
 		if asset.SHA512 != "" {
 			shaOf[asset.Name] = asset.SHA512
+		}
+		if asset.Digest != "" {
+			digestOf[asset.Name] = asset.Digest
 		}
 	}
 
@@ -359,6 +363,9 @@ func (a *App) DownloadUpdate(version string, source string) StartDownloadResult 
 		}
 	}
 	picked.URL = urlOf[picked.Name]
+	// GitHub 的产物没有 sha512（那是我们自己清单里才算的），
+	// 用它的 digest 兜底 —— 两条通道都要能校验
+	picked.Digest = digestOf[picked.Name]
 
 	client, err := netx.Client(a.currentProxy(), 0)
 	if err != nil {

@@ -25,8 +25,10 @@ package update
 //	         其他格式（deb/rpm/tar.gz）需要包管理器，不做自动安装
 
 import (
+	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"path/filepath"
 	"runtime"
@@ -52,7 +54,9 @@ type InstallAsset struct {
 	Name string `json:"name"`
 	URL  string `json:"url"`
 	// SHA512 是 base64 编码的校验值（与 electron-updater 的清单同一格式）
-	SHA512 string    `json:"sha512,omitempty"`
+	SHA512 string `json:"sha512,omitempty"`
+	// Digest 是 GitHub 自带的摘要（形如 `sha256:<hex>`），作为 SHA512 的兜底
+	Digest string    `json:"digest,omitempty"`
 	Size   int64     `json:"size,omitempty"`
 	Kind   AssetKind `json:"kind"`
 }
@@ -158,11 +162,48 @@ func ValidateDownload(data []byte, asset *InstallAsset) error {
 	if asset.Size > 0 && int64(len(data)) != asset.Size {
 		return fmt.Errorf("下载大小不符：收到 %d 字节，清单写的 %d 字节", len(data), asset.Size)
 	}
+	// 优先用发布流程提供的 sha512（与 electron-updater 同一格式）
 	if asset.SHA512 != "" {
-		got := sha512Base64(data)
-		if got != asset.SHA512 {
+		if sha512Base64(data) != asset.SHA512 {
 			return fmt.Errorf("sha512 校验失败（包可能损坏或被替换），请重试")
 		}
+		return nil
+	}
+
+	// 退回 GitHub 自带的 digest（形状是 `sha256:<hex>`）。
+	//
+	// 这条兜底是必要的：`sha512` 来自我们自己生成的 latest*.yml，
+	// 而 Wails 版不走那份清单 —— 它直接读 Release API 的产物列表，
+	// 那里只有 GitHub 算的 sha256。两条通道都要能校验。
+	if asset.Digest != "" {
+		if err := verifyDigest(data, asset.Digest); err != nil {
+			return err
+		}
+		return nil
+	}
+	return nil
+}
+
+// verifyDigest 校验 GitHub 的 `algo:hex` 形式摘要。
+func verifyDigest(data []byte, digest string) error {
+	algo, want, ok := strings.Cut(digest, ":")
+	if !ok || want == "" {
+		return fmt.Errorf("无法识别的摘要格式：%s", digest)
+	}
+	var got string
+	switch strings.ToLower(algo) {
+	case "sha256":
+		sum := sha256.Sum256(data)
+		got = hex.EncodeToString(sum[:])
+	case "sha512":
+		sum := sha512.Sum512(data)
+		got = hex.EncodeToString(sum[:])
+	default:
+		// 不认识的算法**不跳过校验**：那等于完全不校验。
+		return fmt.Errorf("不支持的摘要算法 %q", algo)
+	}
+	if !strings.EqualFold(got, want) {
+		return fmt.Errorf("%s 校验失败（包可能损坏或被替换），请重试", algo)
 	}
 	return nil
 }

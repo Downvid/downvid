@@ -1,6 +1,8 @@
 package update
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"runtime"
 	"strings"
 	"testing"
@@ -175,4 +177,49 @@ func TestInstallPathForMacTargetsAppBundle(t *testing.T) {
 	if got != "/Applications/DownVid.app" {
 		t.Errorf("路径推导错误：%q", got)
 	}
+}
+
+// GitHub 的产物只有 sha256 digest（形状 `sha256:<hex>`），
+// 而我们自己生成的 latest*.yml 才有 sha512。两条通道都要能校验。
+func TestValidateDownloadFallsBackToDigest(t *testing.T) {
+	data := []byte("payload for digest test")
+
+	// 正确摘要
+	good := "sha256:" + sha256Hex(data)
+	if err := ValidateDownload(data, &InstallAsset{Digest: good}); err != nil {
+		t.Fatalf("sha256 摘要正确时应通过：%v", err)
+	}
+
+	// 错误摘要
+	bad := "sha256:" + sha256Hex([]byte("other"))
+	if err := ValidateDownload(data, &InstallAsset{Digest: bad}); err == nil {
+		t.Fatal("sha256 摘要不符时必须报错")
+	}
+
+	// 不认识的算法**不能静默跳过** —— 那等于完全不校验
+	if err := ValidateDownload(data, &InstallAsset{Digest: "md5:abc"}); err == nil {
+		t.Fatal("不支持的算法应报错，而不是跳过校验")
+	}
+
+	// 格式不对也要报错
+	if err := ValidateDownload(data, &InstallAsset{Digest: "no-colon"}); err == nil {
+		t.Fatal("无法识别的摘要格式应报错")
+	}
+}
+
+// sha512 优先于 digest：两条都有时按 sha512 判。
+func TestValidateDownloadPrefersSHA512(t *testing.T) {
+	data := []byte("payload")
+	asset := &InstallAsset{
+		SHA512: sha512Base64(data),
+		Digest: "sha256:" + sha256Hex([]byte("wrong")), // 故意错
+	}
+	if err := ValidateDownload(data, asset); err != nil {
+		t.Fatalf("sha512 正确时不该因为 digest 错而失败：%v", err)
+	}
+}
+
+func sha256Hex(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }

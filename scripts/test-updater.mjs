@@ -436,6 +436,64 @@ suite.case('Wails 产物不得进入 electron-updater 清单', async (t) => {
   )
 })
 
+// 迁移开关：`MIGRATE_TO_WAILS` 决定哪些平台的 latest*.yml 指向新架构产物。
+//
+// 这是**单向门**的开关 —— 切了以后老用户会被换成 Wails 版且回不来。
+// 所以两条都必须钉住：
+//   · 默认（不设环境变量）时**一个都不切**
+//   · 设了之后只切指定的那个平台，其他平台保持原样
+suite.case('迁移开关：默认不切，指定平台才切', async (t) => {
+  const { execFileSync } = await import('node:child_process')
+  const files = [
+    'DownVid-Setup-9.9.9.exe',
+    'DownVid-arm64-Mac-9.9.9.zip',
+    'DownVid-arm64-Mac-9.9.9.dmg',
+    'DownVid-x86_64-Linux-9.9.9.AppImage',
+    'DownVid-Wails-mac-universal-9.9.9.zip',
+    'DownVid-Wails-windows-x64-9.9.9.zip',
+    'DownVid-Wails-linux-x64-9.9.9.tar.gz',
+  ]
+
+  // --- 默认：一个都不切 ---
+  {
+    const dir = suite.tempDir('downvid-migrate-off-')
+    for (const f of files) fs.writeFileSync(path.join(dir, f), `content of ${f}`)
+    execFileSync('node', ['scripts/gen-update-manifests.mjs', dir, '9.9.9'], {
+      cwd: root,
+      env: { ...process.env, MIGRATE_TO_WAILS: '' },
+    })
+    const mac = fs.readFileSync(path.join(dir, 'latest-mac.yml'), 'utf8')
+    t.ok(mac.includes('DownVid-arm64-Mac-9.9.9.zip'), '默认应仍指向 Electron 的 mac 包')
+    t.ok(!mac.includes('Wails'), '默认不该混进 Wails 包（那会把老用户换走且回不来）')
+
+    const win = fs.readFileSync(path.join(dir, 'latest.yml'), 'utf8')
+    t.ok(win.includes('DownVid-Setup-9.9.9.exe'), '默认应仍指向 Electron 的 Windows 安装器')
+  }
+
+  // --- 只切 macOS：Windows 必须保持原样 ---
+  {
+    const dir = suite.tempDir('downvid-migrate-mac-')
+    for (const f of files) fs.writeFileSync(path.join(dir, f), `content of ${f}`)
+    execFileSync('node', ['scripts/gen-update-manifests.mjs', dir, '9.9.9'], {
+      cwd: root,
+      env: { ...process.env, MIGRATE_TO_WAILS: 'macos' },
+    })
+    const mac = fs.readFileSync(path.join(dir, 'latest-mac.yml'), 'utf8')
+    t.ok(
+      mac.includes('DownVid-Wails-mac-universal-9.9.9.zip'),
+      '切了 macOS 后 latest-mac.yml 应指向 Wails 包',
+    )
+    // dmg 不该再出现：Wails 的安装要解压 zip 替换 .app，dmg 用不上
+    t.ok(!mac.includes('.dmg'), '迁移到 Wails 后不该再列 dmg')
+
+    const win = fs.readFileSync(path.join(dir, 'latest.yml'), 'utf8')
+    t.ok(
+      win.includes('DownVid-Setup-9.9.9.exe'),
+      '只切 macOS 时 Windows 必须保持 Electron 通道（不切就不该动）',
+    )
+  }
+})
+
 suite.case('Release 正文按实际产物生成，不出现死链', async (t) => {
   const { execFileSync } = await import('node:child_process')
   const dir = suite.tempDir('downvid-notes-')
