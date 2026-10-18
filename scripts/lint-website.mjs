@@ -277,7 +277,15 @@ if (!productName || artifactNames.length === 0) {
       .split('@@EXT@@').join('[A-Za-z0-9.]+')
     return new RegExp('^' + pattern + '$')
   })
-  for (const template of pageTemplates) {
+  // 新架构（Wails）的产物名**不来自 electron-builder**，而是 release.yml
+  // 的 build-wails job（ditto / Compress-Archive / tar 拼出来的）。
+  // 两类模板要分开校验，否则 Wails 产物会被拿去和 artifactName 比，
+  // 永远匹配不上 —— 而它本来就不该匹配。
+  const WAILS_PREFIX = 'DownVid-Wails-'
+  const wailsTemplates = pageTemplates.filter((t) => t.startsWith(WAILS_PREFIX))
+  const electronTemplates = pageTemplates.filter((t) => !t.startsWith(WAILS_PREFIX))
+
+  for (const template of electronTemplates) {
     const sample = template.split('{version}').join('1.2.3')
     if (!matchers.some((re) => re.test(sample))) {
       problems.push(
@@ -286,7 +294,31 @@ if (!productName || artifactNames.length === 0) {
       )
     }
   }
-  notes.push('下载产物名模板 ' + pageTemplates.length + ' 条与 electron-builder.json5 一致')
+  notes.push(
+    '下载产物名模板 ' + electronTemplates.length + ' 条与 electron-builder.json5 一致',
+  )
+
+  // Wails 产物名对照 release.yml 的 build-wails job。
+  //
+  // 写错同样不会报错，只是官网那个「预览版」入口永远不出现 ——
+  // 用户不知道有新版可用，而我们这边没有任何信号。
+  if (wailsTemplates.length > 0) {
+    const releaseYml = fs.readFileSync(path.join(ROOT, '.github/workflows/release.yml'), 'utf8')
+    const wailsJob = releaseYml.slice(releaseYml.indexOf('build-wails:'))
+    // release.yml 里的产物名形如 DownVid-Wails-${{ matrix.suffix }}-${{ needs.version.outputs.version }}.zip
+    const suffixes = [...wailsJob.matchAll(/suffix:\s*([a-z0-9-]+)/g)].map((m) => m[1])
+    for (const template of wailsTemplates) {
+      const sample = template.split('{version}').join('1.2.3')
+      const matched = suffixes.some((suffix) => sample.includes(`DownVid-Wails-${suffix}-`))
+      if (!matched) {
+        problems.push(
+          '官网的新架构产物模板 ' + template +
+            ' 与 release.yml 的 build-wails 产物名对不上（预览版入口会永远不出现）',
+        )
+      }
+    }
+    notes.push('新架构产物名模板 ' + wailsTemplates.length + ' 条与 release.yml 一致')
+  }
 }
 
 // ===== 7b. 平台图标 =====
