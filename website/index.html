@@ -75,6 +75,22 @@
         </a>
       </div>
       <p class="dl-note" id="dlNote"></p>
+      <!--
+        新架构（Wails）预览版入口。
+        
+        刻意做成**次级文字链接**而不是第二个主按钮：
+        新架构版目前没有自更新，误当主推会让新用户每版都要手动回来下载。
+        没有该平台的产物时整块隐藏（脚本里控制），不留死链。
+      -->
+      <p class="dl-preview" id="dlPreview" hidden>
+        <a id="dlPreviewLink" href="https://github.com/Downvid/downvid/releases">
+          <span data-i18n="dl.previewLink">试用新架构预览版</span>
+          <span class="dl-preview-badge" data-i18n="dl.previewBadge">预览</span>
+        </a>
+        <span class="dl-preview-note" data-i18n="dl.previewNote">
+          体积约为原来的 1/7，启动更快；暂不支持自动更新与抖音/快手
+        </span>
+      </p>
       <!-- 下载量 / 星标用 README 同款 shields.io 徽章：数字实时，不再维护静态值 -->
       <div class="hero-badges">
         <a href="https://github.com/Downvid/downvid/releases" rel="noopener"><img src="https://img.shields.io/github/downloads/Downvid/downvid/total?style=flat&amp;label=Downloads&amp;logo=github&amp;logoColor=white&amp;color=2563eb" alt="Downloads" height="20"></a>
@@ -270,7 +286,7 @@
           <div class="dv-alt-panel dv-about" id="dvAltAbout" hidden>
             <img class="dv-about-logo" src="https://raw.githubusercontent.com/Downvid/downvid/main/src/assets/logo.png" alt="" width="64" height="64">
             <p class="dv-about-name">DownVid</p>
-            <p class="dv-about-version" id="dvAboutVersion" data-version>v1.4.0</p>
+            <p class="dv-about-version" id="dvAboutVersion" data-version>v1.5.0</p>
             <p class="dv-about-text" data-i18n="demo.about">基于 yt-dlp 的开源桌面视频下载工具</p>
             <p class="dv-about-link"><a href="https://github.com/Downvid/downvid">github.com/Downvid/downvid</a></p>
           </div>

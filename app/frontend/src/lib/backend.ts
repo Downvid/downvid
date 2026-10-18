@@ -145,6 +145,9 @@ type Bindings = {
   OpenManagedDir(): Promise<string>
   TestProxy(proxy: string): Promise<{ ok: boolean; latencyMs?: number; status?: number; error?: string; kind?: string }>
   ReadClipboard(): Promise<{ text: string; error?: string }>
+  DownloadUpdate(version: string, source: string): Promise<{ ok: boolean; error?: string }>
+  InstallUpdate(): Promise<{ ok: boolean; error?: string }>
+  PendingUpdateInfo(): Promise<{ pending: boolean; version?: string; kind?: string }>
   PickDirectory(title: string): Promise<string>
   PickFile(title: string, extensions: string[]): Promise<string>
   ChangelogList(): Promise<ChangelogEntry[]>
@@ -663,6 +666,49 @@ export async function platform(): Promise<string> {
 }
 
 /**
+ * 下载更新包（异步，进度走 `update:progress` 事件）。
+ *
+ * 与早先「打开 Releases 页面」的区别：这是真的把包装到本地并校验 sha512。
+ * 校验不过会删掉已下载的文件并报错 —— 损坏的包装上去，应用就再也打不开了。
+ */
+export async function requestUpdateDownload(
+  version: string,
+  source = 'auto',
+): Promise<{ ok: boolean; message?: string }> {
+  const b = await backend()
+  if (!b) return { ok: false, message: '浏览器预览没有后端' }
+  try {
+    const res = await b.DownloadUpdate(version, source)
+    return { ok: res.ok, message: res.error }
+  } catch (e) {
+    return { ok: false, message: String((e as Error)?.message ?? e) }
+  }
+}
+
+/** 应用已下载的更新并重启。 */
+export async function requestUpdateInstall(): Promise<{ ok: boolean; message?: string }> {
+  const b = await backend()
+  if (!b) return { ok: false, message: '浏览器预览没有后端' }
+  try {
+    const res = await b.InstallUpdate()
+    return { ok: res.ok, message: res.error }
+  } catch (e) {
+    return { ok: false, message: String((e as Error)?.message ?? e) }
+  }
+}
+
+/** 是否有已下载待安装的更新（启动时提示用）。 */
+export async function pendingUpdate(): Promise<{ pending: boolean; version?: string; kind?: string } | null> {
+  const b = await backend()
+  if (!b) return null
+  try {
+    return await b.PendingUpdateInfo()
+  } catch {
+    return null
+  }
+}
+
+/**
  * 读剪贴板。
  *
  * 桌面端走 Go（`pbpaste` / `Get-Clipboard` / `wl-paste`），**不碰**
@@ -799,4 +845,9 @@ async function subscribe(name: string, cb: (data: unknown) => void): Promise<() 
   } catch {
     return () => {}
   }
+}
+
+/** 订阅更新下载进度（与 download:progress 同一套订阅方式） */
+export async function onUpdateProgress(cb: (p: unknown) => void): Promise<() => void> {
+  return subscribe('update:progress', cb)
 }

@@ -36,6 +36,7 @@ import (
 	"github.com/Downvid/downvid/app/internal/download"
 	"github.com/Downvid/downvid/app/internal/history"
 	"github.com/Downvid/downvid/app/internal/image"
+	"github.com/Downvid/downvid/app/internal/netx"
 	"github.com/Downvid/downvid/app/internal/parse"
 	"github.com/Downvid/downvid/app/internal/settings"
 	"github.com/Downvid/downvid/app/internal/shell"
@@ -314,6 +315,158 @@ func (a *App) CheckUpdate(source string) map[string]any {
 		out["migration"] = update.MigrationHint{Reason: "检查更新失败，无法判断新架构版本"}
 	}
 	return out
+}
+
+// ===== 自更新：下载与安装 =====
+
+// DownloadUpdate 下载新版本安装包并校验。
+//
+// **异步**：立即返回，进度走 `update:progress` 事件。安装包可能有几十 MB，
+// 同步等待会让界面卡住且无法显示进度。
+//
+// 只做「下载 + 校验 + 记到 pending」，不安装 —— 用户可以继续手头的活，
+// 下次启动时再装（或主动点「重启并安装」）。
+func (a *App) DownloadUpdate(version string, source string) StartDownloadResult {
+	if version == "" {
+		return StartDownloadResult{OK: false, Error: "缺少版本号"}
+	}
+
+	// 复用 CheckUpdate 的结果拿产物列表：那里已经处理了降级链与代理
+	info := a.CheckUpdate(source)
+	release, _ := info["release"].(*update.Release)
+	if release == nil {
+		return StartDownloadResult{OK: false, Error: "拿不到版本信息，请先检查更新"}
+	}
+
+	shaOf := map[string]string{}
+	sizeOf := map[string]int64{}
+	urlOf := map[string]string{}
+	names := make([]string, 0, len(release.AssetDetails))
+	for _, asset := range release.AssetDetails {
+		names = append(names, asset.Name)
+		urlOf[asset.Name] = asset.URL
+		sizeOf[asset.Name] = asset.Size
+		if asset.SHA512 != "" {
+			shaOf[asset.Name] = asset.SHA512
+		}
+	}
+
+	picked := update.PickInstallAsset(names, shaOf, sizeOf)
+	if picked == nil {
+		return StartDownloadResult{
+			OK:    false,
+			Error: "这一版没有提供适合本机自动更新的安装包，请到 Releases 页面手动下载",
+		}
+	}
+	picked.URL = urlOf[picked.Name]
+
+	client, err := netx.Client(a.currentProxy(), 0)
+	if err != nil {
+		return StartDownloadResult{OK: false, Error: err.Error()}
+	}
+
+	go func() {
+		dir := filepath.Join(a.dataDir, "pending-update")
+		path, err := update.Downloader{Client: client, Dir: dir}.Download(
+			context.Background(), picked,
+			func(p update.DownloadProgress) {
+				a.emit("update:progress", map[string]any{
+					"status":   "downloading",
+					"percent":  p.Percent,
+					"received": p.Received,
+					"total":    p.Total,
+				})
+			},
+		)
+		if err != nil {
+			a.emit("update:progress", map[string]any{
+				"status": "error", "message": err.Error(),
+			})
+			return
+		}
+
+		state := update.PendingUpdate{
+			Version:      version,
+			Path:         path,
+			Kind:         picked.Kind,
+			DownloadedAt: nowISO(),
+		}
+		if err := update.SavePending(a.pendingUpdatePath(), state); err != nil {
+			a.emit("update:progress", map[string]any{
+				"status": "error", "message": "保存更新记录失败：" + err.Error(),
+			})
+			return
+		}
+		a.emit("update:progress", map[string]any{"status": "downloaded", "version": version})
+	}()
+
+	return StartDownloadResult{OK: true}
+}
+
+// InstallUpdate 应用已下载的更新并重启。
+//
+// 三个平台各一套（见 internal/update/install_*.go），共同点：
+// 替换动作都在**本进程退出之后**发生，所以这里返回后必须立刻退出。
+func (a *App) InstallUpdate() StartDownloadResult {
+	pending := update.LoadPending(a.pendingUpdatePath())
+	if pending == nil {
+		return StartDownloadResult{OK: false, Error: "没有待安装的更新，请先下载"}
+	}
+
+	exe, err := os.Executable()
+	if err != nil {
+		return StartDownloadResult{OK: false, Error: "拿不到可执行文件路径"}
+	}
+	ok, reason := update.CanSelfInstall(exe, func(p string) bool {
+		// 只要能写目标目录，就说明这个安装位置可以由我们替换
+		return os.WriteFile(filepath.Join(p, ".downvid-write-test"), nil, 0o644) == nil
+	})
+	if !ok {
+		return StartDownloadResult{OK: false, Error: reason}
+	}
+
+	logPath := filepath.Join(a.dataDir, "update-install.log")
+	bundle := update.InstallTarget(exe)
+
+	var installErr error
+	switch runtime.GOOS {
+	case "darwin":
+		installErr = update.InstallMac(pending.Path, bundle, logPath)
+	case "windows":
+		installErr = update.InstallWindows(pending.Path, logPath)
+	default:
+		installErr = update.InstallLinux(pending.Path)
+	}
+	if installErr != nil {
+		return StartDownloadResult{OK: false, Error: installErr.Error()}
+	}
+
+	update.ClearPending(a.pendingUpdatePath())
+
+	// 安装脚本在等这个进程退出。延迟一点再退，让返回值先送达前端。
+	go func() {
+		time.Sleep(300 * time.Millisecond)
+		wruntime.Quit(a.ctx)
+	}()
+	return StartDownloadResult{OK: true}
+}
+
+// PendingUpdateInfo 报告是否有已下载待安装的更新（启动时用来提示）。
+func (a *App) PendingUpdateInfo() map[string]any {
+	p := update.LoadPending(a.pendingUpdatePath())
+	if p == nil {
+		return map[string]any{"pending": false}
+	}
+	return map[string]any{
+		"pending": true,
+		"version": p.Version,
+		"kind":    string(p.Kind),
+	}
+}
+
+// pendingUpdatePath 是「待安装更新」记录的位置。
+func (a *App) pendingUpdatePath() string {
+	return filepath.Join(a.dataDir, "pending-update.json")
 }
 
 // ===== 前端用得到的辅助 =====

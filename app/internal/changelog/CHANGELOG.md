@@ -2,7 +2,73 @@
 
 本文件记录 DownVid 的所有版本更新。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [1.5.0] - 2026-10-18
+
+> 这一版同时发布两套产物：**Electron 版**（老用户走自动更新）与
+> **Wails 版**（新架构预览，手动下载，文件名前缀 `DownVid-Wails-`）。
+
+### 新增
+
+- **新架构预览版（Wails）**：Go + Wails + Svelte，单文件约 18 MB（Electron 版 128 MB）。
+  依赖探测、解析、下载、历史、设置、更新检查全部走 Go 核心（`app/internal/` 下 14 个包，
+  互相零依赖）。产物独立命名，**不进老用户的更新通道**。
+- **过渡版能检测到新架构版本**：设置 → 更新里会出现提示，显示可用的 `DownVid-Wails-*`
+  产物名。迁移由用户手动确认 —— 装上新架构后回不到 Electron，这是单向门。
+- **直链下载器**：抖音 / 快手的 CDN 直链走独立路径（分块队列、`.part` 断点续传、
+  429/503 降并发并遵守 `Retry-After`）。这两家的直链有效期只有几分钟，
+  交给 yt-dlp 会二次请求平台接口、拿不到同一份地址。
+- **代理真正生效**：此前只有 yt-dlp 走 `--proxy`，应用自己的 HTTP（直链下载、
+  依赖下载、更新检查）全部直连。现在统一走 `internal/netx`。
+  「测试」按钮也从「正则校验」改成真实连通性探测（带回延迟毫秒数）。
+- **更新日志读真实 CHANGELOG**：关于页的版本列表此前是硬编码的三条，
+  内容还是占位词条。现在解析内嵌的 `CHANGELOG.md`，支持 Markdown 粗体 /
+  行内代码 / 链接，默认只显示标题、点开看展开说明。
+
+### 修复
+
+- **滑块拖不动 / 加速设置不生效**：`updateSetting('key', value)` 被写成了
+  单参数签名，运行时把字符串按字符下标展开成 `{0:'m',1:'a',…}`，
+  **一个字段都没改且不报错**。同类问题还有 Go 侧的 `accelEnabled` /
+  `accelConnections` 只在启动时初始化、`a.proxy` 从不从设置读回。
+- **同链接不同清晰度无法再次下载**：原来只比 URL，下过 1080P 就再也下不了 4K。
+  改为 URL + 清晰度 + 模式三项判定；文件名同时补清晰度后缀，
+  否则不同清晰度算出同名文件、yt-dlp 静默跳过却报成功。
+- **续传用错格式**：暂停后点「继续」读的是解析面板**当前**选中的格式，
+  而用户此时可能已经换视频了。改为把选择固化在任务上。
+- **YouTube 多音轨选择无效**：`DownloadRequest` 里根本没有 `AudioTrack` 字段，
+  用户选了日语下下来还是默认音轨。
+- **加速页永远显示「未找到 aria2」**：后端 kind 是 `aria2`，前端按 `aria2c` 查找。
+- **窗口拖不动、左上角被红绿灯压住**：macOS 用 `TitleBarHiddenInset`（内容铺到顶部），
+  而顶栏没设成拖拽区。
+- **关于页看起来「打不开」**：实际是内容被右侧「传输」浮层盖住（窄窗口下
+  `position: fixed` 且默认展开）。同时修了 `ChangelogHistory` 返回 nil 导致
+  整页白屏（Go 的 nil 切片 JSON 化是 `null`，前端 `.length` 直接抛）。
+- **「作者的话」永远停在打包那天**：`fetchAnnouncement()` 早就写好了却从没被调用。
+  同时换掉已失效的 `ghproxy.com`（它现在返回 301 跳首页，会被当成公告正文），
+  并加内容校验防止代理返回 HTML 被当 Markdown 解析。
+- **粘贴按钮弹出权限框**：`navigator.clipboard` 在 WebView 里要授权，
+  改为 Go 侧读系统剪贴板（`pbpaste` / `Get-Clipboard` / `wl-paste`）。
+- **设置页的文件夹按钮是「打开」不是「选择」**：点一下弹出 Finder，
+  想换保存位置只能自己敲路径。
+- **依赖页只剩一条**：Wails 版打出来的 app 里根本没有依赖边车
+  （Wails 没有 electron-builder 的 `extraResources`）。改为内嵌进主二进制。
+
+### 工程
+
+- **CI 七处长期红叉全清**，五条工作流（Linux / macOS / Windows / Docker / CodeQL）全绿。
+  其中两处是真 bug：`process_tree.go` 在 Windows 上根本编译不过
+  （`syscall.Kill` 不存在）、`runtime` 包的数据竞争（并行探测互相重置扫描预算，
+  `go test -race` 抓到）。
+- 新增三条 CI 检查：`svelte-check`（`.svelte` 里的类型错误，`tsc` 看不见）、
+  `lint:i18n:app`（中英词条成对 / 无演示文案 / `t()` 引用的 key 存在）、
+  `sync:changelog`（内嵌副本与根部 CHANGELOG 一致）。
+- 删除 `core/` 空壳目录（Wails 方案里可复用的核心是 Go 的 `app/internal/*`）。
+  `lint:boundaries` 改为守护 Go 分层：`internal` 包之间不得互相 import。
+
+---
+
 ## [Unreleased]
+
 
 ### 文档
 

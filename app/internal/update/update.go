@@ -200,6 +200,24 @@ type Release struct {
 	// 只有 GitHub / Gitee 的 API 会给这个字段；jsDelivr / 官网只报版本号，
 	// 此时 Assets 为空 —— 调用方据此区分「确定没有」与「不知道」。
 	Assets []string `json:"assets,omitempty"`
+	// AssetDetails 是与 Assets 一一对应的详细信息（URL / sha512 / 大小）。
+	//
+	// 自更新需要 URL 与校验值；只给文件名的话，调用方还得自己拼
+	// `releases/download/vX/<name>`，那条规则变一次就全错。
+	AssetDetails []Asset `json:"assetDetails,omitempty"`
+}
+
+// Asset 是 Release 里的一个产物。
+type Asset struct {
+	Name string `json:"name"`
+	// URL 是浏览器的下载直链（GitHub 的 browser_download_url）
+	URL string `json:"url,omitempty"`
+	// Size 是字节数，用于下载时校验长度
+	Size int64 `json:"size,omitempty"`
+	// Digest 是 GitHub 提供的摘要，形如 `sha256:abc...`；可能为空
+	Digest string `json:"digest,omitempty"`
+	// SHA512 来自同名 `.sha512` 附件（若发布流程提供）
+	SHA512 string `json:"sha512,omitempty"`
 }
 
 // versionPattern 与 TS 的 `/^\d+(\.\d+)*([.-][0-9A-Za-z.-]+)?$/` 对应。
@@ -303,17 +321,37 @@ func ParseLatestPayload(source SourceID, payload any) (Release, bool) {
 
 	// GitHub / Gitee 都叫 `assets`，每项里有 `name`
 	var assets []string
+	var details []Asset
 	if list, ok := obj["assets"].([]any); ok {
 		for _, raw := range list {
-			if a, ok := raw.(map[string]any); ok {
-				if name, ok := a["name"].(string); ok && name != "" {
-					assets = append(assets, name)
-				}
+			a, ok := raw.(map[string]any)
+			if !ok {
+				continue
 			}
+			name, _ := a["name"].(string)
+			if name == "" {
+				continue
+			}
+			assets = append(assets, name)
+
+			detail := Asset{Name: name}
+			if u, ok := a["browser_download_url"].(string); ok {
+				detail.URL = u
+			}
+			if sz, ok := a["size"].(float64); ok {
+				detail.Size = int64(sz)
+			}
+			if dg, ok := a["digest"].(string); ok {
+				detail.Digest = dg
+			}
+			details = append(details, detail)
 		}
 	}
 
-	return Release{Version: version, ReleaseNote: notes, ReleaseDate: date, Source: source, Assets: assets}, true
+	return Release{
+		Version: version, ReleaseNote: notes, ReleaseDate: date, Source: source,
+		Assets: assets, AssetDetails: details,
+	}, true
 }
 
 // CompareVersions 按「数字段逐个比较」判断 a 与 b 的先后，返回 -1 / 0 / 1。

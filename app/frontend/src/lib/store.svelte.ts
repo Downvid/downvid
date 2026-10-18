@@ -58,6 +58,9 @@ import {
   pickDirectory,
   pickFile,
   platform as backendPlatform,
+  onUpdateProgress,
+  requestUpdateDownload,
+  requestUpdateInstall,
   changelogHistory as backendChangelogHistory,
   type ChangelogEntry,
   type MigrationHint,
@@ -310,6 +313,31 @@ class AppStore {
         const ev = p as { event?: string; downloaded?: number; total?: number; message?: string }
         if (ev.event === 'progress' && ev.total) {
           this.depsPromptProgress = (ev.downloaded ?? 0) / ev.total
+        }
+      }),
+    )
+
+    // 更新下载进度
+    this.cleanups.push(
+      await onUpdateProgress((p: unknown) => {
+        const ev = p as { status?: string; percent?: number; message?: string; version?: string }
+        if (ev.status === 'downloading') {
+          this.updateInfo = {
+            ...this.updateInfo,
+            status: 'downloading',
+            progress: (ev.percent ?? 0) / 100,
+          }
+        } else if (ev.status === 'downloaded') {
+          this.updateInfo = {
+            ...this.updateInfo,
+            status: 'downloaded',
+            progress: 1,
+            version: ev.version ?? this.updateInfo.version,
+          }
+          this.toast(t('update.downloadedReady'), 'success')
+        } else if (ev.status === 'error') {
+          this.updateInfo = { ...this.updateInfo, status: 'error', summary: ev.message }
+          this.toast(ev.message || t('update.downloadFailed'), 'error')
         }
       }),
     )
@@ -1271,10 +1299,22 @@ class AppStore {
     this.toast(t('update.migrationManual'), 'info')
   }
 
+  /**
+   * 安装已下载的更新并重启。
+   *
+   * 真机上替换动作发生在**本进程退出之后**（各平台实现见
+   * `internal/update/install_*.go`），所以这里返回后应用会自己退出重启。
+   */
   async installUpdate(): Promise<void> {
-    await openExternal(REPO_RELEASES)
+    const res = await requestUpdateInstall()
+    if (!res.ok) {
+      // 装不上时退回「打开下载页」—— 用户至少还能手动装
+      await openExternal(REPO_RELEASES)
+      this.toast(res.message || t('update.manualDownload'), 'error')
+      return
+    }
     this.dialog = 'none'
-    this.toast(t('update.manualDownload'), 'info')
+    this.toast(t('update.installing'), 'info')
   }
 
   /**
@@ -1283,13 +1323,28 @@ class AppStore {
    * **后端没有实现这条**（Go 侧只有更新检查，没有 electron-updater 的下载/安装）。
    * 如实告知用户去 Releases 页面手动下载，而不是假装下载成功。
    */
+  /**
+   * 下载更新包（异步，进度走 `update:progress`）。
+   *
+   * 早先这里只是「打开 Releases 页面」—— 那是**没实现**，不是设计。
+   * 现在真的下载并校验；校验不过会删掉已下载的文件并报错。
+   */
   async downloadUpdate(): Promise<void> {
-    if (this.updateInfo.version) {
-      await openExternal(`${REPO_RELEASES}/tag/v${this.updateInfo.version}`)
-    } else {
+    const version = this.updateInfo.version
+    if (!version) {
       await openExternal(REPO_RELEASES)
+      return
     }
-    this.toast(t('update.manualDownload'), 'info')
+
+    this.updateInfo = { ...this.updateInfo, status: 'downloading', progress: 0 }
+    const res = await requestUpdateDownload(version, this.settings.updateSource)
+
+    if (!res.ok) {
+      this.updateInfo = { ...this.updateInfo, status: 'error', summary: res.message }
+      // 自动下载失败时退回手动：用户至少还能自己下
+      await openExternal(`${REPO_RELEASES}/tag/v${version}`)
+      this.toast(res.message || t('update.manualDownload'), 'error')
+    }
   }
 
   // ============================================================

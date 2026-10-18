@@ -267,6 +267,24 @@ const ARTIFACTS = {
 };
 
 /**
+ * 新架构（Wails）预览版的产物模板。
+ *
+ * ## 为什么单独一张表，不并进 ARTIFACTS
+ *
+ * 主按钮必须继续指向 **Electron 版** —— 那是有自动更新的版本。
+ * 新架构版目前**没有自更新**（点了「检查更新」只是打开下载页），
+ * 如果它成了主按钮，新用户装完以后每出一版都要自己回来下载。
+ *
+ * 所以它只作为一个次级入口出现，并且明确标注「预览」。
+ * `pnpm lint:website` 会核对这里的产物名与 release.yml 的 build-wails 一致。
+ */
+const WAILS_ARTIFACTS = {
+  windows: 'DownVid-Wails-windows-x64-{version}.zip',
+  macos: 'DownVid-Wails-mac-universal-{version}.zip',
+  linux: 'DownVid-Wails-linux-x64-{version}.tar.gz',
+};
+
+/**
  * 判断桌面系统。Android / iOS / ChromeOS 一律归到 other：
  * 官网没有它们的安装包，把它们当 Linux 只会让用户下到一个装不上的包。
  */
@@ -344,6 +362,19 @@ function selectDownload(release, os, arch) {
     matches.find(m => m.variant.primary) ||
     matches[0];
   return { primary: primary, others: matches.filter(m => m !== primary) };
+}
+
+/**
+ * 挑选当前平台可用的新架构预览包。
+ *
+ * 返回 null 表示这一版没发该平台的 Wails 产物 —— 调用方据此隐藏入口，
+ * 而不是留一个死链。
+ */
+function selectWailsPreview(release, os) {
+  if (!release || !os || !WAILS_ARTIFACTS[os]) return null;
+  const re = templateToRegex(WAILS_ARTIFACTS[os]);
+  const asset = release.assets.find(a => re.test(a.name));
+  return asset ? asset : null;
 }
 
 /** 菜单用的全量列表：每个平台里所有能匹配到的产物，识别出的平台排在最前面 */
@@ -491,6 +522,20 @@ function renderDownload() {
   btnEl.setAttribute('href', href);
   if (installEl) installEl.setAttribute('href', href);
   noteEl.textContent = note;
+
+  // 新架构预览入口：只有这一版真的发了**本平台**的 Wails 包时才出现。
+  // 否则隐藏 —— 留一个点不开的链接比不显示更糟。
+  const previewEl = document.getElementById('dlPreview');
+  const previewLink = document.getElementById('dlPreviewLink');
+  if (previewEl && previewLink) {
+    const preview = os && release ? selectWailsPreview(release, os) : null;
+    if (preview) {
+      previewLink.setAttribute('href', preview.url);
+      previewEl.hidden = false;
+    } else {
+      previewEl.hidden = true;
+    }
+  }
 
   renderMenu(os);
 }
