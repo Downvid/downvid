@@ -115,24 +115,68 @@
     void app.loadChangelog()
   })
 
+  /**
+   * 用户选中的版本。
+   *
+   * ## 这个 `$effect` 曾经让下拉框**完全不能换版本**
+   *
+   * 上一版写的是「每次 `selectedVersion` 变化就把它强制改回当前运行版本」，
+   * 于是用户在 `<select>` 里选历史版本时：
+   *
+   *   1. `onchange` 把 `selectedVersion` 设成目标版本
+   *   2. `$effect` 看到它 ≠ 当前版本，立刻改回去
+   *   3. 下拉框弹回当前版本，下方内容也跟着回去
+   *
+   * 表现就是「选了没反应」。这类 bug 很难从代码上看出来（effect 的意图
+   * 本身是合理的），必须真的点一下才发现。
+   *
+   * 正确做法：**只在还没有选中值时对齐一次**（`synced` 守卫），
+   * 之后完全由用户控制。
+   */
   let selectedVersion = $state('')
-  // 默认选中**当前运行版本**；当前版本不在列表里时退回第一条。
-  //
-  // 这里必须处理「选中值不在 options 里」的情况：`<select value=...>` 在
-  // 值不存在时会渲染成空白（浏览器行为），用户看到的是一个没有选中项的
-  // 下拉框。早先的实现只在 selectedVersion 为空时才赋值，一旦它被设成
-  // 一个不存在的版本（比如开发构建的 0.0.0-dev），下拉框就永远空白。
+  let syncedVersion = false
   $effect(() => {
-    if (releases.length === 0) return
+    if (syncedVersion || releases.length === 0) return
+    syncedVersion = true
+    // 当前运行版本不在列表里（开发构建的 0.0.0-dev）时退回第一条，
+    // 否则 `<select value=...>` 会渲染成空白（浏览器行为）
     const wanted = `v${app.version.replace(/^v/, '')}`
-    const exists = releases.some((r) => r.version === wanted)
-    const fallback = releases[0].version
-    const next = exists ? wanted : fallback
-    if (selectedVersion !== next) selectedVersion = next
+    selectedVersion = releases.some((r) => r.version === wanted) ? wanted : releases[0].version
   })
 
   const selectedRelease = $derived(
     releases.find((release) => release.version === selectedVersion) ?? releases[0] ?? null,
+  )
+
+  /**
+   * 折叠状态：默认只显示前 N 条。
+   *
+   * ## 为什么需要折叠
+   *
+   * 一个版本的 CHANGELOG 动辄 15~20 条（1.4.0 是 20 条），全部铺开会把
+   * 整个「关于」页拉得很长——用户要滑很久才能看到下面的链接区，而
+   * 「看这一版改了什么」通常只需要前几条。
+   *
+   * 切换版本时**重置折叠状态**：否则在第 1.4.0 展开了、切到 1.3.4
+   * 仍然处于展开态，用户会以为那一版也很长。
+   */
+  const DEFAULT_VISIBLE = 3
+  let expanded = $state(false)
+  // 版本一变就收起（`selectedVersion` 是唯一入口）
+  $effect(() => {
+    void selectedVersion
+    expanded = false
+  })
+
+  const visibleNotes = $derived(
+    selectedRelease
+      ? expanded
+        ? selectedRelease.notes
+        : selectedRelease.notes.slice(0, DEFAULT_VISIBLE)
+      : [],
+  )
+  const hiddenCount = $derived(
+    selectedRelease ? Math.max(0, selectedRelease.notes.length - DEFAULT_VISIBLE) : 0,
   )
 
   function onVersionChange(event: Event): void {
@@ -241,7 +285,7 @@
       </div>
       {#if selectedRelease}
         <ol class="notes">
-          {#each selectedRelease.notes as note, index (index)}
+          {#each visibleNotes as note, index (index)}
             <li class="note">
               <span class="note-index num">{String(index + 1).padStart(2, '0')}</span>
               <span class="note-text">
@@ -267,6 +311,17 @@
             </li>
           {/each}
         </ol>
+        {#if hiddenCount > 0}
+          <button
+            type="button"
+            class="notes-more"
+            onclick={() => (expanded = !expanded)}
+            aria-expanded={expanded}
+          >
+            <span>{expanded ? t('about.collapseNotes') : t('about.showAllNotes', { count: hiddenCount })}</span>
+            <Icon name={expanded ? 'expand_less' : 'expand_more'} size={14} />
+          </button>
+        {/if}
       {:else}
         <!--
           没有更新日志时如实说明，而不是显示空列表或占位文案。

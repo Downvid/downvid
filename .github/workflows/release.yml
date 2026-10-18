@@ -316,7 +316,7 @@ jobs:
           retention-days: 7
 
   release:
-    needs: [version, build-mac-arm64, build-mac-x64, build-win, build-linux-x64, build-linux-arm64]
+    needs: [version, build-mac-arm64, build-mac-x64, build-win, build-linux-x64, build-linux-arm64, build-wails]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     if: needs.version.outputs.version != ''
@@ -376,6 +376,10 @@ jobs:
             artifacts/**/*.tar.gz
             artifacts/latest*.yml
             artifacts/**/*.blockmap
+            # Wails 版（新架构）的独立产物：与 Electron 版同时挂在同一个 Release 上，
+            # 但文件名前缀不同（DownVid-Wails-*），electron-updater 不会把它
+            # 当成更新包 —— 那正是我们要的（见 build-wails 的注释）
+            artifacts/DownVid-Wails-*
 
       # 发布**完成后**回头核对一次：Release 真的存在、且带着全部平台的更新清单。
       # 为什么需要这一步：实测 `v1.3.5` 的 tag 推上去了、CHANGELOG 也写了，
@@ -425,3 +429,106 @@ jobs:
           fi
           git commit -m "chore(website): 发布后同步官网版本号至 v$VERSION" -m "由 release.yml 在 Release 创建成功后自动写入，离线兜底值不再是过期的。"
           git push origin main
+
+  # ===== Wails 版（新架构）=====
+  #
+  # 与上面的 Electron 版**并行发布**，产物用独立命名（`DownVid-Wails-*`），
+  # 互不干扰。这是刻意的：
+  #
+  #   存量 9600+ 用户装的是 Electron 版，靠 electron-updater 读
+  #   `latest*.yml` + NSIS/dmg。Wails 产出的是裸 `.app` / `.exe`，
+  #   格式对不上 —— 直接替换产物会让他们的自动更新**永远失败**，
+  #   而那是「唯一一旦坏掉就再也修不好」的通道。
+  #
+  # 所以分阶段：
+  #   1. 现在：两套并行，Wails 版作为「独立下载」的预览产物
+  #   2. 稳定几个版本后：单独做一次迁移器，把老用户导过去
+  build-wails:
+    needs: [version]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: darwin/universal
+            suffix: mac-universal
+          - os: windows-latest
+            platform: windows/amd64
+            suffix: windows-x64
+          - os: ubuntu-22.04
+            platform: linux/amd64
+            suffix: linux-x64
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.25'
+          cache: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - uses: pnpm/action-setup@v6
+
+      # Linux 构建 Wails 需要 GTK / WebKit 开发包，运行需要它们的运行时库。
+      # 这两组包名在不同发行版上不同，这里按 Ubuntu 22.04 写。
+      - name: Install Linux build deps
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-3-dev libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
+
+      - name: Install frontend deps
+        working-directory: app/frontend
+        run: pnpm install --frozen-lockfile
+
+      # 必须用 build.sh：它先把依赖边车编译好再带 `-tags withsidecar` 构建。
+      # 直接 `wails build` 出来的应用**没有依赖探测能力**（边车不在包里），
+      # 用户看到的是「依赖页只剩一条」——这个故障真实发生过。
+      - name: Build (Wails)
+        working-directory: app
+        run: bash scripts/build.sh -platform ${{ matrix.platform }} -skipbindings
+
+      - name: Package macOS
+        if: matrix.os == 'macos-latest'
+        run: |
+          cd app/build/bin
+          # universal 产出的名字是 downvid.app；压成 zip 保留可执行权限
+          ditto -c -k --sequesterRsrc --keepParent downvid.app \
+            "../../../DownVid-Wails-${{ matrix.suffix }}-${{ needs.version.outputs.version }}.zip"
+          ls -la ../../../DownVid-Wails-*.zip
+
+      - name: Package Windows
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $v = "${{ needs.version.outputs.version }}"
+          Compress-Archive -Path app/build/bin/downvid.exe `
+            -DestinationPath "DownVid-Wails-windows-x64-$v.zip"
+          Get-Item DownVid-Wails-*.zip | Format-List Name, Length
+
+      - name: Package Linux
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          cd app/build/bin
+          tar -czf "../../../DownVid-Wails-${{ matrix.suffix }}-${{ needs.version.outputs.version }}.tar.gz" downvid
+          ls -la ../../../DownVid-Wails-*.tar.gz
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: wails-${{ matrix.suffix }}
+          # macOS / Windows 出 zip，Linux 出 tar.gz（保留可执行位）
+          path: |
+            DownVid-Wails-*.zip
+            DownVid-Wails-*.tar.gz
+          retention-days: 7
+          if-no-files-found: error

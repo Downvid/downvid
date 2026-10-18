@@ -104,6 +104,9 @@ const visibility = await page.evaluate(() => {
 })
 console.log('可见性:', JSON.stringify(visibility))
 
+// 先截图（此时公告还没打开，看到的是关于页本身）
+await page.screenshot({ path: '/tmp/about-real.png' })
+
 // 再测「作者的话」：点开公告，看它有没有真的去拉远端
 await page.evaluate(() => {
   const btn = [...document.querySelectorAll('button')].find((b) => /作者的话|announce/.test(b.className) || /作者的话/.test(b.textContent))
@@ -129,8 +132,46 @@ if (errors.length) {
   console.log('--- 页面错误 ---')
   for (const e of errors.slice(0, 5)) console.log(e.slice(0, 300))
 }
-await page.screenshot({ path: '/tmp/about-real.png' })
+
+// ===== 折叠与版本切换 =====
+const collapse = await page.evaluate(() => {
+  const notes = document.querySelectorAll('.note').length
+  const more = document.querySelector('.notes-more')
+  return { visibleNotes: notes, hasMoreButton: !!more, moreText: more?.textContent?.trim() ?? '' }
+})
+console.log('折叠:', JSON.stringify(collapse))
+
+// 展开全部
+await page.evaluate(() => document.querySelector('.notes-more')?.click())
+await new Promise((r) => setTimeout(r, 300))
+const expandedCount = await page.evaluate(() => document.querySelectorAll('.note').length)
+console.log(`展开后条目数: ${expandedCount}`)
+
+// 切到历史版本 —— 这是之前**完全失效**的操作
+const switched = await page.evaluate(() => {
+  const sel = document.querySelector('.version-select')
+  if (!sel || sel.options.length < 2) return { ok: false, reason: '选项不足' }
+  const before = sel.value
+  const target = sel.options[1].value
+  sel.value = target
+  sel.dispatchEvent(new Event('change', { bubbles: true }))
+  return { ok: true, before, target }
+})
+await new Promise((r) => setTimeout(r, 400))
+const afterSwitch = await page.evaluate(() => {
+  const sel = document.querySelector('.version-select')
+  return { value: sel?.value ?? '', notes: document.querySelectorAll('.note').length }
+})
+console.log('切换版本:', JSON.stringify({ ...switched, ...afterSwitch }))
+
 const fails = []
+if (!switched.ok) fails.push('无法切换版本：' + switched.reason)
+if (switched.ok && afterSwitch.value !== switched.target) {
+  fails.push(`切到 ${switched.target} 又被弹回 ${afterSwitch.value}（$effect 覆盖了用户选择）`)
+}
+if (!collapse.hasMoreButton) fails.push('没有折叠按钮（条目会拉长整页）')
+if (collapse.visibleNotes > 4) fails.push(`默认显示了 ${collapse.visibleNotes} 条，应折叠到 4 条`)
+if (expandedCount <= collapse.visibleNotes) fails.push('展开没有生效')
 if (!state.hasAbout) fails.push('关于页没渲染')
 if (state.optionCount < 1) fails.push('版本下拉是空的')
 if (state.noteCount < 1) fails.push('更新日志没有条目')

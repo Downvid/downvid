@@ -1040,12 +1040,16 @@ select.field {
   .statusbar {
     display: none;
   }
-  /* 底部有 54px 的手机式导航，内容要给它让位 */
-  .main-scroll {
-    padding-bottom: 62px;
-  }
+  /* 底部有 54px 的手机式导航，内容要给它让位。
+   *
+   * **内边距必须加在 `.view` 上，不能加在 `.main-scroll` 的 padding**：
+   * 滚动容器的 `padding-bottom` 不进入滚动高度，滚到底时最后一段仍会被
+   * 固定定位的导航压住（真机上就是条目末尾的文字被切掉）。
+   *
+   * 76px = 54px 导航 + 22px 呼吸空间。
+   */
   .view {
-    padding: 16px 16px 22px;
+    padding: 16px 16px 76px;
   }
   .workarea.with-rail {
     grid-template-columns: minmax(0, 1fr);
