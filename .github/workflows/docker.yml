@@ -103,18 +103,18 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
         with:
           platforms: arm64
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       # 只构建，不推送。冒烟需要镜像在本地 daemon 里，所以用 load: true。
       # cache-from/to 用 GHA 缓存：这条缓存让 publish job 的 arm64
       # 构建只需要重编 Go 与前端，不用重下 100MB 依赖。
       - name: 构建镜像（amd64）
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile
@@ -245,15 +245,15 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@v4
         with:
           platforms: arm64
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to GHCR
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -291,7 +291,7 @@ jobs:
       # 缓存与 build job 分开 scope：amd64-only 的缓存键与多架构的不同，
       # 混用会让 publish 每次都退化成全量构建（QEMU 下 arm64 全量要 20+ 分钟）。
       - name: 构建并推送 amd64 + arm64
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: docker/Dockerfile

@@ -55,7 +55,7 @@ jobs:
       # 发布不完整时开一条 Issue（去重：已有同名 open issue 就不重复开）
       - name: 发布不完整则开 Issue 提醒
         if: steps.verify.outputs.ok == 'false'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           TAG: ${{ steps.latest.outputs.tag }}
         with:
