@@ -7,7 +7,7 @@
 >
 > | 当时设想 | 实际采用 |
 > | --- | --- |
-> | `core/`（纯 Node 业务核心） | **`app/internal/*`**（Go，14 个包，互相零依赖） |
+> | `core/`（纯 Node 业务核心） | **`app/internal/*`**（Go，15 个包，互相零依赖） |
 > | Electron / HTTP+WS / 浏览器 三适配层 | **Wails 绑定 / 容器 WebSocket**（共用 Go 核心） |
 > | `src/`（Vue） | **`app/frontend/`**（Svelte 5） |
 >

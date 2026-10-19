@@ -112,6 +112,12 @@
   Linuxbrew / Nix，以及 Windows 上的 nvm-windows（`nvm use` 没有管理员权限时版本装好了却不在 PATH 里）、
   fnm 与 mise（通常只在 PowerShell profile 里激活）、Volta（`bin\` 里只有 `node.cmd`）。
   兜底排在所有原有候选**之后**，原来能找到运行时的用户选中的仍是同一个。
+- **Wails 版：同样的问题更严重，且解析时根本不传 JS 运行时**：此前只用 `exec.LookPath` 查 PATH，
+  连 Homebrew 装的 node 在从程序坞启动时都找不到，也不校验版本；解析 YouTube 时不带 `--js-runtimes`，
+  yt-dlp 只会在 PATH 里找 deno，探测到的 node 根本用不上。现在探测改用 `app/internal/jsruntime`
+  （上面那张候选表的 Go 移植，与 TS 版逐字交叉验证，Windows 路径的拼接规则与 Node 的 `path.win32` 一致），
+  解析与下载都把结果交给 yt-dlp；YouTube 没有可用运行时时直接提示，不再起一个注定失败的 yt-dlp。
+  探测结果只缓存「找到」的情况——装好 Node 后马上重试就能用。
 - **YouTube「页面需要重载」时的回退策略静默退化**：`nextYoutubeRetry` 会**按 yt-dlp 版本**
   选兼容客户端（`>= 2026.10.10` 用 `default,web_embedded`，更早用 `web_safari`），
   但上一次为了省掉「为拿版本号多跑一次 `--version`」，传给它的版本号被写死成了空串 ——

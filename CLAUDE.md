@@ -116,7 +116,7 @@ and a **Go sidecar** (detects and installs yt-dlp / ffmpeg). They talk over IPC 
 
 | Path | Contents | Output |
 |------|----------|--------|
-| `app/internal/*` | **Go core, 14 packages, zero cross-imports** (download / parse / deps / update / history / settings …) | — |
+| `app/internal/*` | **Go core, 15 packages, zero cross-imports** (download / parse / deps / update / history / settings …) | — |
 | `app/main.go` / `app/app.go` / `app/bindings_*.go` | Wails shell: plumbing only, no business rules | `app/build/bin/` |
 | `app/frontend/` | Svelte 5 + Vite renderer | embedded into the binary (`go:embed`) |
 | `app/scripts/build.sh` | **build entry point**: compiles the sidecar, then builds with `-tags withsidecar` | single file ~18 MB |
@@ -535,6 +535,12 @@ and refills the queue.
   in a terminal while YouTube parsing said "needs Node.js 22+" (reported again and again, latest #80).
   The fallbacks come **after** every original candidate, so a runtime that was found before is still the one
   selected. The sidecar does not install JS runtimes.
+  The Wails build uses the Go port in `app/internal/jsruntime` (same candidate table, version rule and budgets;
+  `pnpm crosscheck:port --module=js-runtime` compares the two on a shared fake directory tree, including Node's
+  `path.win32.join` edge cases). Its parse passes `--js-runtimes` and returns runtime-unavailable for YouTube
+  without spawning yt-dlp, like the Electron one; without `--js-runtimes` yt-dlp only looks for deno on PATH.
+  The binding caches only a *found* runtime (60 s): a "not found" must not be cached, or installing Node and
+  retrying would keep failing.
 - YouTube parsing keeps yt-dlp's default clients. Format/page-reload errors each allow one fallback, at most three rounds.
   Retries share one Cookie lifecycle; downloads reuse successful client arguments and the UI displays a recovery notice.
   `shared/parse-error.ts` emits only categories and validated versions; Issue drafts exclude raw output and environment details.

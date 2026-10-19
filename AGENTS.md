@@ -118,7 +118,7 @@ Dependabot 已忽略其大版本升级。
 
 | 路径 | 内容 | 输出 |
 |------|------|------|
-| `app/internal/*` | **Go 核心，14 个包，互相零依赖**（下载 / 解析 / 依赖 / 更新 / 历史 / 设置 …） | — |
+| `app/internal/*` | **Go 核心，15 个包，互相零依赖**（下载 / 解析 / 依赖 / 更新 / 历史 / 设置 …） | — |
 | `app/main.go` / `app/app.go` / `app/bindings_*.go` | Wails 壳：只做「搬运」，不含业务规则 | `app/build/bin/` |
 | `app/frontend/` | Svelte 5 + Vite 渲染进程 | 打进二进制（`go:embed`） |
 | `app/scripts/build.sh` | **构建入口**：先编依赖边车 → 再带 `-tags withsidecar` 构建 | 单文件约 18 MB |
@@ -545,6 +545,11 @@ Windows 先 `taskkill /T /F` 再杀父进程（父先死会丢掉子进程关系
   没有这些兜底时，只通过版本管理器装的 Node 根本找不到——终端里 `node -v` 是 v22，
   YouTube 解析却报「需要 Node.js 22+」（反复被报告，最近一次 #80）。
   兜底排在所有原有候选**之后**，原来能找到的运行时选中的仍是同一个。运行依赖侧车不会自动安装 JS 运行时。
+  Wails 版用的是 `app/internal/jsruntime` 里的 Go 移植（候选表、版本规则与预算都相同；
+  `pnpm crosscheck:port --module=js-runtime` 在同一棵假目录树上比对两边，含 Node `path.win32.join` 的边角）。
+  它的解析会传 `--js-runtimes`，YouTube 没有运行时时直接报 runtime-unavailable、不起 yt-dlp，与 Electron 版一致；
+  不传 `--js-runtimes` 时 yt-dlp 只会在 PATH 里找 deno。绑定层只缓存**找到**的结果（60 秒）：
+  「没找到」不能缓存，否则用户装好 Node 后重试还是失败。
 - YouTube 解析默认沿用 yt-dlp 客户端；格式/页面重载错误各允许一次回退，至多三轮。
   回退在同一次 Cookie 生命周期内执行，下载沿用成功的客户端参数，界面显示恢复提示。
   `shared/parse-error.ts` 仅输出类别和验证过的版本；Issue 草稿不包含原始输出或环境信息。
