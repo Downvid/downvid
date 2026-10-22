@@ -350,7 +350,7 @@ pnpm lint:workflows          # 工作流里「用了某工具」与「装了该�
 pnpm deps:manifest:check     # 依赖清单是否落后上游
 
 # 纯逻辑单测
-pnpm test                    # 28 个文件 / 334 个用例
+pnpm test                    # 28 个文件 / 339 个用例
 pnpm test tests/formats.test.ts   # 单文件
 pnpm test:watch
 

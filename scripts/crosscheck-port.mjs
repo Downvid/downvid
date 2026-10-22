@@ -41,6 +41,10 @@ import { loader } from './lib/load-source.mjs'
 const ROOT = path.resolve(import.meta.dirname, '..')
 const onlyModule = process.argv.find((a) => a.startsWith('--module='))?.split('=')[1]
 
+// js-runtime 模块的假目录树：每组用例在 tsCall 里换上自己的那棵，
+// TS 侧通过替身 fs.readdirSync 读它，Go 侧从用例 JSON 里读同一棵。
+let jsRuntimeTree = {}
+
 /**
  * 每个模块的用例集。
  *
@@ -589,6 +593,162 @@ const MODULES = {
     tsCall(mod, testCase) {
       if (testCase.kind === 'retry') return mod.nextYoutubeRetry(testCase.err, testCase.state, testCase.version)
       if (testCase.kind === 'args') return mod.youtubeExtractorArgs(testCase.state)
+      throw new Error('unknown kind ' + testCase.kind)
+    },
+  },
+
+  /**
+   * JS 运行时：候选表 / `--version` 输出判定 / Electron 排除。
+   *
+   * 候选表要列目录（版本管理器、WinGet、Homebrew 的 opt/），两边读**同一棵假目录树**：
+   * TS 侧替换 fs.readdirSync，Go 侧注入 Env.ReadDir。真实执行（checkJsRuntime / Check
+   * 的探测循环）不在这里对拍——它依赖真实进程，由两边各自的单测覆盖。
+   *
+   * 路径拼接是最容易分叉的地方：TS 用 Node 的 path.win32 / path.posix，Go 侧是照搬的实现，
+   * 所以用例里刻意放了尾分隔符、正斜杠、`..`、UNC、相对路径和带空格 / 中文的目录。
+   */
+  'js-runtime': {
+    tsFile: 'electron/utils/js-runtime.ts',
+    goDir: 'app/internal/jsruntime',
+    goTest: 'TestCrossCheckJsRuntime',
+    mocks: {
+      'node:fs': {
+        readdirSync: (dir) => {
+          const entries = jsRuntimeTree[dir]
+          if (!entries) throw Object.assign(new Error(`ENOENT: ${dir}`), { code: 'ENOENT' })
+          return entries.map((e) => ({ name: e.name, isDirectory: () => e.dir }))
+        },
+      },
+      'node:child_process': { execFile: () => { throw new Error('交叉验证不执行进程') } },
+    },
+    buildCases() {
+      // 目录项默认是目录；`{ name, dir: false }` 表示普通文件（WinGet 只收目录）
+      const tree = (spec) => Object.fromEntries(Object.entries(spec).map(([dir, names]) => [
+        dir, names.map((n) => (typeof n === 'string' ? { name: n, dir: true } : { name: n.name, dir: n.dir })),
+      ]))
+      const mac = '/Users/tester'
+      const linux = '/home/tester'
+      const win = 'C:\\Users\\tester'
+      const guiPath = '/usr/bin:/bin:/usr/sbin:/sbin'
+      const cases = []
+      const candidates = (name, platform, env, home, spec = {}) => {
+        cases.push({ kind: 'candidates', name, platform, env, home, tree: tree(spec) })
+      }
+
+      // --- macOS / Linux ---
+      candidates('mac-gui-path-empty', 'darwin', { PATH: guiPath }, mac)
+      candidates('mac-path-variants', 'darwin', {
+        PATH: '/opt/homebrew/bin/:/usr/local/bin::./bin:../tools:/Users/tester/.volta/bin://usr//bin',
+      }, mac)
+      candidates('mac-version-managers', 'darwin', { PATH: guiPath }, mac, {
+        [`${mac}/.nvm/versions/node`]: ['v20.11.0', 'v22.2.0', 'v24.1.0', 'v22.11.0', 'lts', '.DS_Store'],
+        [`${mac}/.config/nvm/versions/node`]: ['v22.12.0'],
+        [`${mac}/Library/Application Support/fnm/node-versions`]: ['v22.11.0', '.downloads'],
+        [`${mac}/.fnm/node-versions`]: ['v21.7.3'],
+        [`${mac}/.local/share/mise/installs/node`]: ['22.11.0', '22', '22.11', 'latest', 'lts'],
+        [`${mac}/.local/share/mise/installs/deno`]: ['2.2.9', '2.3.1', '2'],
+        [`${mac}/.asdf/installs/nodejs`]: ['18.20.4', '22.11.0', 'ref-main'],
+        [`${mac}/.asdf/installs/deno`]: ['2.3.0'],
+        [`${mac}/.volta/tools/image/node`]: ['20.18.0', '22.11.0'],
+        '/opt/homebrew/opt': ['node@20', 'node@22', 'node@24', 'node', 'deno', 'openssl@3', 'node@', 'node@22.1'],
+        '/usr/local/opt': ['node@22'],
+      })
+      candidates('mac-env-overrides', 'darwin', {
+        PATH: '', NVM_DIR: '/data/nvm/', FNM_DIR: '/data/fnm', MISE_DATA_DIR: '/data/mise',
+        ASDF_DATA_DIR: '/data/asdf', VOLTA_HOME: '/data/volta/', N_PREFIX: '/data/n',
+        XDG_DATA_HOME: '/data/xdg-data', XDG_CONFIG_HOME: '/data/xdg-config', DOWNVID_NODE_PATH: '/opt/custom/node',
+      }, mac, {
+        '/data/nvm/versions/node': ['v22.11.0'],
+        '/data/fnm/node-versions': ['v24.1.0'],
+        '/data/mise/installs/node': ['22.11.0'],
+        '/data/asdf/installs/nodejs': ['22.11.0'],
+        '/data/volta/tools/image/node': ['22.11.0'],
+        '/data/xdg-config/nvm/versions/node': ['v23.0.0'],
+        '/data/xdg-data/fnm/node-versions': ['v22.0.0'],
+      })
+      candidates('mac-unicode-home', 'darwin', { PATH: guiPath }, '/Users/张三 李', {
+        '/Users/张三 李/.nvm/versions/node': ['v22.11.0'],
+      })
+      candidates('linux-desktop', 'linux', {
+        PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin',
+      }, linux, {
+        [`${linux}/.local/share/fnm/node-versions`]: ['v22.11.0'],
+        [`${linux}/.fnm/node-versions`]: ['v22.10.0'],
+        [`${linux}/.nvm/versions/node`]: ['v22.11.0', 'v22.9.0', 'v22.10.0'],
+        '/home/linuxbrew/.linuxbrew/opt': ['node@22', 'node@18'],
+      })
+      candidates('linux-no-path', 'linux', {}, linux)
+
+      // --- Windows ---
+      candidates('win-path-variants', 'win32', {
+        PATH: 'C:\\Windows\\system32;C:\\Windows;C:\\Program Files\\nodejs\\;C:/Tools/bin/;;%USERPROFILE%\\bin;\\\\server\\share\\tools;relative\\bin',
+      }, win)
+      candidates('win-defaults', 'win32', { PATH: '' }, win, {
+        [`${win}\\AppData\\Local\\Microsoft\\WinGet\\Packages`]: [
+          'DenoLand.Deno_Microsoft.Winget.Source_8wekyb3d8bbwe', 'yt-dlp.yt-dlp_x', { name: 'DenoLand.Deno_file', dir: false },
+        ],
+        'C:\\Program Files\\WinGet\\Packages': ['denoland.deno_lowercase'],
+        [`${win}\\AppData\\Local\\nvm`]: ['v20.11.0', 'v22.11.0', 'elevate.cmd', 'settings.txt'],
+        [`${win}\\AppData\\Roaming\\nvm`]: ['v24.1.0'],
+        [`${win}\\AppData\\Roaming\\fnm\\node-versions`]: ['v22.11.0'],
+        [`${win}\\.fnm\\node-versions`]: ['v22.0.0'],
+        [`${win}\\AppData\\Local\\Volta\\tools\\image\\node`]: ['22.11.0', '20.0.0'],
+        [`${win}\\AppData\\Local\\mise\\installs\\node`]: ['22.11.0', '22', 'latest'],
+        [`${win}\\AppData\\Local\\mise\\installs\\deno`]: ['2.3.1', '2.2.0'],
+      })
+      candidates('win-env-overrides', 'win32', {
+        PATH: 'D:\\node22\\', LOCALAPPDATA: 'F:\\Local\\', APPDATA: 'F:\\Roaming', ProgramFiles: 'D:\\Programs',
+        'ProgramFiles(x86)': 'D:\\Programs (x86)', ProgramData: 'G:\\Data', SCOOP: 'E:\\scoop\\', SCOOP_GLOBAL: 'G:\\scoop',
+        NVM_HOME: 'D:\\nvm\\', NVM_SYMLINK: 'D:/nvm4w/nodejs/', FNM_DIR: 'E:\\fnm', VOLTA_HOME: 'E:\\volta',
+        MISE_DATA_DIR: 'E:\\mise', DOWNVID_NODE_PATH: 'C:\\custom\\node.exe',
+      }, 'D:\\Profiles\\tester\\', {
+        'F:\\Local\\Microsoft\\WinGet\\Packages': ['DenoLand.Deno_test'],
+        'D:\\nvm\\': ['v22.11.0', 'v21.0.0'],
+        'D:\\nvm': ['v22.12.0'],
+        'E:\\fnm\\node-versions': ['v24.1.0'],
+        'E:\\volta\\tools\\image\\node': ['22.11.0'],
+        'E:\\mise\\installs\\node': ['22.11.0'],
+        'E:\\mise\\installs\\deno': ['2.3.1'],
+      })
+      candidates('win-unc-home', 'win32', { PATH: '' }, '\\\\fileserver\\users\\tester', {
+        '\\\\fileserver\\users\\tester\\AppData\\Local\\nvm': ['v22.11.0'],
+      })
+
+      // --- `--version` 输出判定 ---
+      const outputs = {
+        node: ['v22.0.0', 'v21.9.0', 'v22.11.0\n', 'v24.1.0\r\n', '  v22.1.0  ', 'v22.1', 'node v22.1.0', 'v22.1.0-nightly',
+          'deno 2.3.0', '', 'v100.0.0', 'v022.001.000', 'v22.0.0\nextra', 'v22.0.0\u00a0', '\ufeffv22.0.0', 'v22.0.0\u0085'],
+        deno: ['deno 2.3.0', 'deno 2.2.9', 'deno 2.3.0 (stable, release, x86_64-unknown-linux-gnu)\nv8 13.5\ntypescript 5.8.3',
+          'deno 3.0.0', 'deno 10.0.0', 'v22.0.0', 'deno 2.3', 'deno  2.3.0', 'Deno 2.3.0', 'deno 2.3.0-rc.1',
+          'deno 2.3.1\r\nv8 13.5', '', 'deno 2.3.0\u00a0x', 'deno 2.3.0\u000bx', 'deno 2.3.0\u0085x', 'deno 1.46.3'],
+      }
+      for (const [runtime, list] of Object.entries(outputs)) {
+        for (const output of list) cases.push({ kind: 'version', runtime, output })
+      }
+
+      // --- Electron 排除 ---
+      for (const p of [
+        '/Applications/DownVid.app/Contents/MacOS/DownVid',
+        '/Users/x/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron',
+        '/Applications/Visual Studio Code.app/Contents/MacOS/Electron',
+        '/usr/local/bin/electron',
+        '/usr/bin/node',
+        '/opt/homebrew/opt/node@22/bin/node',
+        'C:\\Program Files\\nodejs\\node.exe',
+        'C:\\X\\DownVid.APP\\Contents\\MacOS\\DownVid',
+        'D:\\Tools\\ELECTRON\\node.exe',
+        '/Users/electron-dev/.nvm/versions/node/v22.11.0/bin/node',
+      ]) cases.push({ kind: 'looks-like-node', path: p })
+
+      return cases
+    },
+    tsCall(mod, testCase) {
+      if (testCase.kind === 'candidates') {
+        jsRuntimeTree = testCase.tree
+        return mod.jsRuntimeCandidates(testCase.platform, testCase.env, testCase.home)
+      }
+      if (testCase.kind === 'version') return mod.supportedJsVersion(testCase.runtime, testCase.output)
+      if (testCase.kind === 'looks-like-node') return mod.looksLikeNode(testCase.path)
       throw new Error('unknown kind ' + testCase.kind)
     },
   },

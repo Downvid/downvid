@@ -116,7 +116,7 @@ and a **Go sidecar** (detects and installs yt-dlp / ffmpeg). They talk over IPC 
 
 | Path | Contents | Output |
 |------|----------|--------|
-| `app/internal/*` | **Go core, 14 packages, zero cross-imports** (download / parse / deps / update / history / settings …) | — |
+| `app/internal/*` | **Go core, 15 packages, zero cross-imports** (download / parse / deps / update / history / settings …) | — |
 | `app/main.go` / `app/app.go` / `app/bindings_*.go` | Wails shell: plumbing only, no business rules | `app/build/bin/` |
 | `app/frontend/` | Svelte 5 + Vite renderer | embedded into the binary (`go:embed`) |
 | `app/scripts/build.sh` | **build entry point**: compiles the sidecar, then builds with `-tags withsidecar` | single file ~18 MB |
@@ -525,7 +525,22 @@ and refills the queue.
 - YouTube needs an installed Node / Deno; `checkJsRuntime()` in `utils/js-runtime.ts` must never return the Electron binary.
   It probes asynchronously, requiring Node >=22 / Deno >=2.3, with a six-second total budget and one second per candidate.
   It checks WinGet, Scoop and the user's `.deno/bin` as well as PATH
-  so a GUI process with an old PATH can still find the runtime. The sidecar does not install JS runtimes.
+  so a GUI process with an old PATH can still find the runtime. After those it falls back to install dirs a GUI
+  process never has on PATH (Finder/Dock apps get `/usr/bin:/bin:/usr/sbin:/sbin`, and nothing reads `.zshrc`):
+  nvm / fnm / mise / asdf version dirs (supported versions only, newest first), Volta, n, keg-only Homebrew
+  `node@NN`, MacPorts / Snap / Linuxbrew / Nix, plus nvm-windows / fnm / Volta / mise on Windows. Version dirs are
+  matched by name only (`opt/node@22` and Windows junctions are links, so `isDirectory()` is false), and alias
+  links such as mise's `22` / `latest` are skipped because their full-version target is listed anyway.
+  Without these fallbacks a Node installed only through a version manager was invisible — `node -v` printed v22
+  in a terminal while YouTube parsing said "needs Node.js 22+" (reported again and again, latest #80).
+  The fallbacks come **after** every original candidate, so a runtime that was found before is still the one
+  selected. The sidecar does not install JS runtimes.
+  The Wails build uses the Go port in `app/internal/jsruntime` (same candidate table, version rule and budgets;
+  `pnpm crosscheck:port --module=js-runtime` compares the two on a shared fake directory tree, including Node's
+  `path.win32.join` edge cases). Its parse passes `--js-runtimes` and returns runtime-unavailable for YouTube
+  without spawning yt-dlp, like the Electron one; without `--js-runtimes` yt-dlp only looks for deno on PATH.
+  The binding caches only a *found* runtime (60 s): a "not found" must not be cached, or installing Node and
+  retrying would keep failing.
 - YouTube parsing keeps yt-dlp's default clients. Format/page-reload errors each allow one fallback, at most three rounds.
   Retries share one Cookie lifecycle; downloads reuse successful client arguments and the UI displays a recovery notice.
   `shared/parse-error.ts` emits only categories and validated versions; Issue drafts exclude raw output and environment details.

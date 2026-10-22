@@ -32,6 +32,7 @@ import (
 	"github.com/Downvid/downvid/app/internal/download"
 	"github.com/Downvid/downvid/app/internal/fetch"
 	"github.com/Downvid/downvid/app/internal/image"
+	"github.com/Downvid/downvid/app/internal/jsruntime"
 	"github.com/Downvid/downvid/app/internal/netx"
 	"github.com/Downvid/downvid/app/internal/parse"
 	"github.com/Downvid/downvid/app/internal/settings"
@@ -163,6 +164,11 @@ func invalidateDepsCache() {
 // 断言参数；而这条映射恰恰出过 bug（`DownloadRequest` 少了 AudioTrack 字段，
 // 于是界面上的音轨选择器完全不起作用，且没有任何报错）。
 func (a *App) buildArgs(opts DownloadRequest) []string {
+	// 只有 YouTube 用得到 JS 运行时；探测要真的执行一次 node，别的站点不付这个代价
+	var jsRuntime *download.JSRuntime
+	if download.IsYouTube(opts.URL) {
+		jsRuntime = a.jsRuntime()
+	}
 	return download.BuildArgs(download.Options{
 		TaskID:       opts.TaskID,
 		URL:          opts.URL,
@@ -177,7 +183,7 @@ func (a *App) buildArgs(opts DownloadRequest) []string {
 	}, opts.OutputDir, download.BuildArgsContext{
 		FfmpegLocation: a.ffmpegLocation(),
 		Aria2Path:      a.resolveAria2(),
-		JSRuntime:      a.jsRuntime(),
+		JSRuntime:      jsRuntime,
 	})
 }
 
@@ -379,6 +385,12 @@ func (a *App) StartDownload(opts DownloadRequest) StartDownloadResult {
 	if ytdlp == "" {
 		return StartDownloadResult{OK: false, Error: "未找到可用的 yt-dlp，请在「设置 → 运行依赖」中下载",
 			MissingKind: "yt-dlp"}
+	}
+
+	// 与 electron/download/ytdlp.ts 一致：YouTube 没有可用的 JS 运行时就不起 yt-dlp。
+	// 解析时已经要求过一次，这里兜住「解析之后运行时没了」与解析缓存命中这两种情况。
+	if download.IsYouTube(opts.URL) && a.jsRuntime() == nil {
+		return StartDownloadResult{OK: false, Error: "需要可运行的 Node.js 22+ 或 Deno 2.3+"}
 	}
 
 	args := a.buildArgs(opts)
@@ -639,23 +651,57 @@ func (a *App) acceleration() *download.Acceleration {
 	})
 }
 
-// jsRuntime 返回可用的 JS 运行时（YouTube 需要）。
+// jsRuntime / parseJSRuntime 返回可用的 JS 运行时（YouTube 需要），没有时返回 nil。
 //
-// 这里只做最小实现：找系统 PATH 里的 node/deno。
-// 完整的 js-runtime 探测（含版本校验与缓存）在后续移植。
+// 探测在 internal/jsruntime（electron/utils/js-runtime.ts 的移植，与 TS 交叉验证过）。
+// 早先这里只用 exec.LookPath 查 PATH，而从 Finder / 程序坞 / 桌面启动的 GUI 进程
+// 拿不到 shell 里配置的 PATH：Homebrew、nvm、fnm、mise 装的 node 全都找不到，
+// 也不校验版本——低于 yt-dlp 最低要求的 Node 照样会被传过去。
 func (a *App) jsRuntime() *download.JSRuntime {
-	for _, kind := range []string{"node", "deno"} {
-		if p, err := lookPath(kind); err == nil {
-			return &download.JSRuntime{Path: p, Kind: kind}
-		}
+	info := cachedJSRuntime()
+	if !info.Available {
+		return nil
 	}
-	return nil
+	return &download.JSRuntime{Path: info.Path, Kind: info.Kind}
+}
+
+func (a *App) parseJSRuntime() *parse.JSRuntime {
+	info := cachedJSRuntime()
+	if !info.Available {
+		return nil
+	}
+	return &parse.JSRuntime{Path: info.Path, Kind: info.Kind, Version: info.Version}
+}
+
+// checkJSRuntime 是真实探测；测试里替换它，避免用例依赖宿主机装没装 Node。
+var checkJSRuntime = jsruntime.Check
+
+// jsRuntimeCache 只缓存**找到**的结果，TTL 与依赖探测一致（60 秒）。
+//
+// 每次解析 / 下载都执行一遍 `node --version` 没有必要；但「没找到」不能缓存——
+// 用户照着提示装好 Node 后马上重试，必须立刻能用。
+var (
+	jsRuntimeCache    jsruntime.Info
+	jsRuntimeCachedAt time.Time
+	jsRuntimeCacheMu  sync.Mutex
+)
+
+func cachedJSRuntime() jsruntime.Info {
+	jsRuntimeCacheMu.Lock()
+	defer jsRuntimeCacheMu.Unlock()
+
+	if jsRuntimeCache.Available && time.Since(jsRuntimeCachedAt) < depsCacheTTL {
+		return jsRuntimeCache
+	}
+	info := checkJSRuntime(context.Background())
+	if info.Available {
+		jsRuntimeCache = info
+		jsRuntimeCachedAt = time.Now()
+	}
+	return info
 }
 
 func (a *App) cookieArgs() []string { return nil }
-
-// 小工具：os/exec 的 LookPath 包一层，避免主文件再 import 一次。
-func lookPath(name string) (string, error) { return exec.LookPath(name) }
 
 // runSidecar 执行 Go 边车并返回 stdout。
 //
@@ -713,8 +759,9 @@ func (a *App) Parse(url string, proxy string) (*parse.VideoInfo, error) {
 		CookieArgs: a.cookieArgs(),
 		// 原始 info JSON 落在数据目录下而不是 /tmp：
 		// 桌面端可能长期运行，/tmp 会被系统清理，而下载时要读它
-		CacheDir: filepath.Join(a.dataDir, "parse-cache"),
-		Timeout:  90 * time.Second,
+		CacheDir:  filepath.Join(a.dataDir, "parse-cache"),
+		Timeout:   90 * time.Second,
+		JSRuntime: a.parseJSRuntime,
 	})
 	if err != nil {
 		return nil, err

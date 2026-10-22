@@ -89,6 +89,18 @@ type ParseOptions struct {
 	CacheDir string
 	// Timeout 是单次解析的总时限
 	Timeout time.Duration
+	// JSRuntime 只在**解析 YouTube** 时调用，返回 nil 表示没有可用的 Node.js / Deno。
+	//
+	// 做成函数而不是值：探测要真的执行一次 `node --version`，别的站点用不到它，
+	// 没必要为它们付这个代价（TS 版同样只在 YouTube 时才探测）。
+	JSRuntime func() *JSRuntime
+}
+
+// JSRuntime 是 YouTube 需要的 JS 运行时（由调用方探测好再传入）。
+type JSRuntime struct {
+	Path    string
+	Kind    string // "node" 或 "deno"，即 yt-dlp `--js-runtimes` 的名字
+	Version string // 只用于诊断（`node@22.11.0`），可以为空
 }
 
 // Parser 负责解析，并缓存结果（含条数上限）。
@@ -189,6 +201,25 @@ func (p *Parser) Parse(opts ParseOptions) (*VideoInfo, error) {
 	}
 	base = append(base, "--dump-json")
 
+	// YouTube 必须带上 JS 运行时，与 electron/parsers/ytdlp.ts 的 dumpInfo 一致：
+	// 找不到可用的 Node.js / Deno 时直接报 runtime-unavailable，**不起 yt-dlp**
+	// （TS 侧由 test:parse:integration 钉住「不起进程」这一点）。
+	// 不传 `--js-runtimes` 时 yt-dlp 只会在 PATH 里找 deno，用不上已经探测到的 node。
+	runtimeVersion := ""
+	if isYoutube {
+		var rt *JSRuntime
+		if opts.JSRuntime != nil {
+			rt = opts.JSRuntime()
+		}
+		if rt == nil || rt.Path == "" || rt.Kind == "" {
+			return nil, fmt.Errorf("[[parse-error:%s]]%s", KindRuntimeUnavailable, ParseMessages[KindRuntimeUnavailable])
+		}
+		base = append(base, "--js-runtimes", rt.Kind+":"+rt.Path)
+		if rt.Version != "" {
+			runtimeVersion = rt.Kind + "@" + rt.Version
+		}
+	}
+
 	var stdout, stderr string
 	var lastErr error
 
@@ -220,7 +251,7 @@ func (p *Parser) Parse(opts ParseOptions) (*VideoInfo, error) {
 
 	if lastErr != nil {
 		kind := ClassifyParseError(stderr)
-		return nil, fmt.Errorf("[[parse-error:%s]]%s", kind, ParseDiagnostic(stderr, Versions{}))
+		return nil, fmt.Errorf("[[parse-error:%s]]%s", kind, ParseDiagnostic(stderr, Versions{Runtime: runtimeVersion}))
 	}
 
 	// 多视频推文等播放列表会逐行输出多个 JSON，只取第一个条目

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -118,6 +119,86 @@ func TestParseWithoutYtdlp(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "[[deps-missing:yt-dlp]]") {
 		t.Fatalf("应带 deps-missing 标记，got %q", err.Error())
+	}
+}
+
+// ===== YouTube 的 JS 运行时（对应 TS 侧 test:parse:integration 的「运行时缺失引导」）=====
+
+// readArgs 读出假 yt-dlp 记下的参数（每行一个）
+func readArgs(t *testing.T, path string) []string {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("假 yt-dlp 没有被执行：%v", err)
+	}
+	return strings.Split(strings.TrimSpace(string(raw)), "\n")
+}
+
+// 找不到运行时：不起 yt-dlp，直接报 runtime-unavailable（TS 侧断言 calls.length === 0）
+func TestParseYoutubeWithoutJSRuntime(t *testing.T) {
+	ran := filepath.Join(t.TempDir(), "ran")
+	fake := fakeYtdlp(t, "touch '"+ran+"'\nexit 0\n")
+	for name, resolver := range map[string]func() *JSRuntime{
+		"调用方没给探测函数": nil,
+		"探测结果为空":    func() *JSRuntime { return nil },
+		"探测结果缺路径":   func() *JSRuntime { return &JSRuntime{Kind: "node"} },
+	} {
+		_, err := NewParser().Parse(ParseOptions{
+			YtdlpPath: fake, URL: "https://www.youtube.com/watch?v=x", CacheDir: t.TempDir(), Timeout: 10 * time.Second,
+			JSRuntime: resolver,
+		})
+		if err == nil || !strings.Contains(err.Error(), "[[parse-error:runtime-unavailable]]") {
+			t.Fatalf("%s：应报 runtime-unavailable，got %v", name, err)
+		}
+	}
+	if _, err := os.Stat(ran); err == nil {
+		t.Fatal("没有 JS 运行时时不该起 yt-dlp")
+	}
+}
+
+// 探测到的运行时要通过 --js-runtimes 交给 yt-dlp：不传时 yt-dlp 只会在 PATH 里找 deno。
+// 失败诊断里带上运行时版本（TS 侧的 runtimeVersion），省掉 Issue 里的一轮来回问。
+func TestParseYoutubePassesJSRuntime(t *testing.T) {
+	argsFile := filepath.Join(t.TempDir(), "args")
+	fake := fakeYtdlp(t, "printf '%s\\n' \"$@\" > '"+argsFile+"'\necho 'ERROR: Connection timed out' >&2\nexit 1\n")
+	calls := 0
+	_, err := NewParser().Parse(ParseOptions{
+		YtdlpPath: fake, URL: "https://youtu.be/x", CacheDir: t.TempDir(), Timeout: 10 * time.Second,
+		JSRuntime: func() *JSRuntime {
+			calls++
+			return &JSRuntime{Kind: "node", Path: "/opt/node/bin/node", Version: "22.11.0"}
+		},
+	})
+	if calls != 1 {
+		t.Fatalf("应探测一次运行时，实际 %d 次", calls)
+	}
+	args := readArgs(t, argsFile)
+	i := slices.Index(args, "--js-runtimes")
+	if i < 0 || i+1 >= len(args) || args[i+1] != "node:/opt/node/bin/node" {
+		t.Fatalf("应传 --js-runtimes node:/opt/node/bin/node，实际参数 %q", args)
+	}
+	if err == nil || !strings.Contains(err.Error(), "runtime：node@22.11.0") {
+		t.Fatalf("失败诊断应带运行时版本，got %v", err)
+	}
+}
+
+// 非 YouTube 链接不探测运行时（探测要真的执行一次 node），也不传 --js-runtimes
+func TestParseNonYoutubeSkipsJSRuntime(t *testing.T) {
+	argsFile := filepath.Join(t.TempDir(), "args")
+	fake := fakeYtdlp(t, "printf '%s\\n' \"$@\" > '"+argsFile+"'\necho 'ERROR: Unsupported URL: https://x' >&2\nexit 1\n")
+	calls := 0
+	_, err := NewParser().Parse(ParseOptions{
+		YtdlpPath: fake, URL: "https://www.bilibili.com/video/BV1xx", CacheDir: t.TempDir(), Timeout: 10 * time.Second,
+		JSRuntime: func() *JSRuntime { calls++; return &JSRuntime{Kind: "node", Path: "/opt/node/bin/node"} },
+	})
+	if err == nil || strings.Contains(err.Error(), "runtime-unavailable") {
+		t.Fatalf("应报站点本身的错误而不是运行时缺失，got %v", err)
+	}
+	if calls != 0 {
+		t.Fatalf("非 YouTube 不该探测运行时，实际 %d 次", calls)
+	}
+	if slices.Contains(readArgs(t, argsFile), "--js-runtimes") {
+		t.Fatal("非 YouTube 不该传 --js-runtimes")
 	}
 }
 
