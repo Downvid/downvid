@@ -90,8 +90,8 @@
     "bufferutil": "^4.1.0",
     "electron-updater": "^6.8.3",
     "marked": "^18.1.1",
-    "pinia": "^4.0.3",
-    "puppeteer-core": "^25.13.0",
+    "pinia": "^4.1.0",
+    "puppeteer-core": "^25.14.0",
     "utf-8-validate": "^6.0.6",
     "vue": "^3.5.44"
   },
@@ -100,7 +100,7 @@
     "@types/node": "^26.6.5",
     "@types/ws": "^8.18.2",
     "@vitejs/plugin-vue": "^6.0.10",
-    "electron": "44.7.2",
+    "electron": "44.8.0",
     "electron-builder": "^26.15.3",
     "postcss": "^8.5.30",
     "tailwindcss": "^4.3.3",
@@ -109,7 +109,7 @@
     "vite": "^8.3.4",
     "vite-plugin-electron": "^1.1.2",
     "vite-plugin-electron-renderer": "^1.0.0",
-    "vitest": "^5.0.4",
+    "vitest": "^5.0.5",
     "vue-tsc": "^3.3.13",
     "ws": "^8.22.0"
   },
