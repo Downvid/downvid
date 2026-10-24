@@ -70,10 +70,13 @@
 
 ---
 
-### UI 对接（下一步）
+### UI 对接 —— **已完成**
 
-- [ ] 你的 store 接后端（`demo/lib/backend.ts` 已就绪，需扩到 deps / settings / shell）
-- [ ] 把 `demo/` 定为正式 `src/`，删掉早期验证页
+- [x] store 全部接通真实后端（deps / settings / shell / clipboard / update / history / download）
+- [x] `app/frontend/src` 正式成为主线渲染进程，移除早期 mock 验证设施
+- [x] 加速滑块物理动效优化与 32 节点自适应边界
+- [x] 发布 v1.6.0 与 v1.6.1 双架构版本（Wails 单文件免安装 + Electron 存量更新）
+- [x] 官网可交互全功能预览（解析/下载体验、设置切换、作者信模态框、深浅色实时预览）
 
 ---
 

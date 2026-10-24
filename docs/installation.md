@@ -25,13 +25,15 @@
 
 ### 选择正确的文件
 
-| 你的系统 | 应该下载的文件 | 文件名示例 |
-|----------|---------------|-----------|
-| macOS Apple Silicon (M1/M2/M3/M4) | `DownVid-arm64-Mac-*.dmg` | `DownVid-arm64-Mac-1.0.0.dmg` |
-| macOS Intel | `DownVid-x64-Mac-*.dmg` | `DownVid-x64-Mac-1.0.0.dmg` |
-| Windows | `DownVid-Setup-*.exe` | `DownVid-Setup-1.0.0.exe` |
-| Linux x64 | `DownVid-x64-Linux-*.AppImage` | `DownVid-x64-Linux-1.0.0.AppImage` |
-| Linux ARM64 | `DownVid-arm64-Linux-*.AppImage` | `DownVid-arm64-Linux-1.0.0.AppImage` |
+推荐优先下载**全新架构（Wails）产物**（体积约 18 MB，仅为旧版的 1/7，原生 Webview 渲染，启动更快，内存占用低至 60~80 MB）：
+
+| 你的系统 | 推荐下载（Wails 全新架构） | 存量下载（Electron） |
+|----------|---------------------------|---------------------|
+| macOS Apple 芯片 / Intel 通用 | `DownVid-Wails-macOS-universal.zip` | `DownVid-arm64-Mac-*.dmg` / `DownVid-x64-Mac-*.dmg` |
+| Windows x64 | `DownVid-Wails-windows-amd64.exe`（单文件免安装） | `DownVid-Setup-*.exe`（安装版） / 便携版 |
+| Linux x64 / ARM64 | `DownVid-Wails-linux-amd64` | `DownVid-*-Linux-*.AppImage` / `.deb` |
+
+> 💡 **提示**：macOS 推荐下载 `DownVid-Wails-macOS-universal.zip`，解压即得 `DownVid.app`，直接拖入「应用程序」文件夹即可运行，包含完整的运行依赖边车。旧架构 `.dmg` 与 `.exe` 仍在并行发布以保证现有用户的自动更新通道。
 
 > ⚠️ **怎么知道自己是 Apple Silicon 还是 Intel？**
 > 点击左上角苹果图标 → "关于本机" → 查看"芯片"一栏。如果显示 Apple M1/M2/M3/M4 就是 Apple Silicon，如果显示 Intel 就是 x64。

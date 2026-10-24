@@ -119,8 +119,8 @@
           </button>
         </div>
         <span class="dv-bar-actions">
-          <span class="dv-bell" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 16v-5a6 6 0 1 0-12 0v5l-2 2h16l-2-2zM12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22z"/></svg><i></i></span>
-          <span class="dv-gear" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7zm7.4-2.6c.05-.3.07-.6.07-.9s-.02-.6-.07-.9l2.03-1.58a.5.5 0 0 0 .12-.64l-1.93-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.4 7.4 0 0 0-1.56-.9l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.56.23-1.08.53-1.56.9l-2.39-.96a.5.5 0 0 0-.6.22L2.44 8.87a.5.5 0 0 0 .12.64l2.03 1.59c-.05.3-.07.6-.07.9s.02.6.07.9l-2.03 1.58a.5.5 0 0 0-.12.64l1.93 3.32c.13.22.39.3.6.22l2.39-.96c.48.37 1 .67 1.56.9l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.56-.23 1.08-.53 1.56-.9l2.39.96c.21.08.47 0 .6-.22l1.93-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58z"/></svg></span>
+          <button class="dv-bar-btn dv-bell" type="button" id="dvBell" title="作者的话" aria-label="作者的话"><svg viewBox="0 0 24 24"><path d="M18 16v-5a6 6 0 1 0-12 0v5l-2 2h16l-2-2zM12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22z"/></svg><i></i></button>
+          <button class="dv-bar-btn dv-gear" type="button" id="dvGear" title="设置" aria-label="设置"><svg viewBox="0 0 24 24"><path d="M12 15.5A3.5 3.5 0 1 1 12 8.5a3.5 3.5 0 0 1 0 7zm7.4-2.6c.05-.3.07-.6.07-.9s-.02-.6-.07-.9l2.03-1.58a.5.5 0 0 0 .12-.64l-1.93-3.32a.5.5 0 0 0-.6-.22l-2.39.96a7.4 7.4 0 0 0-1.56-.9l-.36-2.54a.5.5 0 0 0-.5-.42h-3.84a.5.5 0 0 0-.5.42l-.36 2.54c-.56.23-1.08.53-1.56.9l-2.39-.96a.5.5 0 0 0-.6.22L2.44 8.87a.5.5 0 0 0 .12.64l2.03 1.59c-.05.3-.07.6-.07.9s.02.6.07.9l-2.03 1.58a.5.5 0 0 0-.12.64l1.93 3.32c.13.22.39.3.6.22l2.39-.96c.48.37 1 .67 1.56.9l.36 2.54c.04.24.25.42.5.42h3.84c.25 0 .46-.18.5-.42l.36-2.54c.56-.23 1.08-.53 1.56-.9l2.39.96c.21.08.47 0 .6-.22l1.93-3.32a.5.5 0 0 0-.12-.64l-2.03-1.58z"/></svg></button>
         </span>
       </div>
 
@@ -284,12 +284,125 @@
             <p class="dv-empty-hint" id="dvHistoryEmpty" data-i18n="demo.historyempty">暂无下载记录</p>
           </div>
           <div class="dv-alt-panel dv-about" id="dvAltAbout" hidden>
-            <img class="dv-about-logo" src="https://raw.githubusercontent.com/Downvid/downvid/main/src/assets/logo.png" alt="" width="64" height="64">
-            <p class="dv-about-name">DownVid</p>
-            <p class="dv-about-version" id="dvAboutVersion" data-version>v1.6.1</p>
+            <div class="dv-about-header">
+              <img class="dv-about-logo" src="https://raw.githubusercontent.com/Downvid/downvid/main/src/assets/logo.png" alt="" width="52" height="52">
+              <div class="dv-about-title-block">
+                <p class="dv-about-name">DownVid</p>
+                <p class="dv-about-version" id="dvAboutVersion" data-version>v1.6.1</p>
+              </div>
+            </div>
             <p class="dv-about-text" data-i18n="demo.about">基于 yt-dlp 的开源桌面视频下载工具</p>
-            <p class="dv-about-link"><a href="https://github.com/Downvid/downvid">github.com/Downvid/downvid</a></p>
+            <div class="dv-tech-stack">
+              <span class="dv-chip">Go 1.25</span>
+              <span class="dv-chip">Wails v2</span>
+              <span class="dv-chip">Svelte 5</span>
+              <span class="dv-chip">yt-dlp</span>
+              <span class="dv-chip">FFmpeg</span>
+              <span class="dv-chip">aria2</span>
+            </div>
+            <div class="dv-contributors-block">
+              <span class="dv-section-label" data-i18n="demo.contributors">代码与生态贡献者</span>
+              <div class="dv-marquee">
+                <div class="dv-marquee-track">
+                  <div class="dv-marquee-group">
+                    <span class="dv-c-chip"><img src="https://github.com/yxxbc.png?size=48" alt=""><b>yxxbc</b><em>DEV</em></span>
+                    <span class="dv-c-chip"><img src="https://github.com/cshuangyy.png?size=48" alt=""><b>cshuangyy</b></span>
+                    <span class="dv-c-chip"><img src="https://github.com/hailaij.png?size=48" alt=""><b>hailaij</b><em>CONTRIBUTOR</em></span>
+                    <span class="dv-c-chip"><img src="https://github.com/jwfstars.png?size=48" alt=""><b>jwfstars</b><em>CONTRIBUTOR</em></span>
+                    <span class="dv-c-chip"><img src="https://github.com/zerow.png?size=48" alt=""><b>zerow</b><em>CONTRIBUTOR</em></span>
+                    <span class="dv-c-chip"><img src="https://github.com/linuztx.png?size=48" alt=""><b>linuztx</b><em>CONTRIBUTOR</em></span>
+                    <span class="dv-c-chip"><img src="https://github.com/Glaroday.png?size=48" alt=""><b>Glaroday</b><em>CONTRIBUTOR</em></span>
+                  </div>
+                  <div class="dv-marquee-group" aria-hidden="true">
+                    <span class="dv-c-chip"><img src="https://github.com/yxxbc.png?size=48" alt=""><b>yxxbc</b><em>DEV</em></span>
+                    <span class="dv-c-chip"><img src="https://github.com/cshuangyy.png?size=48" alt=""><b>cshuangyy</b></span>
+                    <span class="dv-c-chip"><img src="https://github.com/hailaij.png?size=48" alt=""><b>hailaij</b><em>CONTRIBUTOR</em></span>
+                    <span class="dv-c-chip"><img src="https://github.com/jwfstars.png?size=48" alt=""><b>jwfstars</b><em>CONTRIBUTOR</em></span>
+                    <span class="dv-c-chip"><img src="https://github.com/zerow.png?size=48" alt=""><b>zerow</b><em>CONTRIBUTOR</em></span>
+                    <span class="dv-c-chip"><img src="https://github.com/linuztx.png?size=48" alt=""><b>linuztx</b><em>CONTRIBUTOR</em></span>
+                    <span class="dv-c-chip"><img src="https://github.com/Glaroday.png?size=48" alt=""><b>Glaroday</b><em>CONTRIBUTOR</em></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <p class="dv-about-link"><a href="https://github.com/Downvid/downvid" target="_blank" rel="noopener">github.com/Downvid/downvid</a></p>
           </div>
+          <div class="dv-alt-panel dv-settings-panel" id="dvAltSettings" hidden>
+            <div class="dv-settings-head">
+              <h4 data-i18n="demo.tabsettings">应用设置</h4>
+              <span class="dv-saved-tag"><svg viewBox="0 0 24 24"><path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/></svg><span data-i18n="demo.settings.autosave">设置已自动保存</span></span>
+            </div>
+            <div class="dv-settings-rows">
+              <div class="dv-s-row">
+                <div class="dv-s-label">
+                  <span data-i18n="demo.settings.downloaddir">下载保存目录</span>
+                  <em data-i18n="demo.settings.downloaddir.hint">默认保存至系统的 Downloads/DownVid 文件夹</em>
+                </div>
+                <div class="dv-s-ctrl">
+                  <input class="dv-s-input" type="text" value="~/Downloads/DownVid" readonly>
+                  <button class="dv-s-btn" type="button" title="选择文件夹"><svg viewBox="0 0 24 24"><path d="M10 4H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-8z"/></svg></button>
+                </div>
+              </div>
+              <div class="dv-s-row">
+                <div class="dv-s-label">
+                  <span data-i18n="demo.settings.filenametpl">文件名命名模板</span>
+                  <em data-i18n="demo.settings.filenametpl.hint">使用视频标题作为文件名</em>
+                </div>
+                <div class="dv-s-ctrl">
+                  <input class="dv-s-input" type="text" value="%(title)s.%(ext)s" readonly>
+                </div>
+              </div>
+              <div class="dv-s-row">
+                <div class="dv-s-label">
+                  <span data-i18n="demo.settings.updatesource">更新与镜像源</span>
+                  <em data-i18n="demo.settings.updatesource.hint">自动降级（GitHub → jsDelivr → gh-proxy → Gitee → 官网）</em>
+                </div>
+                <div class="dv-s-ctrl">
+                  <select class="dv-s-select" disabled>
+                    <option selected>自动降级 (推荐)</option>
+                  </select>
+                </div>
+              </div>
+              <div class="dv-s-row">
+                <div class="dv-s-label">
+                  <span data-i18n="demo.settings.theme">外观主题</span>
+                  <em data-i18n="demo.settings.theme.hint">浅色 / 深色，或跟随系统</em>
+                </div>
+                <div class="dv-s-ctrl">
+                  <div class="dv-seg">
+                    <button class="dv-seg-btn is-on" type="button" data-i18n="demo.settings.themeauto">跟随系统</button>
+                    <button class="dv-seg-btn" type="button" data-i18n="demo.settings.themelight">浅色</button>
+                    <button class="dv-seg-btn" type="button" data-i18n="demo.settings.themedark">深色</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="dv-dialog-overlay" id="dvAnnouncementDialog" hidden>
+        <div class="dv-dialog-box" role="dialog" aria-modal="true" aria-labelledby="dvAuthorTitle">
+          <header class="dv-dialog-head">
+            <span class="dv-dialog-icon"><svg viewBox="0 0 24 24"><path d="M18 16v-5a6 6 0 1 0-12 0v5l-2 2h16l-2-2zM12 22a2.5 2.5 0 0 0 2.45-2h-4.9A2.5 2.5 0 0 0 12 22z"/></svg></span>
+            <div class="dv-dialog-heading">
+              <h3 id="dvAuthorTitle" data-i18n="demo.authornote">写在 DownVid 边上</h3>
+              <p data-i18n="demo.authornote.date">2026-10-17 · Black Cat</p>
+            </div>
+            <button class="dv-dialog-close" type="button" id="dvDialogClose" aria-label="关闭"><svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg></button>
+          </header>
+          <div class="dv-dialog-body">
+            <p data-i18n="demo.authornote.body1">我是 Black Cat，DownVid 的作者。</p>
+            <p data-i18n="demo.authornote.body2">做这个工具的原因很朴素：有些视频我想留在本地——可能是旅行时看过的一段风景，也可能是一个随时会消失的教程。平台会下架、会限流、会要求登录，但已经下载到硬盘上的文件不会。</p>
+            <p data-i18n="demo.authornote.body3">所以 DownVid 尽量把解析、下载、合并、字幕都放在你自己的机器上完成，也不内置 yt-dlp / ffmpeg，而是优先用你系统里已经有的版本。它不完美，但方向是「你的文件，你做主」。</p>
+            <p data-i18n="demo.authornote.thanks">谢谢你把 DownVid 留在桌面上。</p>
+          </div>
+          <footer class="dv-dialog-foot">
+            <button class="dv-btn-ghost" type="button" id="dvDialogCloseBtn" data-i18n="demo.authornote.close">关闭</button>
+            <a class="dv-btn-primary" href="https://github.com/Downvid/downvid" target="_blank" rel="noopener">
+              <svg viewBox="0 0 24 24"><path d="M12 2A10 10 0 0 0 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.23.66-.5v-1.69c-2.77.6-3.36-1.34-3.36-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.87 1.52 2.34 1.07 2.91.83.1-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.92 0-1.11.38-2 1.03-2.71-.1-.25-.45-1.29.1-2.64 0 0 .84-.27 2.75 1.02.79-.22 1.65-.33 2.5-.33.85 0 1.71.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.35.2 2.39.1 2.64.65.71 1.03 1.6 1.03 2.71 0 3.82-2.34 4.66-4.57 4.91.36.31.69.92.69 1.85V21c0 .27.16.59.67.5C19.14 20.16 22 16.42 22 12A10 10 0 0 0 12 2z"/></svg>
+              <span data-i18n="demo.authornote.repo">GitHub 仓库</span>
+            </a>
+          </footer>
         </div>
       </div>
     </div>

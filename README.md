@@ -137,11 +137,14 @@ Availability can change as sites change.
 Download the latest build from [**GitHub Releases**](https://github.com/Downvid/downvid/releases) and pick the
 package for your OS.
 
-| Platform | Package |
-| --- | --- |
-| macOS | `.dmg` (ARM64 / x64) |
-| Windows | `.exe` (x64) |
-| Linux | `.AppImage` / `.deb` (x64 / ARM64; check the Release page for the exact artifacts) |
+| Platform | Package | Architecture |
+| --- | --- | --- |
+| macOS | `DownVid-Wails-macOS-universal.zip` / `.dmg` | **Mainline (Wails)**: Universal standalone package (~18 MB, 1/7 size of legacy); or legacy DMG |
+| Windows | `DownVid-Wails-windows-amd64.exe` / `.exe` | **Mainline (Wails)**: Single-binary portable executable; or legacy NSIS installer |
+| Linux | `DownVid-Wails-linux-amd64` / `.AppImage` | **Mainline (Wails)**: Native standalone binary; or legacy AppImage / deb |
+
+> [!TIP]
+> **New Architecture (Wails)**: The mainline version is rewritten in Go 1.25 + Wails v2 + Svelte 5, shrinking the bundle size to ~18 MB (-81%), reducing idle memory to 60~80 MB (-60%), and launching instantly via native webviews. Legacy Electron packages continue to be published in parallel to preserve the auto-update channels.
 
 Step-by-step instructions and common issues are in the [installation guide](./docs/installation.md).
 
@@ -177,7 +180,8 @@ reverse proxy, upgrading, troubleshooting — are in the [Docker guide](./docs/d
 
 - Node.js ≥ 22
 - pnpm ≥ 8
-- Go ≥ 1.24
+- Go ≥ 1.25
+- Wails CLI v2.16 (optional, for new architecture development)
 
 yt-dlp and FFmpeg do **not** need to be installed beforehand. At runtime DownVid detects and reuses whatever
 is already on your machine, and can download them in-app when missing.
@@ -188,8 +192,14 @@ is already on your machine, and can download them in-app when missing.
 git clone https://github.com/Downvid/downvid.git
 cd downvid
 pnpm install
-pnpm dev       # development
-pnpm build     # package for the current platform
+
+# New architecture (Wails mainline)
+bash app/scripts/build.sh         # End-to-end single binary build (with embedded sidecar)
+(cd app && wails dev)             # Quick UI development with hot reload
+
+# Legacy architecture (Electron)
+pnpm dev                          # Development mode
+pnpm build                        # Package installer for current platform
 ```
 
 Per-platform build commands, dependency notes and troubleshooting are in the
@@ -223,13 +233,11 @@ Per-platform build commands, dependency notes and troubleshooting are in the
 
 | Technology | Purpose |
 | --- | --- |
-| [Electron](https://www.electronjs.org/) | Cross-platform desktop shell |
-| [Vue 3](https://vuejs.org/) | User interface |
-| [TypeScript](https://www.typescriptlang.org/) | Type safety |
-| [Tailwind CSS](https://tailwindcss.com/) | Styling |
-| [Vite](https://vitejs.dev/) | Development and build |
-| [Pinia](https://pinia.vuejs.org/) | State management |
-| [Go](https://go.dev/) | Dependency sidecar that detects and installs yt-dlp / FFmpeg |
+| [Wails](https://wails.io/) | New architecture (mainline): lightweight desktop shell leveraging native system webviews |
+| [Go](https://go.dev/) | Core backend (16 decoupled internal packages) and dependency sidecar |
+| [Svelte 5](https://svelte.dev/) | New architecture frontend (Runes reactivity system) |
+| [Electron](https://www.electronjs.org/) | Legacy architecture: cross-platform desktop shell |
+| [Vue 3](https://vuejs.org/) | Legacy frontend |
 | [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Video and audio extraction engine |
 | [FFmpeg](https://ffmpeg.org/) | Merging and transcoding |
 | [Vitest](https://vitest.dev/) | Pure-logic unit tests |
@@ -238,10 +246,13 @@ Per-platform build commands, dependency notes and troubleshooting are in the
 
 ```mermaid
 flowchart LR
-    UI["Renderer<br/>Vue 3"] <-->|"IPC"| Main["Main process<br/>Electron / Node.js"]
-    Main <-->|"NDJSON"| Sidecar["Go dependency sidecar"]
-    Main --> Engine["yt-dlp"]
-    Main --> Media["FFmpeg"]
+    subgraph WailsApp["Mainline Architecture (Wails)"]
+        SvelteUI["Renderer<br/>Svelte 5"] <-->|"Go Bindings"| GoCore["Go Core<br/>16 Internal Packages"]
+        GoCore <-->|"Embedded"| Sidecar["Sidecar<br/>yt-dlp / FFmpeg"]
+    end
+    subgraph LegacyApp["Legacy Architecture (Electron)"]
+        VueUI["Renderer<br/>Vue 3"] <-->|"IPC"| Main["Main process<br/>Electron / Node.js"]
+    end
 ```
 
 An interactive diagram with more detail is in the [architecture doc](./docs/architecture.html).
@@ -250,7 +261,7 @@ An interactive diagram with more detail is in the [architecture doc](./docs/arch
 
 | Directory | Purpose |
 | --- | --- |
-| `app/` | New architecture: Go + Wails + Svelte 5 desktop app (15 decoupled internal Go packages) |
+| `app/` | New architecture (mainline): Go + Wails + Svelte 5 desktop app (16 decoupled internal Go packages) |
 | `backend/` | Go dependency sidecar: detects and installs runtime dependencies |
 | `electron/` | Main process, IPC, download implementations, site parsers, updater |
 | `src/` | Vue 3 renderer and UI |

@@ -85,6 +85,28 @@ const I18N = {
     'demo.historyempty': '暂无下载记录',
     'demo.about': '基于 yt-dlp 的开源桌面视频下载工具',
     'demo.caption': '新版界面的可交互预览——可以点解析、下载，也会进入历史 / 关于',
+    'demo.tabsettings': '应用设置',
+    'demo.settings.autosave': '设置已自动保存',
+    'demo.settings.downloaddir': '下载保存目录',
+    'demo.settings.downloaddir.hint': '默认保存至系统的 Downloads/DownVid 文件夹',
+    'demo.settings.filenametpl': '文件名命名模板',
+    'demo.settings.filenametpl.hint': '使用视频标题作为文件名',
+    'demo.settings.updatesource': '更新与镜像源',
+    'demo.settings.updatesource.hint': '自动降级（GitHub → jsDelivr → gh-proxy → Gitee → 官网）',
+    'demo.settings.theme': '外观主题',
+    'demo.settings.theme.hint': '浅色 / 深色，或跟随系统',
+    'demo.settings.themeauto': '跟随系统',
+    'demo.settings.themelight': '浅色',
+    'demo.settings.themedark': '深色',
+    'demo.authornote': '写在 DownVid 边上',
+    'demo.authornote.date': '2026-10-17 · Black Cat',
+    'demo.authornote.body1': '我是 Black Cat，DownVid 的作者。',
+    'demo.authornote.body2': '做这个工具的原因很朴素：有些视频我想留在本地——可能是旅行时看过的一段风景，也可能是一个随时会消失的教程。平台会下架、会限流、会要求登录，但已经下载到硬盘上的文件不会。',
+    'demo.authornote.body3': '所以 DownVid 尽量把解析、下载、合并、字幕都放在你自己的机器上完成，也不内置 yt-dlp / ffmpeg，而是优先用你系统里已经有的版本。',
+    'demo.authornote.thanks': '谢谢你把 DownVid 留在桌面上。',
+    'demo.authornote.close': '关闭',
+    'demo.authornote.repo': 'GitHub 仓库',
+    'demo.contributors': '代码与生态贡献者',
   },
   en: {
     'brand.tag': 'Open source',
@@ -205,6 +227,28 @@ const I18N = {
     'demo.historyempty': 'No download history',
     'demo.about': 'An open-source desktop video downloader built on yt-dlp',
     'demo.caption': 'An interactive preview of the new UI — parse, download, and open History / About',
+    'demo.tabsettings': 'Settings',
+    'demo.settings.autosave': 'Settings saved automatically',
+    'demo.settings.downloaddir': 'Download folder',
+    'demo.settings.downloaddir.hint': 'Saved to Downloads/DownVid by default',
+    'demo.settings.filenametpl': 'Filename template',
+    'demo.settings.filenametpl.hint': 'Use video title as the filename',
+    'demo.settings.updatesource': 'Update mirror',
+    'demo.settings.updatesource.hint': 'Auto fallback (GitHub → jsDelivr → gh-proxy → Gitee → website)',
+    'demo.settings.theme': 'Appearance theme',
+    'demo.settings.theme.hint': 'Light / Dark, or follow system',
+    'demo.settings.themeauto': 'System',
+    'demo.settings.themelight': 'Light',
+    'demo.settings.themedark': 'Dark',
+    'demo.authornote': 'A note from the author',
+    'demo.authornote.date': '2026-10-17 · Black Cat',
+    'demo.authornote.body1': "I'm Black Cat, the author of DownVid.",
+    'demo.authornote.body2': 'The reason for building this is simple: some videos I want to keep locally — a landscape from a trip, or a tutorial that could disappear tomorrow. Delisting or login walls can strike anytime, but downloaded files stay with you.',
+    'demo.authornote.body3': 'So DownVid keeps parsing, downloading, merging and subtitles on your own machine without bundling heavy binaries.',
+    'demo.authornote.thanks': 'Thanks for keeping DownVid on your desktop.',
+    'demo.authornote.close': 'Close',
+    'demo.authornote.repo': 'GitHub Repo',
+    'demo.contributors': 'Code & Ecosystem Contributors',
     'join.title': 'Join the open-source community',
     'join.sub': 'DownVid is an MIT-licensed open-source project. File an issue, send a pull request, or just leave a star.',
     'join.github': 'View on GitHub',
@@ -430,7 +474,7 @@ const CACHE_KEY = 'downvid.latestRelease';
 const CACHE_TTL = 30 * 60 * 1000;   // 版本不会分钟级变化，刷新页面不该重复消耗 API 限额
 
 const fallbackVersionEl = typeof document !== 'undefined' ? document.getElementById('dvAboutVersion') : null;
-const fallbackTag = fallbackVersionEl && /^v\d/.test(fallbackVersionEl.textContent.trim()) ? fallbackVersionEl.textContent.trim() : 'v1.6.0';
+const fallbackTag = fallbackVersionEl && /^v\d/.test(fallbackVersionEl.textContent.trim()) ? fallbackVersionEl.textContent.trim() : 'v1.6.1';
 
 let current = initialLang();
 let release = readCachedRelease() || buildFallbackRelease(fallbackTag);
@@ -939,6 +983,14 @@ function initAppDemo() {
   const alt = document.getElementById('dvAlt');
   const altHistory = document.getElementById('dvAltHistory');
   const altAbout = document.getElementById('dvAltAbout');
+  const altSettings = document.getElementById('dvAltSettings');
+  const bellBtn = document.getElementById('dvBell');
+  const gearBtn = document.getElementById('dvGear');
+  const dialog = document.getElementById('dvAnnouncementDialog');
+  const dialogClose = document.getElementById('dvDialogClose');
+  const dialogCloseBtn = document.getElementById('dvDialogCloseBtn');
+  const themeSegBtns = altSettings ? [...altSettings.querySelectorAll('.dv-seg-btn')] : [];
+  const demoHost = document.getElementById('dvDemo');
   const historyHost = document.getElementById('dvHistory');
   const historyEmpty = document.getElementById('dvHistoryEmpty');
   const aboutVersion = document.getElementById('dvAboutVersion');
@@ -1153,6 +1205,8 @@ function initAppDemo() {
     alt.hidden = name === 'download';
     if (altHistory) altHistory.hidden = name !== 'history';
     if (altAbout) altAbout.hidden = name !== 'about';
+    if (altSettings) altSettings.hidden = name !== 'settings';
+    if (gearBtn) gearBtn.classList.toggle('is-active', name === 'settings');
     if (name === 'history') renderHistory();
     if (name === 'about' && aboutVersion) aboutVersion.textContent = release ? release.tag : aboutVersionFallback;
   }
@@ -1352,6 +1406,41 @@ function initAppDemo() {
   for (const tab of tabs) {
     tab.addEventListener('click', () => setTab(tab.getAttribute('data-dv-tab')));
   }
+
+  if (gearBtn) {
+    gearBtn.addEventListener('click', () => {
+      const isSettings = altSettings && !altSettings.hidden && alt && !alt.hidden;
+      setTab(isSettings ? 'download' : 'settings');
+    });
+  }
+
+  const closeDialog = () => { if (dialog) dialog.hidden = true; };
+  if (bellBtn) bellBtn.addEventListener('click', () => { if (dialog) dialog.hidden = false; });
+  if (dialogClose) dialogClose.addEventListener('click', closeDialog);
+  if (dialogCloseBtn) dialogCloseBtn.addEventListener('click', closeDialog);
+  if (dialog) {
+    dialog.addEventListener('click', (e) => {
+      if (e.target === dialog) closeDialog();
+    });
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && dialog && !dialog.hidden) closeDialog();
+  });
+
+  themeSegBtns.forEach((btn, idx) => {
+    btn.addEventListener('click', () => {
+      themeSegBtns.forEach(b => b.classList.toggle('is-on', b === btn));
+      if (!demoHost) return;
+      demoHost.classList.remove('dv-theme-dark');
+      if (idx === 2) {
+        demoHost.classList.add('dv-theme-dark');
+      } else if (idx === 0) {
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+          demoHost.classList.add('dv-theme-dark');
+        }
+      }
+    });
+  });
 
   // 切语言时把这块演示的文案重刷一遍
   syncAppDemo = function () {

@@ -2,7 +2,13 @@
 
 ```
 downvid/
-├── backend/                # Go 依赖边车（探测 + 下载 yt-dlp / ffmpeg）
+├── app/                    # 全新架构（主线）：Go + Wails + Svelte 5 桌面应用
+│   ├── internal/           # 16 个零耦合业务包（download / parse / deps / settings...）
+│   ├── frontend/           # Svelte 5 + Vite 渲染进程
+│   ├── scripts/build.sh    # 主线构建入口（编译依赖边车 + 内嵌单文件打包）
+│   ├── cmd/downvid-server/ # 容器端 / 无头服务入口
+│   └── main.go / app.go    # Wails 壳与绑定入口
+├── backend/                # Go 依赖边车（探测 + 下载 yt-dlp / ffmpeg，双架构共用）
 │   ├── cmd/downvid-deps/   # 入口：detect / fetch 两个子命令
 │   └── internal/
 │       ├── probe/          # 执行二进制并解析版本号

@@ -130,11 +130,14 @@ DownVid 通过 yt-dlp 支持 **1000+ 个**视频和音频网站。以下是常�
 
 前往 [**GitHub Releases**](https://github.com/Downvid/downvid/releases) 下载最新版本，并按操作系统选择对应安装包。
 
-| 平台 | 安装包 |
-| --- | --- |
-| macOS | `.dmg`（ARM64 / x64） |
-| Windows | `.exe`（x64） |
-| Linux | `.AppImage` / `.deb`（x64 / ARM64，具体产物以 Release 页面为准） |
+| 平台 | 安装包 | 架构说明 |
+| --- | --- | --- |
+| macOS | `DownVid-Wails-macOS-universal.zip` / `.dmg` | **主线新架构**：通用免安装单包（约 18 MB，仅为旧版 1/7）；或存量 DMG |
+| Windows | `DownVid-Wails-windows-amd64.exe` / `.exe` | **主线新架构**：单文件原生可执行程序；或存量 NSIS 安装包 |
+| Linux | `DownVid-Wails-linux-amd64` / `.AppImage` | **主线新架构**：原生独立二进制；或存量 AppImage / deb |
+
+> [!TIP]
+> **新架构（Wails）优势**：主线版本采用 Go 1.25 + Wails v2 + Svelte 5 全新重写，体积仅约 18 MB（缩减 81%），待机内存仅 60~80 MB（降低 60%），启动速度秒开。旧版 Electron 仍同步发布，维护存量自动更新通道。
 
 安装步骤与常见问题见 [安装指南](./docs/installation.md)。
 
@@ -170,7 +173,8 @@ yt-dlp / FFmpeg / ffprobe 已在镜像内预装，且**版本与哈希和桌面�
 
 - Node.js ≥ 22
 - pnpm ≥ 8
-- Go ≥ 1.24
+- Go ≥ 1.25
+- Wails CLI v2.16（可选，开发新架构时使用）
 
 yt-dlp 和 FFmpeg **无需预先安装**。运行时会优先探测并复用系统已有版本；缺失时可在应用内下载安装。
 
@@ -180,8 +184,14 @@ yt-dlp 和 FFmpeg **无需预先安装**。运行时会优先探测并复用系�
 git clone https://github.com/Downvid/downvid.git
 cd downvid
 pnpm install
-pnpm dev       # 开发模式
-pnpm build     # 构建当前平台安装包
+
+# 新架构（Wails 主线）
+bash app/scripts/build.sh         # 端到端编译单文件产物（带依赖边车）
+(cd app && wails dev)             # 界面快速开发热重载
+
+# 旧架构（Electron 存量）
+pnpm dev                          # 开发模式
+pnpm build                        # 构建当前平台安装包
 ```
 
 更多平台构建命令、依赖说明及排错步骤请查看 [从源码构建指南](./docs/build-from-source.md)。
@@ -212,13 +222,11 @@ pnpm build     # 构建当前平台安装包
 
 | 技术 | 用途 |
 | --- | --- |
-| [Electron](https://www.electronjs.org/) | 跨平台桌面应用框架 |
-| [Vue 3](https://vuejs.org/) | 用户界面 |
-| [TypeScript](https://www.typescriptlang.org/) | 类型安全 |
-| [Tailwind CSS](https://tailwindcss.com/) | 界面样式 |
-| [Vite](https://vitejs.dev/) | 开发与构建 |
-| [Pinia](https://pinia.vuejs.org/) | 状态管理 |
-| [Go](https://go.dev/) | 探测与安装 yt-dlp / FFmpeg 的依赖边车 |
+| [Wails](https://wails.io/) | 新架构（主线）：轻量桌面应用框架，调用原生系统 Webview |
+| [Go](https://go.dev/) | 新架构核心（16 个零耦合 internal 包）与依赖管理边车 |
+| [Svelte 5](https://svelte.dev/) | 新架构前端（Runes 响应式系统） |
+| [Electron](https://www.electronjs.org/) | 旧架构（存量维护）：跨平台桌面应用框架 |
+| [Vue 3](https://vuejs.org/) | 旧架构前端 |
 | [yt-dlp](https://github.com/yt-dlp/yt-dlp) | 视频与音频解析引擎 |
 | [FFmpeg](https://ffmpeg.org/) | 音视频合并与转码 |
 | [Vitest](https://vitest.dev/) | 纯逻辑单元测试 |
@@ -227,10 +235,13 @@ pnpm build     # 构建当前平台安装包
 
 ```mermaid
 flowchart LR
-    UI["渲染进程<br/>Vue 3"] <-->|"IPC"| Main["主进程<br/>Electron / Node.js"]
-    Main <-->|"NDJSON"| Sidecar["Go 依赖边车"]
-    Main --> Engine["yt-dlp"]
-    Main --> Media["FFmpeg"]
+    subgraph WailsApp["主线新架构（Wails）"]
+        SvelteUI["渲染进程<br/>Svelte 5"] <-->|"Go Bindings"| GoCore["Go 核心<br/>16 个 Internal 包"]
+        GoCore <-->|"嵌入调用"| Sidecar["依赖边车<br/>yt-dlp / FFmpeg"]
+    end
+    subgraph LegacyApp["存量架构（Electron）"]
+        VueUI["渲染进程<br/>Vue 3"] <-->|"IPC"| Main["主进程<br/>Electron / Node.js"]
+    end
 ```
 
 交互式架构图及详细说明见 [架构文档](./docs/architecture.html)。
@@ -239,7 +250,7 @@ flowchart LR
 
 | 目录 | 作用 |
 | --- | --- |
-| `app/` | 全新架构：Go + Wails + Svelte 5 桌面端（15 个零耦合 Go 内部包，单文件内嵌产物） |
+| `app/` | 全新架构（主线）：Go + Wails + Svelte 5 桌面端（16 个零耦合 Go 内部包，单文件内嵌产物） |
 | `backend/` | Go 依赖边车，探测并安装运行依赖 |
 | `electron/` | 主进程、IPC、下载实现、平台解析器与更新逻辑 |
 | `src/` | Vue 3 渲染进程与界面 |
