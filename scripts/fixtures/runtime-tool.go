@@ -49,7 +49,7 @@ func main() {
 	}
 	name := strings.TrimSuffix(filepath.Base(exe), ".exe")
 	if name == "yt-dlp" {
-		fmt.Println("2026.10.14")
+		fmt.Println("2026.10.25")
 	} else if name == "deno" {
 		fmt.Println("deno 2.3.0")
 	} else if name == "node" {
