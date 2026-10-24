@@ -126,7 +126,7 @@ const REPO_PATH = REPO_URL.replace(/^https:\/\/github\.com\//, '').replace(/\/$/
  */
 export function mirrorSources(locale: Locale): string[] {
   const lang = locale === 'zh-CN' ? 'zh' : 'en'
-  const path = 'app/frontend/src/announcements/author.' + lang + '.md'
+  const path = 'announcements/author.' + lang + '.md'
   const raw = 'https://raw.githubusercontent.com/' + REPO_PATH + '/main/' + path
   return [
     raw,
@@ -146,12 +146,14 @@ export function mirrorSources(locale: Locale): string[] {
  *
  * 判据刻意宽松（公告是 Markdown，可能以 `---` frontmatter 或 `#` 开头）：
  *   - 出现 HTML 文档特征（`<!doctype` / `<html`）→ 不是公告
+ *   - 出现路径相对引用（如 `../`）→ 不是公告（可能是未展开的 symlink）
  *   - 长度太短（< 20 字符）→ 基本是错误页
  */
 function looksLikeMarkdown(text: string): boolean {
   const head = text.trimStart().slice(0, 200).toLowerCase()
   if (head.startsWith('<!doctype') || head.startsWith('<html')) return false
-  return text.trim().length >= 20
+  if (head.startsWith('../') || head.startsWith('./')) return false
+  return text.trim().length >= 20 && (text.includes('---') || text.includes('## ') || text.includes('\n\n'))
 }
 
 /**
