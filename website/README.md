@@ -28,6 +28,13 @@ website/
 ## 部署
 
 推送 `main` 即发布（Vercel 的 Git 集成，命中 `website/**` 或 `vercel.json` 时重建）。
+
+发布流程不靠「Git 集成大概收到了这次 push」：`release.yml` 把版本号提交回 `main` 之后，
+会显式触发一次 Vercel Deploy Hook（仓库 secret `VERCEL_DEPLOY_HOOK`），再回读线上页面的
+`data-version`，确认部署真的生效——那次提交由 `GITHUB_TOKEN` 推送，在 GitHub 里看不到
+任何 CI 信号，静默失败时官网会停在上一版。secret 未配置时该步骤只警告并跳过。
+详见 `docs/release.md` 的「为什么还要显式触发一次部署」。
+
 本地预览：
 
 ```bash

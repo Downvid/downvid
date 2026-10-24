@@ -404,6 +404,9 @@ G2（internal 不得 import cmd），TS 侧规则 3–7（Electron 退役前仍�
 
 无构建的多文件站点（`index.html` / `styles.css` / `app.js`），由 Vercel 项目 `downvid` 的 Git 集成在推送 main 后
 直接发布（`vercel.json` 指定 `outputDirectory: "website"`，域名 <https://downvid-coral.vercel.app>）。
+发布流程不靠「Git 集成大概收到了这次 push」：版本号提交回 main 后，`release.yml` 会显式触发一次
+Vercel Deploy Hook（secret `VERCEL_DEPLOY_HOOK`），再回读线上页面的 `data-version` 确认部署生效；
+没配 secret 只警告并跳过。那次提交由 `GITHUB_TOKEN` 推送，GitHub 不会为它新建 Actions run。
 GitHub Pages **不再使用**：仓库从未在 Settings 里选过 Pages 源，`actions/configure-pages` 只会稳定报
 `Get Pages site failed`，那个工作流已删除。校验改由 `pnpm lint:website` 在三个 `ci-*.yml` 的 frontend job 跑。
 

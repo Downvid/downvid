@@ -82,8 +82,9 @@ git tag -d v1.3.0 && git push origin :refs/tags/v1.3.0
 
 > 其中「官网版本号」这一项**不需要人核对**：`release.yml` 在 Release 创建成功、
 > 且通过 `verify-release.mjs` 自检之后，会自动跑 `pnpm website:version` 把
-> `website/index.html` 的版本号刷成本次版本并提交回 `main`，由 Vercel 自动部署。
-> 详见下文「官网版本号为什么需要自动刷新」。
+> `website/index.html` 的版本号刷成本次版本并提交回 `main`，随后**显式触发一次
+> Vercel 部署并回读线上页面**，确认真的生效。详见下文「官网版本号为什么需要自动刷新」
+> 与「为什么还要显式触发一次部署」。
 
 ## 官网版本号为什么需要自动刷新
 
@@ -101,7 +102,8 @@ git tag -d v1.3.0 && git push origin :refs/tags/v1.3.0
 | --- | --- |
 | 标记 | `website/index.html` 的版本号元素带 `data-version`（刷新脚本的定位标记） |
 | 刷新 | `pnpm website:version` → `scripts/sync-website-version.mjs`，只替换那个元素的文本 |
-| 时机 | `release.yml` 的 `release` job **最后**两步：自检通过之后、预发布则跳过 |
+| 时机 | `release.yml` 的 `release` job **最后**三步：自检通过之后、预发布则跳过 |
+| 部署 | 推 `main` 后显式调一次 Vercel Deploy Hook，再轮询线上页面的 `data-version` |
 | 校验 | `pnpm lint:website` 要求 `data-version` 占位存在且是 `v<数字>` 形态 |
 
 **时机为什么放在最后**：发布被取消或失败时，官网不该先跳到一个不存在的版本。
@@ -113,6 +115,24 @@ git tag -d v1.3.0 && git push origin :refs/tags/v1.3.0
 **产物直链不受影响**：下载按钮至今仍是运行时按 `ARTIFACTS` 模板 + 最新 Release
 拼出来的（见 `website/README.md` 的「下载区」），本流程只刷新离线兜底的版本号，
 不写死任何产物名。
+
+## 为什么还要显式触发一次部署
+
+推 `main` 本来就会由 Vercel 的 Git 集成部署，但这条链路的成败在 GitHub 里**没有任何信号**：
+
+- `release.yml` 用 `GITHUB_TOKEN` 推提交，GitHub 不会为它新建 Actions run（防递归），
+  仓库里看不到这次 push 的任何结果
+- Vercel 侧有没有建部署、部署的是哪个提交，只有打开 Vercel 面板才知道
+- 静默失败的后果和版本号过期一样：Release 已经发出去，官网却还停在上一版
+
+所以发布流程最后多一步：向 Vercel 的 Deploy Hook 发一次 `POST`，然后轮询
+`https://downvid-coral.vercel.app`（域名取自 `shared/app.ts` 的 `WEBSITE_URL`，不另写一份），
+直到页面的 `data-version` 变成 `v<本次版本>`；5 分钟仍未变就判这次发布失败。
+
+**只需要配一次**：Vercel 项目 `downvid` → Settings → Git → Deploy Hooks，名称随意、
+分支选 `main`，把生成的 URL 存成 GitHub 仓库的 Actions secret `VERCEL_DEPLOY_HOOK`。
+没配时这一步只发一条 warning 并跳过——Git 集成仍是兜底，发布不该因为少一条可选
+触发路径而变红；但那条 warning **不代表**官网已经更新。
 
 ## 产物命名契约
 

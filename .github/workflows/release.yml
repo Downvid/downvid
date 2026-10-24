@@ -446,6 +446,73 @@ jobs:
           git commit -m "chore(website): 发布后同步官网版本号至 v$VERSION" -m "由 release.yml 在 Release 创建成功后自动写入，离线兜底值不再是过期的。"
           git push origin main
 
+      # ===== 显式触发官网部署：不指望「Git 集成恰好收到了这次 push」 =====
+      #
+      # 官网本来只靠 Vercel 的 Git 集成：推 main 就部署。但上面那次提交是用
+      # GITHUB_TOKEN 推的——GitHub 不会为它新建 Actions run（防递归），而 Vercel 那边
+      # 到底有没有部署、部署的是哪个提交，在 GitHub 里**看不到任何信号**。
+      # 一次静默失败的后果是：Release 已经发出去，官网的离线兜底版本号却停在上一版。
+      #
+      # 所以这里显式调一次 Deploy Hook（Vercel 项目 → Settings → Git → Deploy Hooks，
+      # 分支选 main，URL 存成仓库 secret `VERCEL_DEPLOY_HOOK`），再回读线上页面，
+      # 确认 `data-version` 真的变成了本次版本。只有「确实部署成功」才算这一步通过。
+      #
+      # 没配 secret 时只警告、不失败：Git 集成仍是兜底，发布不该因为少一条可选
+      # 触发路径而变红；但那条 warning 不代表官网已经更新。
+      # 同一个提交重复触发会被 Vercel 自己取消，不会堆积部署。
+      - name: 触发官网部署
+        if: needs.version.outputs.prerelease != 'true'
+        env:
+          VERCEL_DEPLOY_HOOK: ${{ secrets.VERCEL_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$VERCEL_DEPLOY_HOOK" ]; then
+            echo "::warning::未配置 VERCEL_DEPLOY_HOOK，跳过显式部署；官网仍会由 Vercel 的 Git 集成发布。"
+            exit 0
+          fi
+
+          # 站点域名只在 shared/app.ts 里维护，这里不要另写一份
+          SITE=$(grep -oE "WEBSITE_URL = '[^']+'" shared/app.ts | cut -d"'" -f2)
+          if [ -z "$SITE" ]; then
+            echo "::error::无法从 shared/app.ts 解析 WEBSITE_URL"
+            exit 1
+          fi
+
+          echo "触发 Deploy Hook：$SITE"
+          CURL_RC=0
+          # 状态码与响应体一次取回：不落临时文件，少一个可能写不进去的路径
+          RESP=$(curl -sS -X POST -w '\n%{http_code}' "$VERCEL_DEPLOY_HOOK") || CURL_RC=$?
+          HTTP=$(printf '%s\n' "$RESP" | tail -n1)
+          BODY=$(printf '%s\n' "$RESP" | sed '$d')
+          if [ "$CURL_RC" -ne 0 ]; then
+            echo "::error::调用 Vercel Deploy Hook 失败（curl exit $CURL_RC）：$BODY"
+            exit 1
+          fi
+          case "$HTTP" in
+            2*) ;;
+            *)
+              echo "::error::Vercel Deploy Hook 返回 HTTP $HTTP：$BODY"
+              exit 1
+              ;;
+          esac
+          echo "$BODY"
+          if ! printf '%s' "$BODY" | grep -q '"job"'; then
+            echo "::error::Deploy Hook 没有返回 job，部署未触发：$BODY"
+            exit 1
+          fi
+
+          # 部署是异步的：轮询线上页面，直到 data-version 变成本次版本。
+          # 静态站通常 30–90 秒；给 5 分钟，超时就是真出问题了（不要静默收工）。
+          # 每次带不同的查询串：避免 CDN 把上一次的旧 HTML 缓存住，白等 5 分钟
+          for attempt in $(seq 1 30); do
+            if curl -fsS "$SITE/?deploy=$VERSION-$attempt" | grep -Eq "data-version[^>]*>v$VERSION<"; then
+              echo "官网已更新到 v$VERSION（第 $attempt 次检查）"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::5 分钟内线上官网仍未出现 v$VERSION：去 Vercel 面板看这次部署的日志。"
+          exit 1
+
   # ===== Wails 版（新架构）=====
   #
   # 与上面的 Electron 版**并行发布**，产物用独立命名（`DownVid-Wails-*`），

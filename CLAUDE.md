@@ -438,7 +438,11 @@ plus TS rules 3–7 (kept until Electron is retired).
 
 Three local files — `website/index.html`, `styles.css`, `app.js` — **no build step**, published
 straight from `main` by the Git integration of the Vercel project `downvid` (`vercel.json` sets `outputDirectory: "website"`,
-site at <https://downvid-coral.vercel.app>). GitHub Pages is **no longer used**: the repo never
+site at <https://downvid-coral.vercel.app>). Releases do not rely on the Git integration "probably"
+receiving that push: after committing the version bump back to `main`, `release.yml` explicitly
+triggers a Vercel Deploy Hook (secret `VERCEL_DEPLOY_HOOK`) and reads `data-version` back from the
+live page to confirm; without the secret the step only warns and skips. That commit is pushed with
+`GITHUB_TOKEN`, so GitHub never starts an Actions run for it. GitHub Pages is **no longer used**: the repo never
 had Pages enabled in Settings, so `actions/configure-pages` only ever failed with
 `Get Pages site failed` — that workflow is gone, and `pnpm lint:website` (frontend job of all three
 `ci-*.yml`) does the checks instead.
