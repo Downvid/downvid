@@ -170,6 +170,8 @@ func findOneContext(parent context.Context, kind Kind, opts Options) Result {
 	// 直接用 lastErr 会把前者覆盖掉（用户只看到 stat no such file）。
 	var staleErr error // 找到了文件但版本太旧
 	staleSeen := false // 至少有一个副本因版本过旧被拒
+	var staleInfo probe.Info
+	var staleSource Source
 	var probeErr error // 找到了文件但执行失败（损坏、无权限等）
 	var lastErr error  // 其它（路径不存在之类）
 	for _, c := range candidatesFor(kind, opts) {
@@ -194,6 +196,10 @@ func findOneContext(parent context.Context, kind Kind, opts Options) Result {
 		if !isAcceptableVersion(kind, info) {
 			staleErr = staleReason(kind, info)
 			staleSeen = true
+			if staleInfo.Path == "" {
+				staleInfo = info
+				staleSource = c.Source
+			}
 			continue
 		}
 		res.Found = true
@@ -231,6 +237,13 @@ func findOneContext(parent context.Context, kind Kind, opts Options) Result {
 
 	res.RequiredVersion = requiredVersion(kind)
 	res.Stale = staleSeen
+	if staleSeen {
+		res.Path = staleInfo.Path
+		res.Version = staleInfo.Version
+		res.Source = string(staleSource)
+		res.Managed = staleSource == SourceManaged
+		res.Form = binaryForm(kind, staleInfo.Path)
+	}
 
 	switch {
 	case ctx.Err() != nil:

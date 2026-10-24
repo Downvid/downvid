@@ -96,7 +96,6 @@ import { findExistingDownload } from './dedupe'
 import { applyQualityDisambiguation } from './filename'
 import { snapshotForRun } from './snapshot'
 import { dayGroup, formatBytes as formatBytesUtil } from './format'
-import { getDemoHistory } from './demo-history'
 
 export type ParseState = 'idle' | 'parsing' | 'done' | 'error'
 
@@ -975,27 +974,20 @@ class AppStore {
 
   async loadHistory(): Promise<void> {
     const rows = await historyList()
-    if (rows && rows.length > 0) {
-      this.history = rows.map((r) => ({
-        id: String(r.id ?? ''),
-        title: String(r.title ?? ''),
-        thumbnail: String(r.thumbnail ?? ''),
-        url: String(r.url ?? ''),
-        filePath: String(r.filePath ?? ''),
-        quality: String(r.quality ?? ''),
-        ext: String(r.format ?? 'mp4'),
-        mode: 'video' as Mode,
-        sizeBytes: Number(r.sizeBytes ?? r.size ?? 0),
-        createdAt: Date.parse(String(r.createdAt ?? '')) || Date.now(),
-        fileExists: Boolean(r.fileExists),
-      }))
-      if (this.history.length < 15) {
-        const demo = getDemoHistory()
-        this.history = [...this.history, ...demo.slice(6)]
-      }
-    } else {
-      this.history = getDemoHistory()
-    }
+    if (!rows) return
+    this.history = rows.map((r) => ({
+      id: String(r.id ?? ''),
+      title: String(r.title ?? ''),
+      thumbnail: String(r.thumbnail ?? ''),
+      url: String(r.url ?? ''),
+      filePath: String(r.filePath ?? ''),
+      quality: String(r.quality ?? ''),
+      ext: String(r.format ?? 'mp4'),
+      mode: 'video' as Mode,
+      sizeBytes: Number(r.sizeBytes ?? r.size ?? 0),
+      createdAt: Date.parse(String(r.createdAt ?? '')) || Date.now(),
+      fileExists: Boolean(r.fileExists),
+    }))
   }
 
   async removeHistory(id: string): Promise<void> {

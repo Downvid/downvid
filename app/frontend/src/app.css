@@ -570,6 +570,12 @@ body::before {
   color: var(--accent-deep);
   font-weight: 600;
 }
+.chip--warn {
+  border-color: color-mix(in oklab, var(--warn) 55%, transparent);
+  background: color-mix(in oklab, var(--warn) 12%, transparent);
+  color: var(--warn);
+  font-weight: 600;
+}
 
 .seg {
   display: inline-flex;

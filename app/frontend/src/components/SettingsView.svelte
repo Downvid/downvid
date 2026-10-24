@@ -101,9 +101,7 @@
   }
 
   function depSourceLabel(dep: DepItem): string {
-    // 后端可能给 system / managed / manual / scanned，还有空串（未找到）。
-    // 早先这里只声明了 'none'，而实际数据里根本没有 'none' 这个值：
-    // 于是「找到的依赖」也会走到 else 分支，全部显示成「系统安装」。
+    if (!dep.source || dep.source === 'none' || dep.status === 'missing') return ''
     return dep.source === 'managed' ? t('settings.depsManaged') : t('settings.depsSystem')
   }
 </script>
@@ -382,10 +380,15 @@
                 <span class="dep-name">{dep.name}</span>
                 {#if dep.version}
                   <span class="dep-version num">{dep.version}</span>
+                {:else if dep.status === 'outdated'}
+                  <span class="dep-missing">{t('settings.depsOutdated')}</span>
                 {:else}
                   <span class="dep-missing">{t('settings.depsMissing')}</span>
                 {/if}
-                {#if dep.source !== 'none'}
+                {#if dep.status === 'outdated'}
+                  <span class="chip chip--warn">{t('settings.depsOutdated')}</span>
+                {/if}
+                {#if depSourceLabel(dep)}
                   <span class="chip" class:chip--active={dep.source === 'managed'}>{depSourceLabel(dep)}</span>
                 {/if}
                 {#if !dep.required}
@@ -394,6 +397,9 @@
               </div>
               {#if dep.path}
                 <span class="dep-path num" title={dep.path}>{dep.path}</span>
+              {/if}
+              {#if dep.status !== 'ready' && dep.reason}
+                <span class="dep-reason" title={dep.reason}>{dep.reason}</span>
               {/if}
               {#if dep.busy}
                 <div class="progress-wrap dep-progress">
@@ -922,6 +928,11 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  .dep-reason {
+    font-size: 10.5px;
+    color: var(--warn);
+    line-height: 1.4;
   }
   .dep .chip {
     height: 20px;
