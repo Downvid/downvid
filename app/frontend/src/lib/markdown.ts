@@ -178,3 +178,69 @@ export function splitSummary(item: string): { summary: string; detail: string } 
   const detail = line.slice(summary.length).trim()
   return { summary, detail }
 }
+
+/**
+ * 从 GitHub / Gitee 的 Release Notes（由 scripts/gen-release-notes.mjs 生成）
+ * 中截取真正的「更新内容」条目列表，剔除徽章、表格、HTML、Docker 命令及脚本文本。
+ */
+export function extractChangelogFromReleaseNotes(text: string): string[] {
+  let content = text.trim()
+  if (!content) return []
+
+  // 1. 如果包含「更新内容」或「Changelog」标头，优先截取该段落
+  const headerMatch = content.match(
+    /##\s*(?:📝\s*)?(?:更新内容|更新说明|变更日志|Changelog|Release Notes|\[[\d.]+\])[^\n]*/i,
+  )
+  if (headerMatch && headerMatch.index !== undefined) {
+    const afterHeader = content.slice(headerMatch.index + headerMatch[0].length)
+    const endMatch = afterHeader.match(/\n(##\s+[^\n]+|---|\n\s*<sub>)/)
+    content = endMatch && endMatch.index !== undefined ? afterHeader.slice(0, endMatch.index) : afterHeader
+  }
+
+  // 2. 逐行提取列表条目（跳过 HTML、表格、代码块、脚本注释、徽章）
+  const lines = content.split('\n')
+  const items: string[] = []
+  let inCodeBlock = false
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim()
+    if (!trimmed) continue
+    if (trimmed.startsWith('```')) {
+      inCodeBlock = !inCodeBlock
+      continue
+    }
+    if (inCodeBlock) continue
+
+    // 过滤掉脚本生成的模板元素、HTML、表格、注释、徽章、分割线
+    if (
+      trimmed.startsWith('<!--') ||
+      trimmed.startsWith('<div') ||
+      trimmed.startsWith('</div') ||
+      trimmed.startsWith('<sub') ||
+      trimmed.startsWith('</sub') ||
+      trimmed.startsWith('![') ||
+      trimmed.startsWith('[![') ||
+      trimmed.startsWith('|') ||
+      trimmed.startsWith('---') ||
+      trimmed.startsWith('***') ||
+      trimmed.startsWith('docker ') ||
+      trimmed.startsWith('curl ') ||
+      trimmed.includes('scripts/gen-release-notes') ||
+      trimmed.includes('下载对照表') ||
+      trimmed.includes('点击徽章直接下载')
+    ) {
+      continue
+    }
+
+    // 提取列表项
+    if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
+      items.push(trimmed.slice(2).trim())
+    } else if (/^\d+\.\s+/.test(trimmed)) {
+      items.push(trimmed.replace(/^\d+\.\s+/, '').trim())
+    } else if (!trimmed.startsWith('#')) {
+      items.push(trimmed)
+    }
+  }
+
+  return items
+}

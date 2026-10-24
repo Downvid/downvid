@@ -42,7 +42,7 @@ type douyinDetailResponse struct {
 			Nickname string `json:"nickname"`
 		} `json:"author"`
 		Video struct {
-			Duration int64               `json:"duration"` // 毫秒
+			Duration int64 `json:"duration"` // 毫秒
 			Cover    struct {
 				URLList []string `json:"url_list"`
 			} `json:"cover"`

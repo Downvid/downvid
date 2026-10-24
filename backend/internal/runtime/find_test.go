@@ -363,3 +363,42 @@ func TestBinaryForm(t *testing.T) {
 		t.Errorf("不存在的文件应返回空，实际 %q", got)
 	}
 }
+
+// 遇到多个过旧版本时，staleInfo / staleSource / staleErr 必须保持一致，
+// 且优先保留较新的过旧版本，避免标题版本与原因说明版本不一致
+func TestStaleCandidateConsistency(t *testing.T) {
+	const pinned = "2026.10.23.233055"
+	MinVersions[KindYtDlp] = pinned
+	defer delete(MinVersions, KindYtDlp)
+
+	managed := t.TempDir()
+	// 在托管目录放一个 2026.10.21（较新的过旧版本）
+	fakeBinary(t, managed, BinaryName(KindYtDlp), "2026.10.21")
+
+	// 手动路径放一个 2026.07.04（更旧的过旧版本）
+	manualDir := t.TempDir()
+	manualPath := fakeBinary(t, manualDir, BinaryName(KindYtDlp), "2026.07.04")
+
+	res := FindOne(KindYtDlp, Options{
+		ManagedDir:  managed,
+		ManualPaths: map[Kind]string{KindYtDlp: manualPath},
+	})
+
+	if res.Found {
+		t.Fatal("两个版本都过旧，Found 应为 false")
+	}
+	if !res.Stale {
+		t.Fatal("存在过旧候选版本，Stale 应为 true")
+	}
+	// 应该优先保留较新的 2026.10.21
+	if res.Version != "2026.10.21" {
+		t.Errorf("Version 应为较新的 2026.10.21，实际为 %q", res.Version)
+	}
+	// 并且 Reason 里的当前版本必须与 res.Version 一致（包含 2026.10.21，不包含 2026.07.04）
+	if !strings.Contains(res.Reason, "2026.10.21") {
+		t.Errorf("Reason 应包含较新的 2026.10.21，实际为 %q", res.Reason)
+	}
+	if strings.Contains(res.Reason, "2026.07.04") {
+		t.Errorf("Reason 不应被更旧的版本 2026.07.04 覆盖，实际为 %q", res.Reason)
+	}
+}

@@ -975,42 +975,39 @@ func (a *App) DepsSummary() map[string]any {
 
 // InstallDeps 下载并安装依赖。
 //
-// **异步**：立即返回，进度走 `deps:progress` 事件。
-// 同步的话整个下载期间（可能几分钟）界面会卡住。
+// Wails 运行时在独立的 worker goroutine 执行该方法，前端通过 Promise 异步等待。
+// 下载期间通过 `deps:progress` 事件流式推送进度。
 func (a *App) InstallDeps(opts DepsInstallRequest) StartDownloadResult {
 	m := a.depsManager()
 
-	go func() {
-		// 装之前先让探测缓存失效：装完的路径与版本都不一样了，
-		// 不清的话下载发起时还会拿旧路径去 spawn
-		invalidateDepsCache()
-		defer invalidateDepsCache()
+	// 装之前先让探测缓存失效：装完的路径与版本都不一样了，
+	// 不清的话下载发起时还会拿旧路径去 spawn
+	invalidateDepsCache()
+	defer invalidateDepsCache()
 
-		mirror := opts.Mirror
-		if mirror == "" {
-			st := a.GetSettings()
-			mirror = st.DepMirror
-		}
+	mirror := opts.Mirror
+	if mirror == "" {
+		st := a.GetSettings()
+		mirror = st.DepMirror
+	}
 
-		err := m.Install(deps.FetchOptions{
-			Only:    opts.Only,
-			Force:   opts.Force,
-			Proxy:   a.currentProxy(),
-			Mirror:  mirror,
-			Timeout: 10 * time.Minute,
-		}, func(p deps.Progress) {
-			// 事件名与 TS 版一致：前端只把订阅方式换成 EventsOn
-			a.emit("deps:progress", p)
-		})
+	err := m.Install(deps.FetchOptions{
+		Only:    opts.Only,
+		Force:   opts.Force,
+		Proxy:   a.currentProxy(),
+		Mirror:  mirror,
+		Timeout: 10 * time.Minute,
+	}, func(p deps.Progress) {
+		// 事件名与 TS 版一致：前端只把订阅方式换成 EventsOn
+		a.emit("deps:progress", p)
+	})
 
-		if err != nil {
-			a.emit("deps:progress", deps.Progress{Event: "error", Message: err.Error()})
-			return
-		}
-		// 下载完成后探测结果已失效（内容变了），主动推一次新状态
-		a.emit("deps:progress", deps.Progress{Event: "done", Message: "依赖已就绪"})
-	}()
-
+	if err != nil {
+		a.emit("deps:progress", deps.Progress{Event: "error", Message: err.Error()})
+		return StartDownloadResult{OK: false, Error: err.Error()}
+	}
+	// 下载完成后探测结果已失效（内容变了），主动推一次新状态
+	a.emit("deps:progress", deps.Progress{Event: "done", Message: "依赖已就绪"})
 	return StartDownloadResult{OK: true}
 }
 

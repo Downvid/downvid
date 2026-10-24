@@ -44,13 +44,13 @@ type ksGraphQLResponse struct {
 		VisionVideoDetail *struct {
 			Status int `json:"status"`
 			Photo  *struct {
-				ID            string `json:"id"`
-				Duration      int64  `json:"duration"`
-				Caption       string `json:"caption"`
-				CoverURL      string `json:"coverUrl"`
-				PhotoURL      string `json:"photoUrl"`
-				PhotoH265URL  string `json:"photoH265Url"`
-				Manifest      struct {
+				ID           string `json:"id"`
+				Duration     int64  `json:"duration"`
+				Caption      string `json:"caption"`
+				CoverURL     string `json:"coverUrl"`
+				PhotoURL     string `json:"photoUrl"`
+				PhotoH265URL string `json:"photoH265Url"`
+				Manifest     struct {
 					AdaptationSet struct {
 						Duration       int64              `json:"duration"`
 						Representation []ksRepresentation `json:"representation"`

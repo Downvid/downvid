@@ -194,11 +194,13 @@ func findOneContext(parent context.Context, kind Kind, opts Options) Result {
 			continue
 		}
 		if !isAcceptableVersion(kind, info) {
-			staleErr = staleReason(kind, info)
 			staleSeen = true
-			if staleInfo.Path == "" {
+			// 始终让 staleInfo、staleSource 和 staleErr 保持同一份候选，
+			// 且优先保留版本较新的那一个（例如 ~/.local/bin 的 2026.10.21 优于 /usr/bin 的 2026.07.04）
+			if staleInfo.Path == "" || probe.CompareVersions(info.Version, staleInfo.Version) > 0 {
 				staleInfo = info
 				staleSource = c.Source
+				staleErr = staleReason(kind, info)
 			}
 			continue
 		}

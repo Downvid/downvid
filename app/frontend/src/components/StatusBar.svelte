@@ -17,6 +17,18 @@
     }
     app.railOpen = !app.railOpen
   }
+  const ytdlpDep = $derived(app.deps.find((d) => d.id === 'yt-dlp'))
+  const depLabel = $derived.by(() => {
+    if (!ytdlpDep) return 'yt-dlp'
+    if (ytdlpDep.version) {
+      return ytdlpDep.stale
+        ? `yt-dlp ${ytdlpDep.version} (${t('settings.depsOutdated')})`
+        : `yt-dlp ${ytdlpDep.version}`
+    }
+    return ytdlpDep.stale
+      ? `yt-dlp (${t('settings.depsOutdated')})`
+      : `yt-dlp (${t('settings.depsMissing')})`
+  })
 </script>
 
 <footer class="statusbar">
@@ -24,7 +36,7 @@
     <span class="dot" class:dot--danger={!app.depsReady}></span>
     <span>{app.depsReady ? t('status.deps') : t('status.depsMissing')}</span>
     <span class="status-sep">·</span>
-    <span>yt-dlp 2026.10.10</span>
+    <span class="num">{depLabel}</span>
   </button>
 
   <span class="grow"></span>

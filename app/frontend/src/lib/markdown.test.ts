@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseInline, reflowMarkdown, splitSummary } from './markdown'
+import { parseInline, reflowMarkdown, splitSummary, extractChangelogFromReleaseNotes } from './markdown'
 
 /**
  * CHANGELOG 的内联 Markdown 渲染。
@@ -130,5 +130,57 @@ describe('splitSummary', () => {
   it('标题里的行内代码保留原样（由调用方 parseInline 处理）', () => {
     const { summary } = splitSummary('**新增 `pnpm lint:i18n`**：拦下四类失效')
     expect(summary).toBe('新增 `pnpm lint:i18n`')
+  })
+})
+
+describe('extractChangelogFromReleaseNotes', () => {
+  it('从包含生成脚本模板的 Release Notes 中提取真实的更新内容', () => {
+    const raw = `<!-- 此正文由 scripts/gen-release-notes.mjs 生成，请勿手动编辑 -->
+<div align="center">
+
+### ⬇️ 点击徽章直接下载
+
+[![macOS](https://img.shields.io/static/v1?label=macOS)](https://example.com/mac.zip)
+
+<sub>不知道选哪个？见下方对照表</sub>
+
+</div>
+
+---
+
+## 📦 下载对照表
+
+| 平台 | 架构 | 安装包 |
+|------|------|--------|
+| macOS | 通用 | DownVid.zip |
+
+### 🐳 Docker / NAS 用户
+
+\`\`\`bash
+docker pull ghcr.io/Downvid/downvid:latest
+\`\`\`
+
+---
+
+## 📝 更新内容
+
+- **设置页依赖显示修复**：修复过旧版本显示混乱。
+- **清理演示历史**：移除测试虚拟历史注入。
+- **作者寄语弹窗修复**：修复相对路径错误。
+
+---
+
+<sub>完整历史见 CHANGELOG.md</sub>`
+
+    const items = extractChangelogFromReleaseNotes(raw)
+    expect(items).toEqual([
+      '**设置页依赖显示修复**：修复过旧版本显示混乱。',
+      '**清理演示历史**：移除测试虚拟历史注入。',
+      '**作者寄语弹窗修复**：修复相对路径错误。',
+    ])
+  })
+
+  it('空串返回空数组', () => {
+    expect(extractChangelogFromReleaseNotes('')).toEqual([])
   })
 })

@@ -2,43 +2,36 @@
   import Icon from './Icon.svelte'
   import { app } from '../lib/store.svelte'
   import { t } from '../lib/i18n.svelte'
-  import { parseInline, reflowMarkdown } from '../lib/markdown'
+  import { parseInline, reflowMarkdown, extractChangelogFromReleaseNotes } from '../lib/markdown'
   
   const percent = $derived(
     app.updateInfo.status === 'downloading' ? Math.round(app.updateInfo.progress * 100) : 0,
   )
 
   /**
-   * 这一版的更新内容。
-   *
-   * 优先用 Release notes（那是**新版本**的内容，本地 CHANGELOG 还没有），
-   * 没有就退回本地 CHANGELOG 里对应版本的记录。
-   */
-  /**
    * 这一版的更新内容（已 token 化）。
    *
-   * Release notes 与本地 CHANGELOG **都是 Markdown**，必须解析：
-   * 不解析的话用户看到的是 `**修复**：...` 这种带星号的原文
-   * ——那正是真机上出现的问题。
+   * 优先从 Release notes 提取「更新内容」段落（剔除脚本文本、表格、下载徽章与 Docker 命令）。
+   * 若无法提取，则退回本地 CHANGELOG 里该版本的条目。
    */
   const notes = $derived.by(() => {
-    const raw: string[] = []
+    let raw: string[] = []
     const releaseNotes = app.updateInfo.notes?.trim()
     if (releaseNotes) {
-      // Release notes 是整段 Markdown：按行拆，去掉列表符号
-      for (const line of releaseNotes.split('\n')) {
-        const cleaned = line.replace(/^[-*]\s*/, '').trim()
-        if (cleaned && !cleaned.startsWith('#')) raw.push(cleaned)
-      }
-    } else {
-      const local = app.currentChangelog
+      raw = extractChangelogFromReleaseNotes(releaseNotes)
+    }
+    if (raw.length === 0) {
+      const targetVersion = app.updateInfo.version?.replace(/^v/, '')
+      const local =
+        app.changelog.find((e) => e.version === targetVersion) ??
+        app.currentChangelog
       if (local) {
         for (const section of local.sections) {
-          for (const item of section.items.slice(0, 3)) raw.push(item)
+          for (const item of section.items) raw.push(item)
         }
       }
     }
-    return raw.slice(0, 8).map((line) => parseInline(reflowMarkdown(line)))
+    return raw.slice(0, 10).map((line) => parseInline(reflowMarkdown(line)))
   })
 </script>
 
