@@ -280,3 +280,26 @@ func TestFfmpegGateUnaffected(t *testing.T) {
 		t.Error("ffmpeg 2.8 过旧，应不可用")
 	}
 }
+
+// 多个过旧候选竞争时，版本比较能正确裁决较新者优先
+func TestStaleCandidateVersionPrecedence(t *testing.T) {
+	const pinned = "2026.10.23.233055"
+	MinVersions[KindYtDlp] = pinned
+	defer delete(MinVersions, KindYtDlp)
+
+	v1 := probe.Info{Version: "2026.10.21", Major: 2026}
+	v2 := probe.Info{Version: "2026.07.04", Major: 2026}
+
+	if isAcceptableVersion(KindYtDlp, v1) || isAcceptableVersion(KindYtDlp, v2) {
+		t.Fatal("两者均早于门槛，应判为不可用")
+	}
+
+	if probe.CompareVersions(v1.Version, v2.Version) <= 0 {
+		t.Errorf("2026.10.21 应高于 2026.07.04")
+	}
+
+	r1 := staleReason(KindYtDlp, v1).Error()
+	if !strings.Contains(r1, "2026.10.21") || strings.Contains(r1, "2026.07.04") {
+		t.Errorf("r1 应只包含 2026.10.21，实际：%s", r1)
+	}
+}

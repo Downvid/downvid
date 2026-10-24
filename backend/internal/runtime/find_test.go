@@ -367,6 +367,9 @@ func TestBinaryForm(t *testing.T) {
 // 遇到多个过旧版本时，staleInfo / staleSource / staleErr 必须保持一致，
 // 且优先保留较新的过旧版本，避免标题版本与原因说明版本不一致
 func TestStaleCandidateConsistency(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows 上无法用 shell 脚本模拟多候选二进制")
+	}
 	const pinned = "2026.10.23.233055"
 	MinVersions[KindYtDlp] = pinned
 	defer delete(MinVersions, KindYtDlp)
