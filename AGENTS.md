@@ -7,26 +7,53 @@
 
 ## 快速开始
 
+**主线是新架构（Wails，`app/`）**；旧架构（Electron，`electron/` + `src/`）仍在发布，
+但只做存量维护、自动更新通道与新功能对齐。两条线的命令不同，别混用：
+
 ```bash
+# 新架构（主线）
 pnpm install
-pnpm dev        # Vite dev server + Electron 热重载；会自动编译 Go 依赖边车
+pnpm --dir app/frontend install   # app/frontend 是独立包，不在根 workspace
+bash app/scripts/build.sh         # 单文件产物：前端 + 依赖边车都内嵌
+(cd app && wails dev)             # 只调界面时可用；不带依赖边车（见下）
+pnpm --dir app/frontend check     # svelte-check（tsc 看不见 .svelte）
+(cd app && go test ./...)         # Go 核心单测
+
+# 旧架构（Electron，存量）
+pnpm dev                          # Vite dev server + Electron 热重载
+pnpm build                        # vue-tsc + vite + electron-builder
 ```
 
-前置：**Node ≥ 22**、**pnpm ≥ 8**、**Go ≥ 1.24**。
+前置：**Node ≥ 22**、**pnpm ≥ 8**、**Go ≥ 1.25**、Wails CLI v2.16
+（`go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0`）。
 yt-dlp / ffmpeg **不需要**预先安装（见「运行依赖」一节）。
 
-`electron-builder.json5` 的 `extraResources` 指向 `backend/build/${platform}-${arch}`，
-所以 `pnpm dev` / `pnpm build` 都会先跑 `goBackend()` 插件编译边车。没装 Go 时会给出明确报错。
+直接 `cd app && wails dev` 打出来的应用**没有依赖边车**，依赖页只剩「探测程序缺失」，
+构建过程不会警告。边车由 `build.sh` 编进 `app/internal/sidecar/bin/`，再带 `-tags withsidecar` 嵌入；
+要在开发时验证依赖/下载链路，用 `build.sh` 出的产物，或先跑一次 `build.sh` 再 `wails dev -tags withsidecar`。
+Electron 侧对应的是 `electron-builder.json5` 的 `extraResources`（指向 `backend/build/${platform}-${arch}`），
+所以 `pnpm dev` / `pnpm build` 会先跑 `goBackend()` 插件编译边车。没装 Go 时两条线都会明确报错。
 
 ---
 
 ## 验证命令
 
-改完必须全跑一遍。CI 跑的是同一套。
+改完必须全跑一遍。CI 覆盖其中大部分——但 `app/` 的 Go 测试与 `crosscheck:port` **尚未接进 CI**，
+必须在本地跑（见下注）。
 
 ```bash
-pnpm vue-tsc --noEmit                          # 前端类型检查（strict + noUnusedLocals + noUnusedParameters）
-pnpm test                                      # 纯逻辑单测（Vitest，tests/*.test.ts）
+# ===== 新架构（Wails）=====
+(cd app && gofmt -l . && go vet ./... && go test -shuffle=on ./...)   # Go 核心
+pnpm --dir app/frontend check                   # svelte-check（.svelte 的类型错误只有它能看见）
+pnpm lint:i18n:app                              # app/frontend 中英词条成对 + t() key 存在
+pnpm lint:boundaries                            # G1：app/internal 包之间不得互相 import
+pnpm crosscheck:port                            # TS ↔ Go 逐字对拍（移植期核心守门）
+pnpm test:e2e:real                              # 真实 yt-dlp / ffmpeg 端到端（缺依赖时明确跳过）
+bash app/scripts/build.sh                       # 新架构端到端构建
+
+# ===== 旧架构（Electron）=====
+pnpm vue-tsc --noEmit                           # 前端类型检查（strict + noUnusedLocals + noUnusedParameters）
+pnpm test                                       # 纯逻辑单测（Vitest，tests/*.test.ts）
 pnpm test:runtime:windows                       # Windows 原生 exe 集成回归（需 Go）
 pnpm test:download:integration                  # 本地 HTTP / 文件 / Store 下载集成回归
 pnpm test:parse:integration                     # 解析链路（回退 / 轮次上限 / Cookie 生命周期）
@@ -34,27 +61,36 @@ pnpm test:acceleration                          # 加速基准；外部引擎见
 pnpm test:updater                               # 更新状态机 / 缓存 / 兜底 / 各安装方式分支
 pnpm test:settings:migration                    # 设置默认值与合并写入 + 「不许绕过入口」静态扫描
 pnpm test:package                               # 打包产物内容校验（需先跑一次 --dir 打包）
-pnpm lint:ipc                                  # IPC 契约静态校验（三处同步 + 产物命名 + 仓库坐标一致）
-pnpm lint:docker                               # 容器镜像定义（依赖版本来自清单 / 未退回 tsx / 更新检查未退化）
-pnpm test:web                                  # WebUI 服务端回归（跑的是打包产物，与镜像里同一份）
+pnpm lint:ipc                                   # IPC 契约静态校验（三处同步 + 产物命名 + 仓库坐标一致）
+pnpm lint:docker                                # 容器镜像定义（依赖版本来自清单 / 未退回 tsx / 更新检查未退化）
+pnpm test:web                                   # WebUI 服务端回归（跑的是打包产物，与镜像里同一份）
+pnpm build                                      # 端到端：vue-tsc + vite build + electron-builder
+
+# ===== 两份架构都要跑 =====
 pnpm lint:icons                                # 图标名是否有效（写错会静默渲染成文字）
 pnpm lint:website                              # 官网多文件 / 引用资源 / 中英词条 / 配色一致性
 pnpm lint:docs                                 # AGENTS.md ↔ CLAUDE.md 一致 + 引用路径与数字真实存在
 pnpm audit:provenance                          # 代码来源审计：上游逐字存活率 + 登记表是否覆盖（见 docs/provenance/audit.md）
+pnpm lint:attribution                          # 上游版权声明未归零前不许删 LICENSE
+pnpm lint:workflows                            # 工作流「用了某工具」与「装了该工具」成对
+pnpm sync:repo && pnpm sync:doc-numbers && pnpm sync:toolchain && pnpm sync:changelog
 pnpm deps:manifest:check                       # 依赖清单是否落后上游
 cd backend && gofmt -l . && go vet ./... && go test -shuffle=on ./...   # Go 侧车
-pnpm build                                     # 端到端：vue-tsc + vite build + electron-builder
 ```
 
 ### 关于测试
 
-两层：**Go 侧车**（`backend/internal/*/**_test.go`）与**前端纯逻辑**（`tests/*.test.ts`，Vitest）。
+三层：**新架构 Go 核心**（`app/internal/*/**_test.go`）、**Go 侧车**
+（`backend/internal/*/**_test.go`）与**前端纯逻辑**（`tests/*.test.ts`，Vitest）。
 
-- 只覆盖**纯函数**：格式选择、依赖错误识别、yt-dlp 参数组装、解析器共用工具、更新状态机。
-- 依赖 DOM 或需要真的起子进程的逻辑**不写单测**——那类问题靠类型检查、`lint:ipc` 与真机验证拦。
+- 纯逻辑单测只覆盖**纯函数**：格式选择、依赖错误识别、yt-dlp 参数组装、解析器共用工具、更新状态机。
+- 依赖 DOM 或需要真的起子进程 / 联网的逻辑**不写单测**——它们走集成回归（`app/e2e_*.go`、
+  `scripts/test-*`），或靠类型检查、`lint:ipc` 与真机验证拦。
 - 新增测试请针对「曾经出过问题的分支」各留一个用例，**不追覆盖率数字**。
 - **写完必须做变异验证**：把被测逻辑改坏，确认用例会失败。不会失败的测试等于没有测试。
 - 前端纯逻辑单测刻意不引入 jsdom：`environment: 'node'`，见 `vitest.config.ts`。
+- 移植到 Go 的模块要做**双跑对拍**（`pnpm crosscheck:port`），不能只让两边各自的单测变绿——
+  第一版就抓到过「默认并发 8 被写成 1」这种两边测试都绿、行为不同的差异。
 
 ### CI 工作流分工
 
@@ -63,12 +99,15 @@ pnpm build                                     # 端到端：vue-tsc + vite buil
 
 | job | 内容 |
 | --- | --- |
-| `backend` | gofmt / vet / `go test -shuffle=on` / 交叉编译（Linux 跑全 5 平台，macOS/Windows 跑本平台） |
-| `frontend` | 类型检查 / IPC 契约 / 图标名 / 官网校验 / 文档一致性 / **代码来源审计** / 纯逻辑单测 / 更新流程回归 / 设置迁移 |
-| `main-process` | 仅 Linux：更新流程回归 / 设置迁移 / 依赖清单校验 |
-| `integration` | 下载集成回归 / 加速基准 / 解析集成回归 |
+| `backend` | `backend/` 的 gofmt / vet / `go test -shuffle=on` / 交叉编译（Linux 跑全 5 平台，macOS/Windows 跑本平台） |
+| `frontend` | 旧前端类型检查 / IPC 契约 / 图标名 / 官网 / 文档一致性 / 来源审计 / 署名 / 边界 / 仓库坐标 / CHANGELOG 副本 / 文档数字 / 工具链 / 词条 / 工作流 / 镜像定义 / 纯逻辑单测；**外加** `wails generate module` → `app/frontend` 的 svelte-check 与 `lint:i18n:app` |
+| `main-process` | 仅 Linux：更新流程回归 / 设置迁移 / Issue 分类 / 依赖清单校验 / Web 服务回归 |
+| `integration` | 下载集成回归 / 加速基准 / 解析集成回归 / 真机 E2E（真实 yt-dlp / ffmpeg） |
 | `native-runtime` | 仅 Windows：原生 exe 运行依赖回归 |
 | `package` / `packaging` | 构建 / 打包到目录 / 产物内容校验 / 清单与 Release 正文脚本自检 |
+
+> **已知缺口**：`app/` 的 Go 测试（`cd app && go test ./...`）目前**没有**接进三个工作流，
+> 只在本地验证。改 `app/internal/*` 时必须自己跑，别把 CI 绿当成 Go 核心已验证。
 
 **新增测试脚本必须挂到对应平台的三个工作流上** —— 曾经 `test:acceleration` 加了脚本却没接进 CI，
 加速逻辑长期没有自动化验证。同理，**新增工作流文件时必须先 `git add`**：曾有一次把单一的测试
@@ -102,6 +141,13 @@ Dependabot 已忽略其大版本升级。
    （`* text=auto eol=lf`）统一为 LF，**不要删除该文件**。
 4. **路径断言**。测试里不要写死 `/tmp/out/...`，生产代码用 `path.join`，
    Windows 上得到反斜杠。用 `path.join` 计算预期值。
+5. **Wails 的 `universal` 不是 Go 的 `GOARCH`**。`wails build -platform darwin/universal` 由 Wails
+   自己 lipo 合并，但边车是我们自己编的：`app/scripts/build.sh` 必须为 arm64 与 amd64
+   **各编一份**，否则用户下到 universal 包后依赖探测找不到二进制。
+6. **Linux 的 Wails 构建要 webkit2gtk-4.0**。Wails v2.16 的 cgo 指令默认找 `webkit2gtk-4.0`
+   开发包；只装 4.1 会编译失败（CI 已踩过）。运行期同样需要对应的 GTK / WebKit 运行时库。
+7. **Wails 前端不能用绝对资源路径**。`app/frontend/vite.config.ts` 的 `base` 保持 `'./'`；
+   改成 `/` 后开发环境正常，打包进 `embed.FS` 就 404（图标变文字，构建不报错）。
 
 **硬规则**：CI 里新增任何构建/检查步骤，必须先在本地以「非宿主平台语义」复现一遍
 （交叉编译到 `win32`、用 `core.autocrlf=true` 检出），不能只核对 YAML 语法。
@@ -110,24 +156,46 @@ Dependabot 已忽略其大版本升级。
 
 ## 项目结构
 
-> **当前是两套架构并存的过渡期。** 新架构（Wails）在 `app/`，旧架构（Electron）
-> 在 `electron/` + `src/`。两者**并行发布**：老用户走 Electron 的自动更新通道，
-> 新架构作为独立产物供手动下载。切换计划见「架构过渡」一节。
+> **当前是两套架构并存的过渡期，但主线已经是 Wails。** 新架构在 `app/`，
+> 旧架构（Electron）在 `electron/` + `src/`，只保留存量用户的自动更新通道与功能对齐。
+> 新功能先做新架构；旧架构只修用户能感知的线上故障。迁移状态见「架构过渡」一节。
 
-### 新架构（`app/`，Go + Wails + Svelte）
+### 新架构（`app/`，Go + Wails + Svelte 5）—— 主线
 
 | 路径 | 内容 | 输出 |
 |------|------|------|
-| `app/internal/*` | **Go 核心，15 个包，互相零依赖**（下载 / 解析 / 依赖 / 更新 / 历史 / 设置 …） | — |
+| `app/internal/*` | **Go 核心，16 个包，互相零依赖**（职责见下表） | — |
 | `app/main.go` / `app/app.go` / `app/bindings_*.go` | Wails 壳：只做「搬运」，不含业务规则 | `app/build/bin/` |
-| `app/frontend/` | Svelte 5 + Vite 渲染进程 | 打进二进制（`go:embed`） |
-| `app/scripts/build.sh` | **构建入口**：先编依赖边车 → 再带 `-tags withsidecar` 构建 | 单文件约 18 MB |
+| `app/frontend/` | Svelte 5 + Vite 渲染进程；Go 服务端也能托管它（镜像尚未切换） | 打进二进制（`go:embed`） |
+| `app/scripts/build.sh` | **构建入口**：先编依赖边车 → 再带 `-tags withsidecar` 构建（开发热重载用 `wails dev`，它不带边车） | 单文件约 18 MB |
+| `app/cmd/downvid-server` | 容器端 / 无头模式入口（HTTP + WebSocket RPC；镜像仍走旧 TS 服务端） | 独立二进制 |
+
+`app/internal/*` 的 16 个包：
+
+| 包 | 职责 |
+|---|---|
+| `changelog` | 解析仓库 `CHANGELOG.md` 的副本（`//go:embed` 不能跨目录，靠 `pnpm sync:changelog` 同步） |
+| `clipboard` | 读系统剪贴板（WebView 的 `navigator.clipboard` 会弹权限框） |
+| `cookie` | Cookie 策略、浏览器 Cookie 提取与快照（TS 版 `electron/utils/cookies.ts` 的移植） |
+| `deps` | 依赖探测与下载：起边车、把 NDJSON 流转成事件，不重复实现候选表 |
+| `download` | yt-dlp 参数、进度行、进程树终止、aria2 进度 |
+| `fetch` | 直链分块下载与续传检查点 |
+| `history` | 下载历史（原子写 + 损坏恢复 + win32 路径归一） |
+| `image` | 带 Referer 抓缩略图并转 data URL（防盗链） |
+| `jsruntime` | Node / Deno 探测（YouTube 需要真实 JS 运行时） |
+| `netx` | 带代理的 HTTP 客户端与代理探活 |
+| `parse` | 站点解析、格式去重、错误分类、YouTube 有限回退 |
+| `server` | 容器端 HTTP + WebSocket RPC（协议沿用 `docker/web/bridge.ts`） |
+| `settings` | 用户设置（13 个字段，与 TS 版逐字一致，落盘 `userData/settings.json`） |
+| `shell` | 打开路径 / 在文件夹中显示 / 磁盘剩余空间 |
+| `sidecar` | 把依赖边车嵌进主二进制并在运行时落盘 |
+| `update` | 更新检查、自更新下载/安装、新架构产物识别与迁移 |
 
 `app/internal/*` 之间**不得互相 import**（`pnpm lint:boundaries` 规则 G1 校验）。
 这是架构上最值得守住的性质：每个包都能独立测试、独立替换，
 「换个传输层」（Wails 绑定 → 容器 WebSocket）才不会变成大工程。
 
-### 旧架构（Electron，过渡期保留）
+### 旧架构（Electron，存量维护）
 
 | 路径 | 内容 | 输出 |
 |------|------|------|
@@ -142,7 +210,7 @@ Dependabot 已忽略其大版本升级。
 
 | 路径 | 内容 | 输出 |
 |------|------|------|
-| `backend/` | Go 依赖边车（探测 + 下载 yt-dlp/ffmpeg），由 `app/scripts/build.sh` 编入 Wails 二进制 | `backend/build/<platform>-<arch>/` |
+| `backend/` | Go 依赖边车（探测 + 下载 yt-dlp/ffmpeg），两条桌面架构共用 | Electron：`backend/build/<platform>-<arch>/`；Wails：先编到 `app/internal/sidecar/bin/` 再嵌入 |
 | `shared/app.ts` | 仓库坐标与外部链接的**唯一来源** | 被三方共同引用 |
 | `tests/` | Vitest 纯逻辑单测 | — |
 | `docker/` | 容器镜像（原生 WebUI，见 `docs/docker.md` 与 `docker/README.md`） | GHCR 多架构镜像 |
@@ -157,29 +225,83 @@ Dependabot 已忽略其大版本升级。
 
 | 阶段 | 状态 | 说明 |
 |---|---|---|
-| 1. 并行发布 | **现在** | Electron 与 Wails 同时发。老用户自动更新不受影响；Wails 版独立命名（`DownVid-Wails-*`）供手动下载 |
-| 2. 补齐 Wails 自更新 | 待做 | Go 侧只有 `CheckUpdate`，没有下载/安装。做完才能让新架构自己更新 |
-| 3. 迁移器 | 待做 | Wails 产物打进 NSIS/dmg 外壳（格式与老版一致），老用户下次自动更新时被换成新版 |
+| 1. 并行发布 | **已完成** | Electron 与 Wails 同时发。Wails 版独立命名（`DownVid-Wails-*`），Electron 仍走原来的通道 |
+| 2. 补齐 Wails 自更新 | **已完成** | `app/internal/update/selfupdate.go`：macOS zip / Windows NSIS / Linux AppImage 的下载、校验、安装；没有自更新就不能迁移 |
+| 3. 迁移器 | **进行中** | 不再另打 NSIS/dmg 外壳：`release.yml` 的 `migrate_to_wails` 把指定平台的 `latest*.yml` 指向 Wails 产物。默认 **macOS**；Windows 还差 NSIS 的 `--updated` / `--force-run` 支持，Linux 需先确认 AppImage 产物 |
 
-**为什么不能直接切换**：老用户靠 `electron-updater` 读 `latest*.yml` + NSIS/dmg。
+**为什么不能一次性全切**：老用户靠 `electron-updater` 读 `latest*.yml` + NSIS/dmg。
 Wails 产出裸 `.app`/`.exe`，格式对不上。直接替换的话，用户会看到「有新版本」
 但点了装不上 —— 比「检测不到」更糟，而且那条通道**一旦坏掉就再也修不好**。
+所以按平台逐个切，每个平台都要先确认「新架构能自己更新」。
 
-两个必须守住的约束（都有用例）：
+三个必须守住的约束（都有用例）：
 
-1. **`latest*.yml` 只能列 Electron 产物**。Wails 包混进去会让老用户下载到装不上的
-   文件（`scripts/test-updater.mjs` 有专门用例）。
+1. **未迁移平台的 `latest*.yml` 只能列 Electron 产物**。迁移开关会把选中平台的清单
+   **整体换成** Wails 产物（显式的单向切换，不是混列）；`gen-update-manifests.mjs` 自己不设默认，
+   `release.yml` 目前默认 `macos`。任何情况下都不能让同一个平台的清单里 Electron 与 Wails 混杂
+   （`scripts/test-updater.mjs` 有用例）。
 2. **`arch` 默认 `electron`**。若默认 `wails`，过渡版会误判自己是新架构、跳过
-   electron 更新通道（`bindings_test.go` 有用例）。
-
-过渡版能**检测**新架构版本并在设置页提示（`app/internal/update/migration.go`），
-但迁移动作由用户手动确认 —— 迁移是单向门，装上新架构后回不到 Electron。
+   electron 更新通道（`bindings_test.go` 有用例）。Wails 构建由 `build.sh` 注入 `-X main.arch=wails`。
+3. **迁移是单向门**。装上新架构后回不到 Electron；`app/internal/update/migration.go`
+   只负责识别产物与告知，不能把「检测到」当成「已迁移」。
 
 ---
 
 ## 改动落点清单（最容易出错的部分）
 
-### 1. 新增渲染进程可调用的主进程能力 → 三处必须同步
+> 新架构（`app/`）与旧架构（`electron/` + `src/`）的落点**不同**。先确认改的是哪条线，
+> 再按对应清单走；两边共用的只有 `backend/` 边车、`shared/app.ts` 仓库坐标与发布产物命名。
+
+### 0. 新架构（Wails）的改动落点
+
+**新增后端能力（前端可调用）**
+
+1. 在 `app/bindings_*.go`（下载 / 依赖相关）或 `app/app.go`（窗口 / 更新 / 历史等）加导出方法。
+   Wails 会按方法签名生成 `wailsjs`，不需要手写 preload / IPC 注册。
+2. 前端**只能**经 `app/frontend/src/lib/backend.ts` 调用，不要在组件里直接 `import wailsjs/...`：
+   浏览器里那会直接抛 `Failed to resolve module`，整页白屏；换传输层时也只改这一处。
+3. 前后端字段名是**逐字契约**：`app/frontend/src/lib/types.ts` 与 Go 结构体的 JSON tag 必须一致。
+   数组一侧改了不会有类型错误，只会让界面显示空白。
+4. 验证：`pnpm --dir app/frontend check` + `cd app && go test ./...`；改了下载/解析逻辑再跑
+   `pnpm crosscheck:port`。
+
+**新增广播事件（Go → 前端）**
+
+1. Go 侧 `a.emit("event", data)`（`app/app.go` 的 `emit`）。
+2. 前端在 `backend.ts` 里订阅并**返回 unsubscribe**；组件卸载时必须调用。
+3. 事件名与 payload 形状记进 `app/frontend/src/lib/types.ts`，否则只有运行时才发现对不上。
+
+**改用户设置形状**
+
+- 新架构存在 `<dataDir>/settings.json`，唯一入口是 `app/internal/settings/settings.go`；
+  前端映射在 `app/frontend/src/lib/settings.ts`。字段名 / JSON 键 / 默认值与 TS 版**逐字一致**，
+  只许新增（读取时用默认值补齐），删改属于 MAJOR 变更。
+- 旧架构仍用 `localStorage['settings']`（见下面第 3 条）。**迁移期两套并存是刻意的**，
+  不要为了「统一」把其中一边删掉——那会让老用户设置丢一次。
+- `app/frontend/scripts/check-settings-write.mjs` 会扫描「绕过入口直接写设置」的调用。
+
+**改前端文案**
+
+- 词条表在 `app/frontend/src/lib/i18n.svelte.ts`（与旧架构是**独立的两份**）。
+- 新增 key 必须中英成对；`pnpm lint:i18n:app` 会双向校验并检查 `t()` 引用的 key 是否存在。
+- `t()` 是响应式的，**不能在模块顶层求值**；需要常量时用 `computed` / getter。
+
+**改运行依赖 / 更新 / 容器**
+
+- 依赖探测仍由 `backend/` 边车负责；`app/internal/deps` 只起进程、转 NDJSON 事件，
+  **不要在这里再写一份候选路径表**（那正是「依赖页说装了、加速页说没装」的来源）。
+- Wails 产物前缀 `DownVid-Wails-` 同时出现在 `release.yml`、`app/internal/update/migration.go`
+  与 `scripts/verify-release.mjs`，改一处必须改三处。
+- 容器端新入口是 `app/cmd/downvid-server`（`app/internal/server`），当前镜像仍走旧 TS 服务端；
+  切换前不要只改一半。
+
+**改 Go 核心**
+
+- `app/internal/*` 包之间**不得互相 import**，也不得依赖 `cmd`（`pnpm lint:boundaries` G1 / G2）。
+- 改完跑 `gofmt -l .`、`go vet ./...`、`go test -shuffle=on ./...`；新增用例要做变异验证。
+- 跨语言移植必须做双跑对拍（`pnpm crosscheck:port`），两边各自单测绿不代表行为一致。
+
+### 1. 新增渲染进程可调用的主进程能力 → 三处必须同步（旧架构 Electron）
 
 | # | 文件 | 改动 |
 |---|------|------|
@@ -205,9 +327,10 @@ Wails 产出裸 `.app`/`.exe`，格式对不上。直接替换的话，用户会
 现有事件：`deps:progress`、`download:progress`、`history:updated`、`update:status`、`menu:openSettings`、`menu:showAbout`。
 广播事件**不得**同时用作 `ipcMain.handle` 通道（`lint:ipc` 会报）。
 
-### 3. 改用户设置形状 → 会让老用户设置静默失效
+### 3. 改用户设置形状 → 会让老用户设置静默失效（旧架构 Electron；新架构见 §0）
 
-设置存在 `localStorage['settings']`（**不在** Pinia 中），多个组件直接读。
+旧架构的设置存在 `localStorage['settings']`（**不在** Pinia 中），多个组件直接读。
+新架构存在 `<dataDir>/settings.json`（`app/internal/settings/settings.go`），**两套字段名与默认值必须一致**。
 
 字段：`downloadDir`、`filenameTemplate`、`preferredQuality`、`cookieMode`、`cookiesFile`、
 `proxy`、`depPaths`（运行依赖的手动路径）、`acceleration`（开关、并发上限、可选 aria2c 路径）、
@@ -228,9 +351,11 @@ Wails 产出裸 `.app`/`.exe`，格式对不上。直接替换的话，用户会
 - 同步更新 `src/components/SettingsView.vue` 与 `src/components/DepPanel.vue`
 - `scripts/test-settings-migration.mjs` 覆盖以上约定（含「不许绕过入口」的静态扫描）
 
-### 4. 改运行依赖（yt-dlp / ffmpeg / ffprobe）
+### 4. 改运行依赖（yt-dlp / ffmpeg / ffprobe / aria2）
 
-- **新增依赖种类**：`backend/internal/runtime` 的 `Kinds` / `Optional` / 候选路径，
+- 两条架构共用同一个边车与清单：新架构侧 `app/internal/deps` 只负责起边车、把 NDJSON 转成事件；
+  旧架构侧是 `electron/utils/runtime.ts`。**候选路径表只有 `backend/internal/runtime` 一份**，
+  不要在任何一侧再写一份（那正是「依赖页说装了、加速页说没装」的来源）。- **新增依赖种类**：`backend/internal/runtime` 的 `Kinds` / `Optional` / 候选路径，
   以及 `src/types/deps.ts` 的 `DepKind`
 - **改下载源或版本**：只改 `scripts/gen-deps-manifest.mjs` 的资产表，然后 `pnpm deps:manifest`。
   **不要手改** `backend/internal/manifest/assets.gen.go`（生成文件）
@@ -244,6 +369,11 @@ Wails 产出裸 `.app`/`.exe`，格式对不上。直接替换的话，用户会
 产物名被旧版本客户端的 `latest*.yml` 引用。**改名 = 所有老用户无法自动更新。**
 不可更改：`DownVid-Setup-*`、`DownVid-Portable-*`、`DownVid-<arch>-Mac-*`、
 `DownVid-x86_64-Linux-*`。`pnpm lint:ipc` 会校验 `electron-builder.json5` 里的 `artifactName`。
+
+新架构产物名以 `DownVid-Wails-` 开头，同一条 Release 上与 Electron 产物并存。
+**不要把它改成 Electron 的命名**：默认情况下 `latest*.yml` 只描述 Electron 产物；迁移平台会被
+整体替换为 Wails 条目。**同一个平台的清单里混列两者**会让老用户下载到装不上的文件。
+需要切换某个平台的自动更新时，用 `release.yml` 的 `migrate_to_wails` 输入，不要手改产物名。
 
 Linux 用 `amd64`/`x86_64` 而不是 `x64`（与 electron-builder 的 `${arch}` 取值不同，历史约定）。
 
@@ -265,9 +395,10 @@ Linux 用 `amd64`/`x86_64` 而不是 `x64`（与 electron-builder 的 `${arch}` 
 - 登记表里的数字与实测不一致 → 同样红叉（先 `node scripts/audit-provenance.mjs --write`）
 - `docs/provenance/audit.md` 里的存活行数与实测不一致 → 红叉
 
-上游快照在 `scripts/data/provenance/upstream/`，**不要修改**。改架构边界之前先读
-`docs/provenance/architecture.md`——那里有 7 条边界规则和三条端口接口（`DataDirs` / `EventSink` /
-`UserPrompt`），迁移计划 C0 之后由 `lint:boundaries` 机械校验。
+上游快照在 `scripts/data/provenance/upstream/`，**不要修改**。`docs/provenance/architecture.md`
+是 issue #74 的**历史方案**（`core/`），不要照着它新建目录；当前边界以
+`scripts/lint-boundaries.mjs` 为准：Go 侧 G1（`app/internal` 包之间不得互相 import）、
+G2（internal 不得 import cmd），TS 侧规则 3–7（Electron 退役前仍需守住）。
 
 ### 7. 改产品官网（`website/`）
 
@@ -348,7 +479,7 @@ GitHub Pages **不再使用**：仓库从未在 Settings 里选过 Pages 源，`
   网络下载的可执行文件带 quarantine，Apple Silicon 会直接 `killed: 9`。
 - 错误信息里的 URL 会去掉查询串（GitHub 的签名 JWT 长达数百字符，直接展示会撑爆界面）。
 
-### 主进程侧
+### Electron 主进程侧（旧架构）
 
 - `electron/utils/runtime.ts`：定位边车（打包后在 `resources/downvid-deps/`）、执行、
   缓存探测结果 60 秒、广播 `deps:progress`。下载在主进程里完成，界面关闭不中断。
@@ -390,6 +521,19 @@ GitHub Pages **不再使用**：仓库从未在 Settings 里选过 Pages 源，`
   让一份 37MB 的文件在完全连不通时重试三次（每次还要退避 2s、4s），
   只会让用户多等半分钟才看到同一句错误。
 
+### Wails 侧（新架构）
+
+- 边车由 `app/scripts/build.sh` 编译到 `app/internal/sidecar/bin/<goos>-<goarch>/`，
+  再带 `-tags withsidecar` 用 `//go:embed` 嵌进主二进制；运行时落到
+  `<userData>/runtime/bin/downvid-deps`（与 Electron 版位置一致，升级不会留两份）。
+- `app/internal/deps` 只负责起边车、把 NDJSON 流式转成事件并缓存 60 秒；
+  **候选表、镜像链、SHA-256、解压、原子替换、macOS `xattr`/`codesign` 全在 `backend/`**，
+  不要在新架构里复制任何一份。
+- 不带 `-tags withsidecar` 的构建（`go test`、普通 `go build`、直接 `wails build`）
+  会走 stub：编译能过，但依赖页只剩「探测程序缺失」。这是刻意设计，别把警告删掉。
+- 探测结果里 `Source`（system / managed / manual / scanned）与 `Form`（zipapp / native）
+  要在界面上如实展示：`native` 首次执行可能 9~12 秒，不代表文件坏了。
+
 ### 升级依赖清单
 
 `pnpm deps:manifest`（或手动运行 `Update dependencies manifest` 工作流）。
@@ -402,6 +546,11 @@ libmp3lame / aac / libx264。**代价**：上游不公布校验值，`deps:manif
 ---
 
 ## 下载架构
+
+> 两条架构的实现是**逐函数对拍**的：新架构在 `app/internal/parse`（解析 + 格式）、
+> `app/internal/download`（yt-dlp 参数 / 进度 / 进程树 / aria2）、`app/internal/fetch`（直链分段）、
+> `app/internal/netx`（代理）；旧架构在 `electron/parsers` 与 `electron/download`。
+> 改其中一侧的行为时，先跑 `pnpm crosscheck:port`，再同步另一侧——只让一侧的单测变绿不算完成。
 
 ### 解析性能（改这里之前先读）
 
@@ -427,14 +576,14 @@ PyInstaller 的单文件包每次启动都要把 ~72MB 解压到临时目录，�
   串行时总耗时是三者之和。zipapp 之后探测本身只要 0.47s，但这条仍然保留——
   回退到 PyInstaller 的机器上它就是 12s 与 22s 的区别。
 
-### 解析分发（`electron/ipc/download.ts` → `ytdlp:parse`）
+### 解析分发（旧架构：`electron/ipc/download.ts` → `ytdlp:parse`）
 
 抖音/快手有专属解析器（`electron/parsers/`）：平台 API 优先，headless `puppeteer-core`
 驱动系统已安装的 Chrome/Edge（`electron/utils/browser.ts`）作为 fallback。
 **每次失败都被空 `catch` 吞掉**，最终落到 `parseWithYtdlp`。
 调试解析 bug 时注意哪个分支实际运行了——错误在这里是不可见的。
 
-### 两条完全独立的下载路径
+### 两条完全独立的下载路径（旧架构 Electron）
 
 实现已拆到 `electron/download/`，`electron/ipc/download.ts` 只做分发：
 
@@ -513,7 +662,7 @@ Windows 先 `taskkill /T /F` 再杀父进程（父先死会丢掉子进程关系
 `SIGTERM` 给 aria2c 时间把控制文件写完，宽限期后才 `SIGKILL`。
 `tests/process-tree.test.ts` 钉住这几点——**删掉 `detached` 会让这个 bug 静默复发**。
 
-### 任务级并发闸门（`src/stores/download-rules.ts`）
+### 任务级并发闸门（旧架构：`src/stores/download-rules.ts`）
 
 **同时最多 3 个任务在跑**（`MAX_CONCURRENT_DOWNLOADS`），其余留在 `pending` 排队。
 `pumpQueue()` 是唯一执行点：`startDownload` / `resumeTask` / `retryTask` 都汇到它，
@@ -567,6 +716,21 @@ Windows 先 `taskkill /T /F` 再杀父进程（父先死会丢掉子进程关系
 
 ## 状态管理
 
+### 新架构（Wails）
+
+| 状态 | 位置 |
+|------|------|
+| 应用状态（解析结果 / 任务队列 / 弹窗） | `app/frontend/src/lib/store.svelte.ts`（Svelte 5 runes 单例） |
+| 用户设置 | `<dataDir>/settings.json`，入口 `app/internal/settings/settings.go`；前端映射在 `app/frontend/src/lib/settings.ts` |
+| 下载历史 | `app/internal/history` → `userData/download-history.json`（原子写） |
+| 运行依赖 | `app/internal/deps`（探测结果缓存 60 秒） |
+| 更新 | `app/internal/update`（检查 / 自更新 / 迁移识别） |
+
+**所有后端调用必须经 `app/frontend/src/lib/backend.ts`**：浏览器里直接 import `wailsjs` 会白屏，
+换传输层时也只需要改这一处。
+
+### 旧架构（Electron）
+
 | 状态 | 位置 |
 |------|------|
 | 下载队列、选择、编排 | Pinia `src/stores/download.ts` |
@@ -619,7 +783,9 @@ Windows 先 `taskkill /T /F` 再杀父进程（父先死会丢掉子进程关系
 
 ## 界面约定
 
-- **所有界面文案走 `t('key')`**（`src/i18n/`），不要写中文字面量。
+- **两套词条表是独立的**：新架构在 `app/frontend/src/lib/i18n.svelte.ts`（`pnpm lint:i18n:app`），
+  旧架构在 `src/i18n/`（`pnpm lint:i18n`）。改哪边就只跑哪边的校验，**不要复制词条**。
+- 旧架构：**所有界面文案走 `t('key')`**（`src/i18n/`），不要写中文字面量。
   `pnpm lint:i18n` 会扫 `src/` 并拦住硬编码中文。三个容易踩的点：
   - `t()` 读的是一个响应式 `ref`，**不能在模块顶层调用**（那样切换语言不会更新）。
     需要常量时用 `computed(() => t('...'))`，列表项用 `get label()`。
@@ -631,6 +797,8 @@ Windows 先 `taskkill /T /F` 再杀父进程（父先死会丢掉子进程关系
 - **Tailwind v4**（CSS-first，**没有** `tailwind.config.js`）：Material-3 风格语义色 token
   （`bg-surface`、`text-on-surface-variant`、`surface-container-high` 等）定义在
   `src/style.css` 的 `@theme` 中。**用语义 token，不要写 raw hex。**
+- 新架构对应 `app/frontend/src/app.css` 的 `@theme`，色值必须与旧版一致；
+  `app/frontend/src/design-system.test.ts` 钉住了主色、动效属性与时长。
 - 同文件的 `@layer base` 兼容块保留了 v3 默认值（gray-200 边框、按钮 pointer 光标）。
 - `@custom-variant dark` 已声明但**从未切换 class**——目前没有深色模式开关，
   文档里不要声称支持深色主题。
@@ -645,6 +813,12 @@ Windows 先 `taskkill /T /F` 再杀父进程（父先死会丢掉子进程关系
 ## 构建与发布
 
 ```bash
+# 新架构（Wails）
+bash app/scripts/build.sh                      # 当前平台；产物在 app/build/bin/
+bash app/scripts/build.sh -platform darwin/arm64
+bash app/scripts/build.sh -platform darwin/universal  # 边车会为 arm64 + amd64 各编一份
+
+# 旧架构（Electron）
 pnpm build:mac:arm64   # 另有 :mac:x64 :win :linux:x64 :linux:arm64
 ```
 
@@ -654,10 +828,12 @@ Linux x64 有独立格式脚本可并行：`build:linux:x64:appimage`、`:deb`�
 
 1. `package.json` 升版本 → `CHANGELOG.md` 加 `## [x.y.z]` 段落 → 推 tag `v*`
    （或在 Actions 页面手动运行 `release.yml`，填与 `package.json` 一致的版本号）
-2. `release.yml` 构建 5 个架构目标，最后统一由 `scripts/gen-update-manifests.mjs`
-   按**最终产物**重新生成全部 `latest*.yml`（各 job 自己生成的那份会互相覆盖，不能用）
+2. `release.yml` 构建 Electron 的 5 个架构目标 + Wails 的独立产物，最后统一由
+   `scripts/gen-update-manifests.mjs` 按**最终产物**重新生成全部 `latest*.yml`
+   （各 job 自己生成的那份会互相覆盖，不能用）。`migrate_to_wails` 决定哪些平台的
+   `latest*.yml` 指向 Wails 产物（默认 `macos`）。
 3. Release 正文由 `scripts/gen-release-notes.mjs` 生成：顶部是「点徽章即下载」的引导区，
-   下载链接**按实际产物扫描生成**，不会出现死链。改模板后记得用假产物本地跑一遍
+   下载链接**按实际产物扫描生成**，不会出现死链。改模板后记得用假产物本地跑一遍。
 
 ### 发布必须核对「tag ↔ Release」对得上
 
@@ -681,6 +857,10 @@ CHANGELOG 用 `## [Unreleased]` 段落累积改动。发布时再一次性改成
 ---
 
 ## 容器镜像（Dockerfile 与 docker-compose.yml、入口脚本 docker/entrypoint.sh）
+
+> **过渡状态**：新架构已经有 Go 服务端（`app/cmd/downvid-server` + `app/internal/server`），
+> 但当前镜像仍由旧 TS 服务端（`docker/server/index.ts`）提供 WebUI。两者 RPC 协议相同，
+> 切换是独立的一步——不要只改 Dockerfile 一半就以为容器已经迁移。
 
 DownVid 在容器中采用**原生 WebUI 方案**运行：通过轻量 Node 服务（`docker/server/index.ts`）托管
 前端静态页面与下载引擎，浏览器打开即可操作。用户指南在 `docs/docker.md`。
@@ -753,6 +933,19 @@ external，所以配置里显式设了 `ssr.noExternal`；漏了它镜像能构�
   macOS 未签名无法用 Squirrel，自行下载对应架构 zip、校验 sha512、去除隔离属性并 ad-hoc 签名，
   退出后由脚本替换 `.app`（失败回滚）；tar.gz / 便携版 / DMG 内运行走 GitHub API 检查 + 前往下载页。
   electron-updater 使用独立 session 分区，`app:setProxy` 会同步代理
+- 新架构前端 `app/frontend/vite.config.ts` 的 `base: './'` **不能改**：Wails 用 `embed.FS`
+  从根加载，绝对路径 `/assets/...` 在 `file://` 或反向代理子路径下会 404——表现是图标全变成文字，
+  而构建完全不报错
+- `wails generate module` 会先编译 Go 包，而 `app/main.go` 有 `//go:embed all:frontend/dist`：
+  顺序必须是「准备 embed 目录（`app/scripts/prepare-embed-dir.sh`）→ 构建前端 → 生成绑定」。
+  反过来直接 generate 会报 `pattern all:frontend/dist: no matching files found`
+- `app/frontend` 是**独立包**（不在根 pnpm workspace），装依赖要 `pnpm --dir app/frontend install`；
+  类型检查用 `pnpm --dir app/frontend check`，`pnpm vue-tsc` **看不见 `.svelte`**
+- 新架构的设置落在 `<dataDir>/settings.json`，旧架构仍在 `localStorage['settings']`。
+  两边字段名 / 默认值必须一致，但**不要互相覆盖**——迁移期并存是刻意的
+- 新架构的更新逻辑在 `app/internal/update`：`selfupdate.go` 负责下载/校验/安装，
+  `migration.go` 只识别 Wails 产物并告知；`build.sh` 必须注入 `-X main.arch=wails`，
+  否则新架构会误读 Electron 的 `latest*.yml`
 - 所有 UI 文案、注释、commit body **一律中文**，匹配现有风格
 - 分支命名 `feat/…` `fix/…` `docs/…` `chore/…`，Conventional Commits。
   `main` 未开启分支保护，维护者可直接推送；分支与 PR 流程是对外部贡献者的建议

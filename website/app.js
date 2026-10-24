@@ -429,8 +429,11 @@ function buildFallbackRelease(versionTag) {
 const CACHE_KEY = 'downvid.latestRelease';
 const CACHE_TTL = 30 * 60 * 1000;   // 版本不会分钟级变化，刷新页面不该重复消耗 API 限额
 
+const fallbackVersionEl = typeof document !== 'undefined' ? document.getElementById('dvAboutVersion') : null;
+const fallbackTag = fallbackVersionEl && /^v\d/.test(fallbackVersionEl.textContent.trim()) ? fallbackVersionEl.textContent.trim() : 'v1.6.0';
+
 let current = initialLang();
-let release = null;
+let release = readCachedRelease() || buildFallbackRelease(fallbackTag);
 let releaseFailed = false;
 const detectedOS = detectOS(navigator);
 let selectedOS = detectedOS;
@@ -628,13 +631,8 @@ function writeCachedRelease(value) {
   }
 }
 
-/** 拉一次最新 Release；按 GitHub API → gh-proxy 镜像链尝试，网络均失败时退回页面内置版本 */
+/** 拉一次最新 Release；按 GitHub API → gh-proxy 镜像链尝试，网络均失败时保持内置确定性产物直链 */
 function loadRelease() {
-  release = readCachedRelease();
-  if (release) {
-    renderDownload();
-    return;
-  }
   renderDownload();
 
   const endpoints = [
@@ -645,25 +643,20 @@ function loadRelease() {
 
   function tryEndpoint(index) {
     if (index >= endpoints.length) {
-      // 网络完全受阻（或处于断网/限流状态）：使用页面内置的版本号构造兜底产物
-      const versionEl = document.getElementById('dvAboutVersion');
-      const tagText = versionEl ? versionEl.textContent.trim() : '';
-      const fallbackTag = /^v\d/.test(tagText) ? tagText : 'v1.6.0';
-      release = buildFallbackRelease(fallbackTag);
-      releaseFailed = false;
-      writeCachedRelease(release);
-      renderDownload();
+      // 保持现有的确定性产物直链，无需报错或干扰用户下载
       return;
     }
 
-    fetch(endpoints[index], { headers: { Accept: 'application/vnd.github+json' } })
+    fetch(endpoints[index])
       .then(res => {
         if (!res.ok) throw new Error('HTTP ' + res.status);
         return res.json();
       })
       .then(json => {
-        release = normalizeRelease(json);
-        if (!release) throw new Error('unexpected payload');
+        const fresh = normalizeRelease(json);
+        if (!fresh) throw new Error('unexpected payload');
+        release = fresh;
+        releaseFailed = false;
         writeCachedRelease(release);
         renderDownload();
       })

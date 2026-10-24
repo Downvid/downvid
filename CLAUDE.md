@@ -10,33 +10,73 @@ multiple places**, and missing one fails silently (no error, feature just doesn'
 
 ## Commands
 
+**The Wails build in `app/` is the main line.** The Electron build (`electron/` + `src/`) still
+ships, but only maintains the existing auto-update channel and feature parity. The two command
+sets are different — don't mix them:
+
 ```bash
+# New architecture (main line)
 pnpm install
-pnpm dev                    # vite dev server + electron, hot reload; also compiles the Go sidecar
-pnpm vue-tsc --noEmit       # renderer/main type check (strict + noUnusedLocals + noUnusedParameters)
-pnpm test                   # pure-logic unit tests (Vitest, tests/*.test.ts)
-pnpm test:runtime:windows    # native Windows exe integration regression (requires Go)
-pnpm test:download:integration # local HTTP/file/store integration regression
-pnpm test:parse:integration # parser chain: fallbacks, round cap, cookie lifecycle
-pnpm test:acceleration      # acceleration benchmark; see docs/download-acceleration.md
-pnpm test:updater           # updater state machine, cache, fallback, install modes
-pnpm test:settings:migration # settings defaults/merge and the "no bypass" static scan
-pnpm test:package           # unpacked-artifact contents (needs a prior --dir build)
-pnpm lint:ipc               # static check of the hand-maintained IPC wiring
-pnpm lint:docker            # container image definition (versions from manifest / no tsx / update check intact)
-pnpm test:web               # WebUI server regression (runs the *bundled* server, same file as in the image)
-pnpm lint:icons             # icon names must be valid (a typo renders as literal text)
-pnpm lint:website           # landing page: local html/css/js, assets, i18n pairs, theme colors
-pnpm lint:docs              # AGENTS.md ↔ CLAUDE.md parity + referenced paths/numbers exist
-pnpm audit:provenance       # code-provenance audit: verbatim upstream survival + registry coverage
-                            # (see docs/provenance/audit.md)
-pnpm deps:manifest:check    # is the dependency manifest behind upstream?
-pnpm build                  # vue-tsc && vite build && electron-builder (current platform)
-pnpm build:mac:arm64        # also :mac:x64 :win :linux:x64 :linux:arm64
-cd backend && gofmt -l . && go vet ./... && go test ./...
+pnpm --dir app/frontend install  # app/frontend is an independent package, not in the root workspace
+bash app/scripts/build.sh        # single-file build: frontend + sidecar embedded
+(cd app && wails dev)            # UI-only dev; no dependency sidecar (see below)
+pnpm --dir app/frontend check    # svelte-check (tsc cannot see .svelte)
+(cd app && go test ./...)        # Go core tests
+
+# Old architecture (Electron, maintenance)
+pnpm dev                         # vite dev server + electron, hot reload
+pnpm build                       # vue-tsc + vite + electron-builder (current platform)
 ```
 
-Requires **Node ≥ 22, pnpm ≥ 8, Go ≥ 1.24**. yt-dlp / ffmpeg need *not* be preinstalled.
+Requirements: **Node ≥ 22, pnpm ≥ 8, Go ≥ 1.25**, Wails CLI v2.16
+(`go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0`). yt-dlp / ffmpeg need *not* be preinstalled.
+
+A direct `cd app && wails dev` build has **no dependency sidecar**, so the dependencies page only
+shows "probe binary missing", with no build-time warning. `build.sh` compiles the sidecar into
+`app/internal/sidecar/bin/` and embeds it with `-tags withsidecar`; to exercise dependency/download
+paths in dev, use the `build.sh` artifact, or run `build.sh` once and then `wails dev -tags withsidecar`.
+The Electron side uses `extraResources` in `electron-builder.json5` (pointing at
+`backend/build/${platform}-${arch}`), so `pnpm dev` / `pnpm build` also compile the sidecar first.
+Both paths fail loudly when Go is missing.
+
+```bash
+# New architecture (Wails)
+(cd app && gofmt -l . && go vet ./... && go test -shuffle=on ./...)   # Go core
+pnpm --dir app/frontend check                   # svelte-check (.svelte types only)
+pnpm lint:i18n:app                              # app/frontend i18n pairs + t() keys
+pnpm lint:boundaries                            # G1: no imports between app/internal packages
+pnpm crosscheck:port                            # TS ↔ Go byte-for-byte comparison
+pnpm test:e2e:real                              # real yt-dlp / ffmpeg E2E (skips explicitly)
+
+# Old architecture (Electron)
+pnpm vue-tsc --noEmit                           # renderer/main type check (strict + noUnusedLocals)
+pnpm test                                       # pure-logic unit tests (Vitest, tests/*.test.ts)
+pnpm test:runtime:windows                       # native Windows exe integration regression
+pnpm test:download:integration                  # local HTTP/file/store integration regression
+pnpm test:parse:integration                     # parser chain: fallbacks, round cap, cookie lifecycle
+pnpm test:acceleration                          # acceleration benchmark; see docs/download-acceleration.md
+pnpm test:updater                               # updater state machine, cache, fallback, install modes
+pnpm test:settings:migration                    # settings defaults/merge + "no bypass" static scan
+pnpm test:package                               # unpacked-artifact contents (needs a prior --dir build)
+pnpm lint:ipc                                   # static check of the hand-maintained IPC wiring
+pnpm lint:docker                                # container image definition
+pnpm test:web                                   # WebUI server regression (bundled server)
+pnpm build                                      # vue-tsc + vite build + electron-builder
+
+# Required for both
+pnpm lint:icons                                # icon names must be valid
+pnpm lint:website                              # landing page assets / i18n / theme colors
+pnpm lint:docs                                 # AGENTS.md ↔ CLAUDE.md parity + paths/numbers
+pnpm audit:provenance                          # code-provenance audit (docs/provenance/audit.md)
+pnpm lint:attribution                          # upstream notices must stay while code remains
+pnpm lint:workflows                            # "uses tool X" ↔ "installs tool X"
+pnpm sync:repo && pnpm sync:doc-numbers && pnpm sync:toolchain && pnpm sync:changelog
+pnpm deps:manifest:check                       # is the dependency manifest behind upstream?
+cd backend && gofmt -l . && go vet ./... && go test -shuffle=on ./...   # Go sidecar
+```
+
+CI runs most of this set, but the `app/` Go tests and `crosscheck:port` are **not** wired in yet —
+run them locally whenever you touch `app/internal/*` or port logic across languages.
 
 No ESLint/Prettier — **do not add them** (formatting churn would swamp the history). TypeScript is
 pinned to 5.x: vue-tsc can't run on TypeScript 7 (the Go port drops `typescript/lib/tsc`); Dependabot
@@ -44,16 +84,21 @@ ignores its major bumps.
 
 ### Tests
 
-Two layers: Go sidecar (`backend/internal/*/**_test.go`) and renderer/main pure logic
-(`tests/*.test.ts`, Vitest, `environment: 'node'` — deliberately no jsdom).
+Three layers: the **new Go core** (`app/internal/*/**_test.go`), the **Go sidecar**
+(`backend/internal/*/**_test.go`) and **frontend pure logic** (`tests/*.test.ts`, Vitest,
+`environment: 'node'` — deliberately no jsdom).
 
-- Cover **pure functions only**: format selection, dependency-error parsing, yt-dlp arg assembly,
-  parser shared helpers, the updater state machine.
-- Do **not** unit-test anything needing the DOM or a real subprocess — type check, `lint:ipc` and
-  real-app verification cover that instead.
+- Pure-logic unit tests cover **pure functions only**: format selection, dependency-error parsing,
+  yt-dlp arg assembly, parser shared helpers, the updater state machine.
+- Do **not** unit-test anything needing the DOM, a real subprocess or the network — send those to
+  the integration regressions (`app/e2e_*.go`, `scripts/test-*`), or rely on type checks, `lint:ipc`
+  and real-app verification.
 - Target **branches that have actually broken before**, not coverage numbers.
 - **Mutation-check every new test**: break the implementation, confirm the test fails.
   A test that cannot fail is worthless.
+- Any module ported to Go needs a **dual-run comparison** (`pnpm crosscheck:port`); two green
+  per-language suites do not prove identical behaviour — the first port turned "default concurrency
+  8" into 1 while both suites stayed green.
 - `vitest.config.ts` is separate from `vite.config.ts` on purpose — the latter runs `go build`
   in `buildStart`, which tests must not trigger.
 
@@ -64,12 +109,16 @@ Tests are split into three per-platform workflows (`.github/workflows/ci-linux.y
 
 | job | Contents |
 | --- | --- |
-| `backend` | gofmt / vet / `go test -shuffle=on` / cross-compile (all 5 targets on Linux, host only on macOS/Windows) |
-| `frontend` | type check / IPC contract / icon names / landing page / doc parity / **provenance audit** / unit tests / updater / settings migration |
-| `main-process` | Linux only: updater / settings migration / manifest check |
-| `integration` | download integration / acceleration benchmark / parse integration |
+| `backend` | `backend/` gofmt / vet / `go test -shuffle=on` / cross-compile (all 5 targets on Linux, host only on macOS/Windows) |
+| `frontend` | old renderer type check / IPC contract / icon names / landing page / doc parity / provenance / attribution / boundaries / repo coordinates / CHANGELOG copy / doc numbers / toolchain / i18n / workflows / image definition / unit tests; **plus** `wails generate module` → `app/frontend` svelte-check and `lint:i18n:app` |
+| `main-process` | Linux only: updater / settings migration / issue triage / manifest check / Web server regression |
+| `integration` | download integration / acceleration benchmark / parse integration / real-tool E2E |
 | `native-runtime` | Windows only: native exe runtime-deps regression |
 | `package` / `packaging` | build / pack to a directory / artifact contents / manifest & release-notes script self-checks |
+
+> **Known gap**: the `app/` Go tests (`cd app && go test ./...`) are **not** wired into the three
+> workflows yet. Run them locally when touching `app/internal/*`; a green CI does not prove the Go
+> core is verified.
 
 **Every new test script must be wired into all three per-platform workflows** — `test:acceleration`
 was once added without CI wiring and the acceleration logic went unverified for a long time. Likewise
@@ -82,7 +131,7 @@ workflow named in the docs exists).
 
 ## Cross-platform build traps
 
-All four have bitten us for real; the CI windows job caught them, not local macOS.
+All of these have bitten us for real; the CI windows job caught most of them, not local macOS.
 
 1. **`process.platform` is not `GOOS`.** Node says `win32`, Go says `windows`. Passing it through
    yields `unsupported GOOS/GOARCH pair win32/amd64`. macOS/Linux pass only because the names
@@ -95,6 +144,15 @@ All four have bitten us for real; the CI windows job caught them, not local macO
    (`* text=auto eol=lf`) normalizes this. **Do not delete that file.**
 4. **Path assertions.** Never hardcode `/tmp/out/...` in tests; production code uses `path.join`,
    which yields backslashes on Windows. Build expectations with `path.join`.
+5. **Wails `universal` is not a Go `GOARCH`.** `wails build -platform darwin/universal` is lipo'd
+   by Wails, but the sidecar is ours: `app/scripts/build.sh` must compile **both** arm64 and amd64,
+   otherwise a universal build cannot find its sidecar and dependency detection silently degrades.
+6. **Linux Wails builds need webkit2gtk-4.0.** Wails v2.16's cgo directives look for the 4.0 dev
+   package by default; installing only 4.1 fails to compile (CI already hit this). The matching
+   GTK / WebKit runtime libraries are also required at runtime.
+7. **Wails frontends cannot use absolute asset paths.** Keep `base: './'` in
+   `app/frontend/vite.config.ts`; changing it to `/` works in dev but 404s inside `embed.FS`
+   (icons turn into text, and the build does not complain).
 
 **Hard rule**: any new CI build/check step must first be reproduced locally under
 non-host-platform semantics (cross-compile to `win32`, check out with `core.autocrlf=true`).
@@ -104,29 +162,52 @@ Validating YAML syntax is not enough.
 
 ## Architecture
 
-Three components: **renderer** (Vue 3 UI), **main process** (Node — downloading, parsing, updates),
-and a **Go sidecar** (detects and installs yt-dlp / ffmpeg). They talk over IPC and NDJSON.
+The new architecture is a Go core (`app/internal/*`), a Wails desktop shell, a Svelte 5
+frontend, and the shared Go sidecar. The old architecture is a Vue 3 renderer, a Node main
+process, and the same sidecar. They talk over Wails bindings / IPC / NDJSON.
 
-> **Two architectures coexist during the transition.** The new one (Wails) lives in
-> `app/`, the old one (Electron) in `electron/` + `src/`. They are **released in parallel**:
-> existing users stay on Electron's auto-update channel, the new build ships as a separate
-> artifact for manual download. See "Architecture transition" below.
+> **Two architectures coexist during the transition, but Wails is the main line.** The new one
+> lives in `app/`; the old one (Electron) in `electron/` + `src/` only keeps the existing
+> auto-update channel and feature parity. New features go to Wails first. See "Architecture
+> transition" below.
 
-### New architecture (`app/`, Go + Wails + Svelte)
+### New architecture (`app/`, Go + Wails + Svelte 5) — main line
 
 | Path | Contents | Output |
 |------|----------|--------|
-| `app/internal/*` | **Go core, 15 packages, zero cross-imports** (download / parse / deps / update / history / settings …) | — |
+| `app/internal/*` | **Go core, 16 packages, zero cross-imports** (see below) | — |
 | `app/main.go` / `app/app.go` / `app/bindings_*.go` | Wails shell: plumbing only, no business rules | `app/build/bin/` |
-| `app/frontend/` | Svelte 5 + Vite renderer | embedded into the binary (`go:embed`) |
-| `app/scripts/build.sh` | **build entry point**: compiles the sidecar, then builds with `-tags withsidecar` | single file ~18 MB |
+| `app/frontend/` | Svelte 5 + Vite renderer; the Go server can serve it too (the image has not switched yet) | embedded into the binary (`go:embed`) |
+| `app/scripts/build.sh` | **build entry point**: compiles the sidecar, then builds with `-tags withsidecar` (use `wails dev` for hot reload; it has no sidecar) | single file ~18 MB |
+| `app/cmd/downvid-server` | container / headless entry point (HTTP + WebSocket RPC; the image still runs the old TS server) | standalone binary |
+
+The 16 packages under `app/internal/*`:
+
+| Package | Responsibility |
+|---|---|
+| `changelog` | parses the copy of `CHANGELOG.md` (`//go:embed` cannot cross directories; `pnpm sync:changelog` syncs it) |
+| `clipboard` | reads the system clipboard (`navigator.clipboard` triggers a permission dialog in the WebView) |
+| `cookie` | cookie strategy, browser cookie extraction and snapshots (port of `electron/utils/cookies.ts`) |
+| `deps` | dependency detection/download: runs the sidecar and converts NDJSON events; no candidate table here |
+| `download` | yt-dlp arguments, progress lines, process-tree termination, aria2 progress |
+| `fetch` | direct-URL chunked download and resume checkpoints |
+| `history` | download history (atomic write + corruption recovery + win32 path normalisation) |
+| `image` | Referer-aware thumbnail fetch into a data URL (hotlink protection) |
+| `jsruntime` | Node / Deno probing (YouTube needs a real JS runtime) |
+| `netx` | HTTP client with proxy support and proxy liveness probing |
+| `parse` | site parsers, format dedupe, error classification, bounded YouTube fallback |
+| `server` | container HTTP + WebSocket RPC (protocol matches `docker/web/bridge.ts`) |
+| `settings` | `userData/settings.json` (13 fields, byte-for-byte identical to the TS version) |
+| `shell` | open path / reveal in folder / free disk space |
+| `sidecar` | embeds the dependency sidecar into the main binary and extracts it at runtime |
+| `update` | update checks, self-update download/install, Wails artifact recognition and migration |
 
 Packages under `app/internal/*` **must not import each other** (enforced by
 `pnpm lint:boundaries`, rule G1). It is the property most worth protecting: every package
 stays independently testable and replaceable, so swapping the transport
 (Wails bindings → container WebSocket) stays cheap.
 
-### Old architecture (Electron, kept during the transition)
+### Old architecture (Electron, maintenance only)
 
 | Path | Contents | Output |
 |------|----------|--------|
@@ -141,7 +222,7 @@ at buildStart and tests must not trigger that.
 
 | Path | Contents | Output |
 |------|----------|--------|
-| `backend/` | Go dependency sidecar (detects and installs yt-dlp / ffmpeg); compiled into the Wails binary by `build.sh` | `backend/build/<platform>-<arch>/` |
+| `backend/` | Go dependency sidecar (detects and installs yt-dlp / ffmpeg); shared by both desktop architectures | Electron: `backend/build/<platform>-<arch>/`; Wails: compiled into `app/internal/sidecar/bin/` then embedded |
 | `shared/app.ts` | **single source** of repo coordinates and external links | imported by all three |
 | `tests/` | Vitest pure-logic tests | — |
 | `docker/` | container image (entrypoint, virtual display and VNC orchestration; see `docs/docker.md`) | OCI image |
@@ -154,30 +235,93 @@ Three stages, **no skipping**:
 
 | Stage | Status | Notes |
 |---|---|---|
-| 1. Parallel release | **now** | Electron and Wails ship together. Existing users' auto-update is untouched; the Wails build uses a separate name (`DownVid-Wails-*`) for manual download |
-| 2. Wails self-update | TODO | Go only has `CheckUpdate` — no download/install yet. Required before the new build can update itself |
-| 3. Migrator | TODO | Package the Wails build inside NSIS/dmg (same shapes as the old one) so existing users are migrated on their next auto-update |
+| 1. Parallel release | **done** | Electron and Wails ship together. The Wails build uses a separate name (`DownVid-Wails-*`); Electron keeps its original channel |
+| 2. Wails self-update | **done** | `app/internal/update/selfupdate.go`: download, verify and install for macOS zip / Windows NSIS / Linux AppImage. Migration is impossible without it |
+| 3. Migrator | **in progress** | No separate NSIS/dmg wrapper: `release.yml`'s `migrate_to_wails` repoints the selected platform's `latest*.yml` at the Wails artifacts. Default **macOS**; Windows still needs NSIS `--updated` / `--force-run`, Linux needs confirmed AppImage artifacts |
 
-**Why we cannot switch directly**: existing users rely on `electron-updater`, which reads
+**Why we cannot switch everything at once**: existing users rely on `electron-updater`, which reads
 `latest*.yml` plus NSIS/dmg. Wails produces bare `.app`/`.exe`, which does not fit. Replacing
 the artifacts directly leaves users seeing "update available" but unable to install —
 worse than "no update detected", and that channel **can never be repaired once broken**.
+Switch one platform at a time, after confirming that platform's Wails build can update itself.
 
-Two constraints that must hold (both have tests):
+Three constraints that must hold (all have tests):
 
-1. **`latest*.yml` may only list Electron artifacts.** A Wails package in there makes existing
-   users download something they cannot install (`scripts/test-updater.mjs` guards this).
+1. **A non-migrated platform's `latest*.yml` may list Electron artifacts only.** The migration
+   switch replaces the selected platform's manifest **entirely** with Wails entries (an explicit,
+   one-way switch — never a mix). `gen-update-manifests.mjs` itself defaults to no migration;
+   `release.yml` currently defaults to `macos`. Never mix Electron and Wails entries for the same
+   platform (`scripts/test-updater.mjs` guards this).
 2. **`arch` defaults to `electron`.** If it defaulted to `wails`, the transitional build would
    mistake itself for the new architecture and skip the electron-updater channel
-   (`bindings_test.go` guards this).
-
-The transitional build **detects** new-architecture releases and surfaces a hint in Settings
-(`app/internal/update/migration.go`), but migration stays manual — it is a one-way door:
-once on the new architecture there is no path back to Electron.
+   (`bindings_test.go` guards this). The Wails build injects `-X main.arch=wails` via `build.sh`.
+3. **Migration is a one-way door.** There is no path back to Electron once the new architecture is
+   installed; `app/internal/update/migration.go` only recognises artifacts and informs the user —
+   "detected" must never be treated as "migrated".
 
 ### Change-impact checklist
 
-**1. New renderer-callable main capability → three files must change together:**
+> The two architectures have **different touch points**. Decide which line you are changing first;
+> the only shared pieces are the `backend/` sidecar, repo coordinates in `shared/app.ts`, and
+> release artifact naming.
+
+**0. New architecture (Wails) touch points**
+
+**Adding a renderer-callable backend capability**
+
+1. Add an exported method in `app/bindings_*.go` (download/deps) or `app/app.go` (window/update/
+   history/etc.). Wails generates `wailsjs` from the signature — no hand-written preload or IPC
+   registration.
+2. The frontend **must** go through `app/frontend/src/lib/backend.ts`; never `import wailsjs/...`
+   from a component. In a browser that throws `Failed to resolve module` and blanks the page, and
+   swapping transports would touch every call site.
+3. Field names are a **byte-for-byte contract** between `app/frontend/src/lib/types.ts` and the Go
+   struct JSON tags. A mismatch on an array field produces no type error — just blank UI.
+4. Verify with `pnpm --dir app/frontend check` + `cd app && go test ./...`; if download/parse logic
+   changed, run `pnpm crosscheck:port`.
+
+**Adding a broadcast event (Go → frontend)**
+
+1. `a.emit("event", data)` on the Go side (the `emit` helper in `app/app.go`).
+2. Subscribe in `backend.ts` and **return an unsubscribe**; components must call it on unmount.
+3. Record the event name and payload shape in `app/frontend/src/lib/types.ts`.
+
+**Changing the settings shape**
+
+- Wails stores `<dataDir>/settings.json`; the only entry point is
+  `app/internal/settings/settings.go`, with the frontend mapping in `app/frontend/src/lib/settings.ts`.
+  Field names / JSON keys / defaults must match the TS version **exactly**; only add fields (reads
+  fill defaults). Removing or renaming is a MAJOR change.
+- Electron still uses `localStorage['settings']` (see item 3 below). **Both stores coexist on
+  purpose** during the migration; deleting one loses existing users' settings once.
+- `app/frontend/scripts/check-settings-write.mjs` scans for writes that bypass the entry point.
+
+**Changing frontend copy**
+
+- The Wails copy table is `app/frontend/src/lib/i18n.svelte.ts` (**separate** from the old one).
+- New keys must be paired zh/en; `pnpm lint:i18n:app` checks both directions and that every `t()`
+  key exists.
+- `t()` is reactive — never evaluate it at module top level; use `computed` / a getter.
+
+**Changing dependencies / updates / containers**
+
+- Dependency probing still belongs to the `backend/` sidecar; `app/internal/deps` only spawns it
+  and converts NDJSON events. **Do not add a second candidate table** — that is exactly how the
+  dependencies page and acceleration page came to disagree.
+- The `DownVid-Wails-` prefix appears in `release.yml`, `app/internal/update/migration.go` and
+  `scripts/verify-release.mjs`. Change all three together.
+- The new container entry point is `app/cmd/downvid-server` (`app/internal/server`); the image
+  still runs the old TS server. Do not migrate only half of it.
+
+**Changing the Go core**
+
+- Packages under `app/internal/*` must not import each other or `cmd` (`pnpm lint:boundaries`,
+  rules G1 / G2).
+- Run `gofmt -l .`, `go vet ./...`, `go test -shuffle=on ./...`; mutation-check new tests.
+- Cross-language ports need a dual-run comparison (`pnpm crosscheck:port`); green suites on each
+  side do not prove equal behaviour.
+
+**1. New renderer-callable main capability → three files must change together (old Electron architecture):**
 
 | # | File | Change |
 |---|------|--------|
@@ -204,9 +348,11 @@ declared-but-not-exposed, API-group coverage both ways).
 Existing: `deps:progress`, `download:progress`, `history:updated`, `update:status`, `menu:openSettings`, `menu:showAbout`.
 A broadcast event must **not** double as an `ipcMain.handle` channel (`lint:ipc` enforces this).
 
-**3. Changing user settings shape → silently breaks existing users.**
+**3. Changing user settings shape → silently breaks existing users (old Electron architecture; Wails in §0).**
 
-Settings live in `localStorage['settings']` (**not** Pinia). Fields: `downloadDir`,
+The old architecture stores settings in `localStorage['settings']` (**not** Pinia).
+The new architecture stores `<dataDir>/settings.json` (`app/internal/settings/settings.go`).
+**Both must keep identical field names and defaults.** Fields: `downloadDir`,
 `filenameTemplate`, `preferredQuality`, `cookieMode`, `cookiesFile`, `proxy`, `depPaths`,
 `acceleration` (enabled/concurrency/optional aria2c path), `autoCheckUpdate` (default on),
 `depMirror` (dependency download source: `'auto'` walks the mirror chain, or pin one; default
@@ -227,8 +373,12 @@ follows the system, `'zh-CN'` or `'en-US'`; default `'auto'`).
 - Update `src/components/SettingsView.vue` and `src/components/DepPanel.vue` too
 - `scripts/test-settings-migration.mjs` enforces the above, including the "no bypassing" scan
 
-**4. Runtime dependencies (yt-dlp / ffmpeg / ffprobe):**
+**4. Runtime dependencies (yt-dlp / ffmpeg / ffprobe / aria2):**
 
+- Both architectures share the sidecar and the manifest: the Wails side (`app/internal/deps`) only
+  spawns the sidecar and converts NDJSON events; the Electron side uses `electron/utils/runtime.ts`.
+  **The candidate table lives only in `backend/internal/runtime`** — never duplicate it on either
+  side (that is exactly how the dependencies page and the acceleration page came to disagree).
 - New dep kind → `backend/internal/runtime` (`Kinds`/`Optional`/candidates) + `DepKind` in `src/types/deps.ts`
 - Source or version change → only edit the asset table in `scripts/gen-deps-manifest.mjs`, then
   `pnpm deps:manifest`. **Never hand-edit** `assets.gen.go` (generated)
@@ -255,6 +405,12 @@ Names are referenced by older clients' `latest*.yml`. Renaming `DownVid-Setup-*`
 `DownVid-Portable-*`, `DownVid-<arch>-Mac-*`, `DownVid-x86_64-Linux-*` breaks every installed copy.
 `lint:ipc` checks the `artifactName` entries. Linux uses `amd64`/`x86_64`, not `x64`.
 
+Wails artifacts use the `DownVid-Wails-` prefix and sit in the same Release next to the Electron
+ones. **Never rename them to the Electron pattern**: by default `latest*.yml` describes Electron
+artifacts only, and a migrated platform's manifest is intentionally replaced with Wails entries —
+mixing both for one platform makes existing users download something they cannot install. To move a
+platform's auto-update, use `release.yml`'s `migrate_to_wails` input instead of editing names.
+
 **6. Repo coordinates / links** live only in `shared/app.ts` (main re-exports via
 `electron/constants.ts`). `electron-builder.json5`'s `publish` is build-time config that runtime
 can't read — `lint:ipc` cross-checks it. Moving repos means editing `shared/app.ts` + `publish` +
@@ -272,10 +428,11 @@ on the spot by `pnpm audit:provenance`:
   `node scripts/audit-provenance.mjs --write` first)
 - numbers in `docs/provenance/audit.md` must match the measurement
 
-The upstream snapshot lives in `scripts/data/provenance/upstream/` — **do not modify it**. Before
-changing architecture boundaries read `docs/provenance/architecture.md`: it defines the seven
-boundary rules and the three ports (`DataDirs` / `EventSink` / `UserPrompt`) that
-`lint:boundaries` enforces once migration step C0 lands.
+The upstream snapshot lives in `scripts/data/provenance/upstream/` — **do not modify it**.
+`docs/provenance/architecture.md` is the **historical** `core/` plan from issue #74; do not create
+directories from it. The live boundaries are in `scripts/lint-boundaries.mjs`: Go rules G1
+(packages under `app/internal` must not import each other) and G2 (internal must not import `cmd`),
+plus TS rules 3–7 (kept until Electron is retired).
 
 ### 7. Landing page (`website/`)
 
@@ -402,6 +559,20 @@ A Go sidecar resolves them at startup, "prefer the machine's own, download only 
   user machines, hence `deps:manifest:check` in CI. ffmpeg-static has no published checksums, so the
   script downloads each gzip to hash it (~130 MB of traffic).
 
+### Wails side (new architecture)
+
+- `app/scripts/build.sh` compiles the sidecar into `app/internal/sidecar/bin/<goos>-<goarch>/`,
+  then `//go:embed`s it into the main binary with `-tags withsidecar`; at runtime it lands in
+  `<userData>/runtime/bin/downvid-deps` (same location as Electron, so upgrades don't leave two copies).
+- `app/internal/deps` only spawns the sidecar, streams NDJSON events and caches detection for 60 s.
+  **Candidate table, mirror chain, SHA-256, extraction, atomic replacement and macOS `xattr` /
+  `codesign` all live in `backend/`** — do not duplicate any of it here.
+- A build without `-tags withsidecar` (`go test`, plain `go build`, direct `wails build`) uses the
+  stub: it compiles, but the dependencies page only shows "probe binary missing". That is deliberate;
+  do not remove the warning.
+- Show `Source` (system / managed / manual / scanned) and `Form` (zipapp / native) honestly in the UI:
+  a `native` copy may take 9–12 s on first execution, which does not mean the file is corrupt.
+
 ### Parse performance (read before changing this)
 
 **The yt-dlp build choice dominates parse time.** Measured on one machine, same bilibili video:
@@ -426,14 +597,20 @@ not vary with network or site, and users read it as "this app is slow". Therefor
   probing costs the sum. With zipapp the whole probe is 0.47s, but the parallelism still matters on machines
   that fell back to PyInstaller (12s vs 22s).
 
-### Parse dispatch (`ytdlp:parse`)
+### Parse dispatch (old architecture: `ytdlp:parse`)
 
 Douyin and Kuaishou have bespoke parsers: platform API first, headless `puppeteer-core` (launched via
 `electron/utils/browser.ts`) driving a *system-installed* Chrome/Edge as fallback. Every failure is
 swallowed by an empty `catch` and falls through to `parseWithYtdlp`. When debugging a parse bug, check
 which branch actually ran — the errors are invisible.
 
-### Download has two entirely separate paths
+### Download has two entirely separate paths (old Electron architecture)
+
+> The two architectures are compared function by function: the new one uses
+> `app/internal/parse` (parsing + formats), `app/internal/download` (yt-dlp args / progress /
+> process tree / aria2), `app/internal/fetch` (direct chunks) and `app/internal/netx` (proxy);
+> the old one uses `electron/parsers` and `electron/download`. Before changing behaviour on one
+> side, run `pnpm crosscheck:port` and update the other — one side's green tests are not "done".
 
 Implementation lives in `electron/download/`; `electron/ipc/download.ts` only dispatches.
 
@@ -499,7 +676,7 @@ whole file** (16MB sample re-transferred 16.8MB). Hence `detached: true` at spaw
 a grace period so aria2c can flush its control file. `tests/process-tree.test.ts` pins all of this — **dropping
 `detached` silently reintroduces the bug**.
 
-### Task-level concurrency gate (`src/stores/download-rules.ts`)
+### Task-level concurrency gate (old architecture: `src/stores/download-rules.ts`)
 
 **At most 3 tasks run at once** (`MAX_CONCURRENT_DOWNLOADS`); the rest stay `pending` in the queue.
 `pumpQueue()` is the single enforcement point: `startDownload` / `resumeTask` / `retryTask` all funnel
@@ -557,6 +734,21 @@ and refills the queue.
 
 ### State
 
+#### New architecture (Wails)
+
+| State | Where |
+|-------|-------|
+| App state (parse result / task queue / dialogs) | `app/frontend/src/lib/store.svelte.ts` (Svelte 5 runes singleton) |
+| User settings | `userData/settings.json`, entry `app/internal/settings/settings.go`; frontend mapping in `app/frontend/src/lib/settings.ts` |
+| Download history | `app/internal/history` → `userData/download-history.json` (atomic write) |
+| Runtime dependencies | `app/internal/deps` (detection cached 60 s) |
+| Updates | `app/internal/update` (check / self-update / migration recognition) |
+
+**Every backend call must go through `app/frontend/src/lib/backend.ts`**: importing `wailsjs`
+directly blanks the page in a browser, and swapping transports would otherwise touch every call site.
+
+#### Old architecture (Electron)
+
 | State | Where |
 |-------|-------|
 | Download queue / selection / orchestration | Pinia `src/stores/download.ts` |
@@ -578,7 +770,10 @@ and refills the queue.
 
 ### UI conventions
 
-- **All UI strings go through `t('key')`** (`src/i18n/`); never write a literal. `pnpm lint:i18n`
+- **The two copy tables are independent**: Wails uses `app/frontend/src/lib/i18n.svelte.ts`
+  (`pnpm lint:i18n:app`); Electron uses `src/i18n/` (`pnpm lint:i18n`). Run only the check for the
+  side you changed, and **do not copy keys between them**.
+- Old architecture: **all UI strings go through `t('key')`** (`src/i18n/`); never write a literal. `pnpm lint:i18n`
   scans `src/` and rejects hardcoded Chinese. Three easy traps:
   - `t()` reads a reactive `ref`, so **never call it at module top level** — language switches would
     not re-render. Use `computed(() => t('...'))`, or `get label()` for list items.
@@ -592,6 +787,9 @@ and refills the queue.
 - **Tailwind v4**, CSS-first — no `tailwind.config.js`. Material-3 semantic tokens
   (`bg-surface`, `text-on-surface-variant`, `surface-container-high`, …) are defined in `src/style.css`
   `@theme`. **Use tokens, not raw hex.**
+- The Wails equivalent is `app/frontend/src/app.css`'s `@theme`; its colors must match the old
+  version. `app/frontend/src/design-system.test.ts` pins the primary color, animated properties and
+  durations.
 - `@custom-variant dark` is declared but nothing ever toggles the class — there is **no dark mode
   toggle**; don't claim otherwise in docs.
 - Icons: generic ones via `src/components/icons/MaterialIcon.vue` (Material Symbols). **Brand icons need
@@ -604,12 +802,23 @@ and refills the queue.
 
 ## Release
 
+```bash
+# New architecture (Wails)
+bash app/scripts/build.sh                              # current platform → app/build/bin/
+bash app/scripts/build.sh -platform darwin/arm64
+bash app/scripts/build.sh -platform darwin/universal   # sidecar built for arm64 + amd64
+
+# Old architecture (Electron)
+pnpm build:mac:arm64   # also :mac:x64 :win :linux:x64 :linux:arm64
+```
+
 Bump `package.json` → add a `## [x.y.z]` section to `CHANGELOG.md` → push tag `v*` (or run
 `release.yml` manually with a `version` equal to `package.json`'s; the workflow creates the tag).
 
-`release.yml` builds 5 arch targets (each job installs only Go + Node — no binaries are checked in),
-then regenerates every `latest*.yml` from the **final artifacts** via
-`scripts/gen-update-manifests.mjs` (per-job manifests would overwrite each other).
+`release.yml` builds the 5 Electron arch targets plus the separate Wails artifacts, then regenerates
+every `latest*.yml` from the **final artifacts** via `scripts/gen-update-manifests.mjs` (per-job
+manifests would overwrite each other). `migrate_to_wails` decides which platforms' `latest*.yml`
+point at Wails artifacts (default `macos`).
 
 Release body is generated by `scripts/gen-release-notes.mjs`: clickable download badges on top, and
 links are built from **scanned artifacts** so they can't 404. Re-test it against fake artifacts after
@@ -641,6 +850,11 @@ under `## [Unreleased]`. When releasing, rewrite it to `## [x.y.z] - <date>` and
 ---
 
 ## Container image (Dockerfile and docker-compose.yml, entrypoint docker/entrypoint.sh)
+
+> **Transitional state**: the new architecture already has a Go server
+> (`app/cmd/downvid-server` + `app/internal/server`), but the current image is still served by the
+> old TS server (`docker/server/index.ts`). Both speak the same RPC protocol; migrating is a
+> separate step — do not change half of the Dockerfile and assume the container moved.
 
 DownVid in container runs as a **native WebUI**: a lightweight Node service (`docker/server/index.ts`) hosts
 the static frontend and download engines; access it directly from any browser. The user guide is `docs/docker.md`.
@@ -728,6 +942,21 @@ runs the **bundled** server (the same file the image runs): source that works is
 
 ## Gotchas
 
+- `app/frontend/vite.config.ts` must keep `base: './'`: Wails loads assets from `embed.FS`; absolute
+  `/assets/...` paths 404 under `file://` or a reverse-proxied subpath (icons render as text while
+  the build stays green).
+- `wails generate module` compiles the Go package first, and `app/main.go` has
+  `//go:embed all:frontend/dist`: the order is "prepare the embed dir
+  (`app/scripts/prepare-embed-dir.sh`) → build the frontend → generate bindings". Generating first
+  fails with `pattern all:frontend/dist: no matching files found`.
+- `app/frontend` is an **independent package** (not in the root pnpm workspace): install with
+  `pnpm --dir app/frontend install`, type-check with `pnpm --dir app/frontend check` — `pnpm vue-tsc`
+  cannot see `.svelte` files.
+- Wails settings live in `<dataDir>/settings.json`, Electron settings in `localStorage['settings']`.
+  Field names/defaults must match, but **neither store may overwrite the other** during the migration.
+- Wails updates live in `app/internal/update`: `selfupdate.go` downloads/verifies/installs,
+  `migration.go` only recognises Wails artifacts and informs the user. `build.sh` must inject
+  `-X main.arch=wails`, otherwise the new build reads Electron's `latest*.yml`.
 - `electron/main.ts` has one `commandLine.appendSwitch('disable-gpu-sandbox')` — a macOS Tahoe +
   Electron crash workaround. **Don't remove it.**
 - The app menu (`electron/menu.ts`) is registered **only on macOS**: on Windows/Linux Electron
