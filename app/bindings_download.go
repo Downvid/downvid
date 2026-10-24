@@ -28,6 +28,7 @@ import (
 
 	"github.com/Downvid/downvid/app/internal/changelog"
 	"github.com/Downvid/downvid/app/internal/clipboard"
+	"github.com/Downvid/downvid/app/internal/cookie"
 	"github.com/Downvid/downvid/app/internal/deps"
 	"github.com/Downvid/downvid/app/internal/download"
 	"github.com/Downvid/downvid/app/internal/fetch"
@@ -43,12 +44,15 @@ import (
 
 // Dependency 是一次探测结果。
 type Dependency struct {
-	Kind    string `json:"kind"`
-	Found   bool   `json:"found"`
-	Path    string `json:"path,omitempty"`
-	Version string `json:"version,omitempty"`
-	Source  string `json:"source,omitempty"`
-	Reason  string `json:"reason,omitempty"`
+	Kind     string `json:"kind"`
+	Found    bool   `json:"found"`
+	Optional bool   `json:"optional,omitempty"`
+	Path     string `json:"path,omitempty"`
+	Version  string `json:"version,omitempty"`
+	Source   string `json:"source,omitempty"`
+	Reason   string `json:"reason,omitempty"`
+	Stale    bool   `json:"stale,omitempty"`
+	Form     string `json:"form,omitempty"`
 }
 
 // DownloadProgress 是发给前端的进度事件载荷。
@@ -78,7 +82,19 @@ func (a *App) DetectDependencies() []Dependency {
 		}
 	}
 
-	out, err := runSidecar(sidecar, "detect", "--managed-dir", a.managedBinDir(), "--json")
+	args := []string{"detect", "--managed-dir", a.managedBinDir(), "--json"}
+	if st, err := a.settingsStore().Load(); err == nil {
+		for kind, p := range st.DepPaths {
+			if p != "" {
+				args = append(args, "--manual", kind+"="+p)
+			}
+		}
+		if st.Acceleration.Aria2Path != "" {
+			args = append(args, "--manual", "aria2="+st.Acceleration.Aria2Path)
+		}
+	}
+
+	out, err := runSidecar(sidecar, args...)
 	if err != nil {
 		log.Printf("[downvid] 依赖探测失败：%v", err)
 		return []Dependency{{Kind: "yt-dlp", Found: false, Reason: err.Error()}}
@@ -397,30 +413,64 @@ func (a *App) StartDownload(opts DownloadRequest) StartDownloadResult {
 
 	// 异步：Wails 的绑定方法若阻塞整个下载，界面会卡住
 	go func() {
-		res, err := a.runner.Run(opts.TaskID, download.RunOptions{
-			YtdlpPath:     ytdlp,
-			Args:          args,
-			URL:           opts.URL,
-			CookieArgs:    a.cookieArgs(),
-			OutputDir:     opts.OutputDir,
-			WantSubtitles: opts.Subtitles,
-			OnEvent:       func(ev download.Event) { a.forwardEvent(opts.TaskID, opts.URL, ev) },
-		})
+		st, _ := a.settingsStore().Load()
+		manualFile := ""
+		if st.CookieMode == "manual" {
+			manualFile = st.CookiesFile
+		}
+		attempts := a.cookieManager().GetAttempts(manualFile, true)
+		var res download.RunResult
+		var err error
+		var failedBrowsers []string
 
-		if err != nil {
-			a.emitProgress(DownloadProgress{TaskID: opts.TaskID, URL: opts.URL, Status: "error", Error: err.Error()})
-			return
+		for _, att := range attempts {
+			res, err = a.runner.Run(opts.TaskID, download.RunOptions{
+				YtdlpPath:     ytdlp,
+				Args:          args,
+				URL:           opts.URL,
+				CookieArgs:    att.Args,
+				OutputDir:     opts.OutputDir,
+				WantSubtitles: opts.Subtitles,
+				OnEvent:       func(ev download.Event) { a.forwardEvent(opts.TaskID, opts.URL, ev) },
+			})
+			att.Cleanup()
+
+			if res.Paused {
+				a.emitProgress(DownloadProgress{TaskID: opts.TaskID, URL: opts.URL, Status: "paused", FilePath: res.FilePath})
+				return
+			}
+			if err != nil {
+				a.emitProgress(DownloadProgress{TaskID: opts.TaskID, URL: opts.URL, Status: "error", Error: err.Error()})
+				return
+			}
+			if res.Code != nil && *res.Code == 0 {
+				a.cookieManager().OnAttemptSuccess(att)
+				a.emitProgress(DownloadProgress{
+					TaskID: opts.TaskID, URL: opts.URL, Status: "completed",
+					Percent: 100, FilePath: res.FilePath,
+				})
+				return
+			}
+			if cookie.IsCookieError(res.Stderr) {
+				a.cookieManager().OnAttemptFailure(att, res.Stderr)
+				if att.IsBrowser {
+					failedBrowsers = append(failedBrowsers, att.Browser)
+				}
+				continue
+			}
+			break
 		}
-		if res.Paused {
-			a.emitProgress(DownloadProgress{TaskID: opts.TaskID, URL: opts.URL, Status: "paused", FilePath: res.FilePath})
-			return
-		}
+
 		if res.Code != nil && *res.Code != 0 {
 			// 用错误分类给出人话提示，而不是把 yt-dlp 的英文原文丢给用户
 			kind := a.ClassifyError(res.Stderr)
+			diag := a.Diagnostic(res.Stderr, "", "")
+			if len(failedBrowsers) > 0 {
+				diag += cookie.CookieFailureHint(failedBrowsers)
+			}
 			a.emitProgress(DownloadProgress{
 				TaskID: opts.TaskID, URL: opts.URL, Status: "error",
-				Error: a.Diagnostic(res.Stderr, "", ""), Message: kind,
+				Error: diag, Message: kind,
 			})
 			return
 		}
@@ -611,6 +661,11 @@ func platformKey() string {
 
 // ffmpegLocation 返回 ffmpeg 所在目录（yt-dlp 会在该目录里同时找 ffmpeg 与 ffprobe）。
 func (a *App) ffmpegLocation() string {
+	if st, err := a.settingsStore().Load(); err == nil {
+		if p, ok := st.DepPaths["ffmpeg"]; ok && p != "" && fileExists(p) {
+			return filepath.Dir(p)
+		}
+	}
 	p, ok := a.pathOf("ffmpeg")
 	if !ok {
 		return ""
@@ -619,6 +674,14 @@ func (a *App) ffmpegLocation() string {
 }
 
 func (a *App) resolveAria2() string {
+	if st, err := a.settingsStore().Load(); err == nil {
+		if st.Acceleration.Aria2Path != "" && fileExists(st.Acceleration.Aria2Path) {
+			return st.Acceleration.Aria2Path
+		}
+		if p, ok := st.DepPaths["aria2"]; ok && p != "" && fileExists(p) {
+			return p
+		}
+	}
 	p, _ := a.pathOf("aria2")
 	return p
 }
@@ -701,7 +764,37 @@ func cachedJSRuntime() jsruntime.Info {
 	return info
 }
 
-func (a *App) cookieArgs() []string { return nil }
+func (a *App) cookieManager() *cookie.Manager {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.cookieMgr == nil {
+		a.cookieMgr = cookie.NewManager(a.dataDir)
+	}
+	return a.cookieMgr
+}
+
+// GetCookieStatus 返回当前系统/用户配置的 Cookie 可用状态。
+func (a *App) GetCookieStatus() cookie.Status {
+	st, err := a.settingsStore().Load()
+	manualFile := ""
+	if err == nil && st.CookieMode == "manual" {
+		manualFile = st.CookiesFile
+	}
+	return a.cookieManager().GetCookieStatus(manualFile)
+}
+
+func (a *App) cookieArgs() []string {
+	st, err := a.settingsStore().Load()
+	manualFile := ""
+	if err == nil && st.CookieMode == "manual" {
+		manualFile = st.CookiesFile
+	}
+	attempts := a.cookieManager().GetAttempts(manualFile, true)
+	if len(attempts) > 0 {
+		return attempts[0].Args
+	}
+	return nil
+}
 
 // runSidecar 执行 Go 边车并返回 stdout。
 //
@@ -733,7 +826,8 @@ func runSidecar(sidecar string, args ...string) (string, error) {
 // （分类逻辑在 `internal/parse`，前端不重复实现——两处各判一次必然漂移）。
 func (a *App) Parse(url string, proxy string) (*parse.VideoInfo, error) {
 	ytdlp := a.ResolveYtdlp()
-	if ytdlp == "" {
+	// 抖音和快手拥有专属原生 API 解析，不需要 yt-dlp
+	if ytdlp == "" && !parse.IsDouyin(url) && !parse.IsKuaishou(url) {
 		// 前端据此弹「一键下载」，而不是显示一句「解析失败」
 		return nil, fmt.Errorf("[[deps-missing:yt-dlp]]未找到可用的 yt-dlp，请在「设置 → 运行依赖」中下载后重试")
 	}
@@ -752,21 +846,57 @@ func (a *App) Parse(url string, proxy string) (*parse.VideoInfo, error) {
 		effectiveProxy = proxy
 	}
 
-	info, err := parser.Parse(parse.ParseOptions{
-		YtdlpPath:  ytdlp,
-		URL:        url,
-		Proxy:      effectiveProxy,
-		CookieArgs: a.cookieArgs(),
-		// 原始 info JSON 落在数据目录下而不是 /tmp：
-		// 桌面端可能长期运行，/tmp 会被系统清理，而下载时要读它
-		CacheDir:  filepath.Join(a.dataDir, "parse-cache"),
-		Timeout:   90 * time.Second,
-		JSRuntime: a.parseJSRuntime,
-	})
-	if err != nil {
+	st, _ := a.settingsStore().Load()
+	manualFile := ""
+	if st.CookieMode == "manual" {
+		manualFile = st.CookiesFile
+	}
+
+	attempts := a.cookieManager().GetAttempts(manualFile, false)
+	var lastErr error
+	var failedBrowsers []string
+
+	for _, att := range attempts {
+		var rawStderr string
+		info, err := parser.Parse(parse.ParseOptions{
+			YtdlpPath:   ytdlp,
+			URL:         url,
+			Proxy:       effectiveProxy,
+			CookieArgs:  att.Args,
+			CookiesFile: manualFile,
+			// 原始 info JSON 落在数据目录下而不是 /tmp：
+			// 桌面端可能长期运行，/tmp 会被系统清理，而下载时要读它
+			CacheDir:  filepath.Join(a.dataDir, "parse-cache"),
+			Timeout:   90 * time.Second,
+			RawStderr: &rawStderr,
+			JSRuntime: a.parseJSRuntime,
+		})
+		if err == nil {
+			att.Cleanup()
+			a.cookieManager().OnAttemptSuccess(att)
+			return info, nil
+		}
+		att.Cleanup()
+		lastErr = err
+		checkStr := rawStderr
+		if checkStr == "" {
+			checkStr = err.Error()
+		}
+		if cookie.IsCookieError(checkStr) {
+			a.cookieManager().OnAttemptFailure(att, checkStr)
+			if att.IsBrowser {
+				failedBrowsers = append(failedBrowsers, att.Browser)
+			}
+			continue
+		}
+		// 非 Cookie 错误（如网络中断、无效链接）不重试其他来源
 		return nil, err
 	}
-	return info, nil
+
+	if lastErr != nil && len(failedBrowsers) > 0 {
+		return nil, fmt.Errorf("%s%s", lastErr.Error(), cookie.CookieFailureHint(failedBrowsers))
+	}
+	return nil, lastErr
 }
 
 // ParseDump 返回一份**固定的**解析结果，供 UI 在没有网络或依赖时联调。
@@ -856,11 +986,17 @@ func (a *App) InstallDeps(opts DepsInstallRequest) StartDownloadResult {
 		invalidateDepsCache()
 		defer invalidateDepsCache()
 
+		mirror := opts.Mirror
+		if mirror == "" {
+			st := a.GetSettings()
+			mirror = st.DepMirror
+		}
+
 		err := m.Install(deps.FetchOptions{
 			Only:    opts.Only,
 			Force:   opts.Force,
 			Proxy:   a.currentProxy(),
-			Mirror:  opts.Mirror,
+			Mirror:  mirror,
 			Timeout: 10 * time.Minute,
 		}, func(p deps.Progress) {
 			// 事件名与 TS 版一致：前端只把订阅方式换成 EventsOn

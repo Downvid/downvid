@@ -256,6 +256,25 @@
                   </p>
                 </div>
 
+                <div class="rounded-lg border border-primary/20 bg-primary/5 p-3.5 flex flex-col gap-2">
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                      <MaterialIcon name="rocket_launch" :size="18" class="text-primary" />
+                      <span class="text-sm font-semibold text-on-surface">{{ t('updateSettings.migrationTitle') }}</span>
+                    </div>
+                    <button
+                      type="button"
+                      class="px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/10 rounded transition-colors"
+                      @click="openReleases"
+                    >
+                      {{ t('updateSettings.migrationAction') }}
+                    </button>
+                  </div>
+                  <p class="text-[11px] text-on-surface-variant leading-relaxed">
+                    {{ t('updateSettings.migrationHint') }}
+                  </p>
+                </div>
+
                 <p class="text-[11px] text-on-surface-variant leading-relaxed">
                   {{ t('updateSettings.manualHint') }}
                 </p>
@@ -294,6 +313,7 @@ import { abbreviatePath, ensureHomeDir } from '../composables/usePathDisplay'
 import { readSettings, updateSettings } from '../stores/settings'
 import { normalizeAcceleration, type AccelerationSettings } from '../../shared/acceleration'
 import { UPDATE_SOURCE_IDS, type UpdateSourceId } from '../../shared/update-sources'
+import { RELEASES_URL } from '../../shared/app'
 
 const { showError, showInfo } = useErrorModal()
 
@@ -303,6 +323,10 @@ defineProps<{ visible: boolean }>()
 const emit = defineEmits<{ (e: 'update:visible', v: boolean): void }>()
 
 function close() { emit('update:visible', false) }
+
+function openReleases() {
+  window.electronAPI?.shell?.openExternal?.(RELEASES_URL)
+}
 
 const activeSection = ref('download')
 const sections = [

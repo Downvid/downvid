@@ -48,6 +48,8 @@ type VideoInfo struct {
 	ParseNotice  string        `json:"parseNotice"`
 	// CacheFile 是原始 info JSON 的落盘路径，下载时用 --load-info-json 跳过二次提取
 	CacheFile string `json:"cacheFile,omitempty"`
+	// DirectURL 平台 CDN 直链（仅抖音/快手；有它时后端不走 yt-dlp）
+	DirectURL string `json:"directUrl,omitempty"`
 }
 
 // AudioTrack 是 YouTube 的多音轨。
@@ -85,10 +87,14 @@ type ParseOptions struct {
 	Proxy string
 	// CookieArgs 是 cookie 相关参数（由调用方解析好再传入）
 	CookieArgs []string
+	// CookiesFile 可选，用户指定的 cookies.txt 路径（用于平台专属 API）
+	CookiesFile string
 	// CacheDir 是原始 info JSON 的落盘目录（空则用系统临时目录）
 	CacheDir string
 	// Timeout 是单次解析的总时限
 	Timeout time.Duration
+	// RawStderr 可选：接收最后一次 yt-dlp 执行失败时的原始 stderr 输出（供调用方判断 Cookie 错误以触发降级）
+	RawStderr *string
 	// JSRuntime 只在**解析 YouTube** 时调用，返回 nil 表示没有可用的 Node.js / Deno。
 	//
 	// 做成函数而不是值：探测要真的执行一次 `node --version`，别的站点用不到它，
@@ -168,9 +174,6 @@ type rawFormat struct {
 // 失败时返回的错误消息带 `[[parse-error:kind]]` 标记（与 TS 版同一份契约），
 // 前端据此显示可行动的提示，而不是把 yt-dlp 的英文原文丢给用户。
 func (p *Parser) Parse(opts ParseOptions) (*VideoInfo, error) {
-	if opts.YtdlpPath == "" {
-		return nil, errors.New("[[deps-missing:yt-dlp]]未找到可用的 yt-dlp，请在「设置 → 运行依赖」中下载后重试")
-	}
 	if opts.Timeout <= 0 {
 		opts.Timeout = 90 * time.Second
 	}
@@ -178,6 +181,24 @@ func (p *Parser) Parse(opts ParseOptions) (*VideoInfo, error) {
 	key := opts.URL + "|" + opts.Proxy
 	if cached := p.fromCache(key); cached != nil {
 		return cached, nil
+	}
+
+	// 优先尝试平台专属高速 API（抖音 / 快手），~200ms 直出直链
+	if IsDouyin(opts.URL) {
+		if info, err := ParseDouyinAPI(opts.URL, opts.CookiesFile, opts.Proxy); err == nil && info != nil {
+			p.toCache(key, info)
+			return info, nil
+		}
+	}
+	if IsKuaishou(opts.URL) {
+		if info, err := ParseKuaishouAPI(opts.URL, opts.Proxy); err == nil && info != nil {
+			p.toCache(key, info)
+			return info, nil
+		}
+	}
+
+	if opts.YtdlpPath == "" {
+		return nil, errors.New("[[deps-missing:yt-dlp]]未找到可用的 yt-dlp，请在「设置 → 运行依赖」中下载后重试")
 	}
 
 	isYoutube := IsYouTube(opts.URL)
@@ -250,8 +271,15 @@ func (p *Parser) Parse(opts ParseOptions) (*VideoInfo, error) {
 	}
 
 	if lastErr != nil {
+		if opts.RawStderr != nil {
+			*opts.RawStderr = stderr
+		}
 		kind := ClassifyParseError(stderr)
 		return nil, fmt.Errorf("[[parse-error:%s]]%s", kind, ParseDiagnostic(stderr, Versions{Runtime: runtimeVersion}))
+	}
+
+	if opts.RawStderr != nil && stderr != "" {
+		*opts.RawStderr = stderr
 	}
 
 	// 多视频推文等播放列表会逐行输出多个 JSON，只取第一个条目

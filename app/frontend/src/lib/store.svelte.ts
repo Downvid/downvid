@@ -39,6 +39,8 @@ import {
   diskSpace,
   errorMarker,
   fetchImage,
+  getCookieStatus,
+  type CookieStatus,
   historyAdd,
   historyClear,
   historyDelete,
@@ -246,6 +248,9 @@ class AppStore {
   storageFree = $state(0)
   storageTotal = $state(0)
 
+  // ===== Cookie 状态 =====
+  cookieStatus = $state<CookieStatus | null>(null)
+
   // ===== 应用信息 =====
   version = $state('0.0.0-dev')
 
@@ -304,6 +309,7 @@ class AppStore {
 
     void this.refreshStorage()
     void this.loadHistory()
+    void this.refreshCookieStatus()
 
     // 订阅后端事件。**必须保存 unsubscribe 并在 destroy 时调用**，
     // 否则热重载会累积监听（旧版漏过，表现为「用久了越来越卡」）。
@@ -930,6 +936,12 @@ class AppStore {
     const file = await pickFile(t('settings.cookieFile'), ['txt'])
     if (!file) return
     this.update({ cookieFile: file })
+    void this.refreshCookieStatus()
+  }
+
+  /** 刷新 Cookie 状态 */
+  async refreshCookieStatus(): Promise<void> {
+    this.cookieStatus = await getCookieStatus()
   }
 
   /** 打开 Cookie 文件所在的目录 */
@@ -1162,7 +1174,7 @@ class AppStore {
     })
 
     try {
-      const res = await installDeps({ only: [kind] })
+      const res = await installDeps({ only: [kind], mirror: this.settings.depMirror })
       if (!res.ok) {
         this.toast(res.message || t('toast.depInstallFailed'), 'error')
         return
@@ -1181,7 +1193,7 @@ class AppStore {
   async downloadPromptDeps(): Promise<void> {
     this.depsPromptBusy = true
     try {
-      const res = await installDeps({})
+      const res = await installDeps({ mirror: this.settings.depMirror })
       if (!res.ok) {
         this.toast(res.message || t('toast.depInstallFailed'), 'error')
         return

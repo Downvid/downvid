@@ -1,34 +1,12 @@
 <script lang="ts">
   /**
-   * 最大连接数滑块（离散四档）。
-   *
-   * ## 为什么用 bits-ui 而不是手搓
-   *
-   * 手搓版本在「拖拽 + 吸附 + 键盘 + 无障碍」上反复出问题：
-   * 指针捕获在 WebView 里不稳、键盘方向键没处理、`aria-valuetext` 与
-   * 实际值对不上。这些是**别人已经解决过一万遍**的事。
-   *
-   * `bits-ui` 是 shadcn-svelte 的官方底座（Svelte 5 原生 runes 实现），
-   * Slider 提供：
-   *   - 指针拖拽 + 捕获 + 触摸
-   *   - 键盘（←/→/Home/End/PageUp/PageDown）
-   *   - `aria-valuenow` / `aria-valuetext` 完整语义
-   *   - 离散 `step` 吸附
-   *
-   * 我只负责**视觉**：轨道、能量辐射、thumb、档位标签。
-   *
-   * ## 与旧版的行为差异（都是修正）
-   *
-   * 旧版用 `<input type=range>` + 手工 `dragging` 状态。那是原生控件，
-   * 样式要靠 `appearance:none` 覆盖，而 WebKitGTK 上的伪元素覆盖不完全——
-   * 表现是「macOS 上好看、Linux 上露出一截原生轨道」。bits-ui 用 role=slider
-   * 的 div，完全不依赖原生控件的样式能力。
+   * 下载加速 / 推理强度滑块（离散四档：4, 8, 16, 32）。
+   * 采用 ~/project/gqy 的推理滑块视觉体系与指针动力学交互。
+   * 支持 32 之前各档位（4/8/16）的动态主题色彩、能量流动光效与精确几何布局。
    */
   import { untrack } from 'svelte'
-  import { Slider } from 'bits-ui'
   import { CONNECTION_STOPS, nearestConnectionStop } from '../lib/constants'
   import { t } from '../lib/i18n.svelte'
-  import { drawRadiation, resizeCanvas, type RadiationState } from '../lib/radiation'
 
   interface Props {
     value: number
@@ -39,532 +17,608 @@
 
   let { value, onchange, label = '', compact = false }: Props = $props()
 
-  const STOPS = CONNECTION_STOPS
+  const STOPS = CONNECTION_STOPS // [4, 8, 16, 32]
   const MAX_INDEX = STOPS.length - 1
 
+  const STOP_NAMES = [
+    '轻量 (4)',
+    '均衡 (8 · 推荐)',
+    '高速 (16)',
+    '极速 (32)',
+  ]
+
+  const STOP_DESCS = [
+    '轻量单线程低开销，对弱网与公共 Wi-Fi 极友好',
+    '推荐默认档：多线程并发加速，速度与稳定性达到最佳平衡',
+    '高速多分段迸发，充分释放百兆/千兆家庭宽带潜能',
+    '满载极致极速下载，最大化榨干服务器带宽（高能量 Apex 模式）',
+  ]
+
+  let trackEl = $state<HTMLElement | null>(null)
+  let matrixEl = $state<HTMLElement | null>(null)
+  let pressed = $state(false)
   let dragging = $state(false)
-  let canvas = $state<HTMLCanvasElement | null>(null)
-  let dark = $state(false)
 
-  /**
-   * 滑块值就是**档位下标**（0..MAX_INDEX），不是连接数。
-   *
-   * ## 这里曾经有一个让「鼠标拖不动」的 bug
-   *
-   * 第一版写的是：
-   *
-   *     const index = $derived(Math.max(0, STOPS.indexOf(nearestConnectionStop(value))))
-   *     $effect.pre(() => { if (index !== localIndex && !dragging) localIndex = index })
-   *
-   * 看起来是「外部改了 value 就对齐档位」，实际却把拖动结果吃掉了：
-   *
-   *   1. 拖动 → bits-ui 写 `value` = 3（下标）
-   *   2. `index` 把它当**连接数**去归一化 → `nearestConnectionStop(3)` = 4
-   *      → `STOPS.indexOf(4)` = **0**
-   *   3. `$effect.pre` 发现 `0 !== 3` 且已松手（dragging=false）→ 把 localIndex 拉回 0
-   *
-   * 表现就是**鼠标完全拖不动**，而键盘能用（键盘走 `onValueCommit`，
-   * 那条路径里 `commit()` 直接改的是 `localIndex`，没经过归一化）。
-   *
-   * 修法：`index` 直接就是 `localIndex`，不经过 `nearestConnectionStop`。
-   * 那个函数只在**外部传入的连接数** → 档位的那一次转换里用（见 `initialIndex`）。
-   */
-  /**
-   * 外部连接数 → 档位下标。
-   *
-   * `untrack` 是**刻意的**：这里只想读一次初值，不想让 `value` 的变化
-   * 重新触发整个派生链（那会与 `lastExternal` 的外部同步逻辑打架）。
-   * 不加 `untrack` 时 Svelte 会警告 `state_referenced_locally`——
-   * 那个警告正是提醒「你在捕获初始值而不是建立依赖」，与这里的意图一致。
-   */
-  const initialIndex = untrack(() =>
-    Math.max(0, STOPS.indexOf(nearestConnectionStop(value))),
-  )
+  const initialIndex = untrack(() => Math.max(0, STOPS.indexOf(nearestConnectionStop(value))))
+  let selected = $state(initialIndex)
+  let live = $state(initialIndex)
 
-  /** bits-ui 的滑块值（档位下标）。初值来自外部传入的连接数。 */
-  let localIndex = $state<number>(initialIndex)
-
-  /** 当前档位下标（就是滑块值本身） */
-  const index = $derived(localIndex)
-  const current = $derived(STOPS[index] ?? STOPS[0])
-
-  /**
-   * 外部改了 `value`（比如设置页同步过来）时对齐。
-   *
-   * **只在外部值真的变了时对齐**：用 `lastExternal` 记住上次处理过的外部值，
-   * 否则拖拽过程中每次 `localIndex` 变化都会触发这里，
-   * 而 `value` 是 bind 过去的、此时已等于 `localIndex`，会形成自激。
-   */
+  // 外部 value 响应
   let lastExternal = $state(untrack(() => value))
   $effect.pre(() => {
-    if (value === lastExternal) return
-    lastExternal = value
-    const target = Math.max(0, STOPS.indexOf(nearestConnectionStop(value)))
-    if (target !== localIndex) localIndex = target
+    if (value !== lastExternal) {
+      lastExternal = value
+      const target = Math.max(0, STOPS.indexOf(nearestConnectionStop(value)))
+      if (target !== selected && !pressed) {
+        selected = target
+        live = target
+      }
+    }
   })
 
-  const percent = $derived((localIndex / MAX_INDEX) * 100)
+  // 文字切换过渡
+  let prevValueText = $state('')
+  let ghostText = $state('')
 
-  const labels = $derived([
-    t('settings.effortLight'),
-    t('settings.effortBalanced'),
-    t('settings.effortFast'),
-    t('settings.effortAggressive'),
-  ])
-  const hints = $derived([
-    t('settings.effortLightHint'),
-    t('settings.effortBalancedHint'),
-    t('settings.effortFastHint'),
-    t('settings.effortAggressiveHint'),
-  ])
+  const activeIndex = $derived(pressed ? live : selected)
+  const currentName = $derived(STOP_NAMES[activeIndex] ?? STOP_NAMES[0])
+  const currentDesc = $derived(STOP_DESCS[activeIndex] ?? STOP_DESCS[0])
+  const isApex = $derived(activeIndex === MAX_INDEX)
 
-  function commit(next: number | readonly number[]): void {
-    const i = Array.isArray(next) ? Number(next[0]) : Number(next)
-    localIndex = Math.max(0, Math.min(MAX_INDEX, i))
-    if (STOPS[localIndex] !== value) onchange(STOPS[localIndex])
+  $effect(() => {
+    const next = currentName
+    if (prevValueText && prevValueText !== next) {
+      ghostText = prevValueText
+    }
+    prevValueText = next
+  })
+
+  // 极速 Apex 矩阵粒子效果
+  let matrixWidth = 0
+  function buildMatrix() {
+    if (!matrixEl || !trackEl) return
+    const w = trackEl.clientWidth
+    if (!w || w === matrixWidth) return
+    matrixWidth = w
+    const block = 4
+    const gap = 1
+    const cols = Math.max(1, Math.floor((w + gap) / (block + gap)))
+    matrixEl.style.gridTemplateColumns = `repeat(${cols}, ${block}px)`
+    matrixEl.style.gridAutoRows = `${block}px`
+    matrixEl.style.gap = `${gap}px`
+    let html = ''
+    for (let r = 0; r < 5; r += 1) {
+      for (let c = 0; c < cols; c += 1) {
+        const fx = cols < 2 ? 1 : c / (cols - 1)
+        let fade = 1
+        if (fx <= 0.05) fade = 0
+        else if (fx < 0.78) {
+          const t = (fx - 0.05) / 0.73
+          fade = t * t * (3 - 2 * t)
+        }
+        const delay = (-Math.random() * 2.6).toFixed(2)
+        html += `<i class="effort-cell" style="opacity:${fade.toFixed(2)};animation-delay:${delay}s"></i>`
+      }
+    }
+    matrixEl.innerHTML = html
   }
 
-  /** 跟随系统深浅色。`$effect` 的返回函数就是清理，只有一个出口。 */
   $effect(() => {
-    const mq = window.matchMedia('(prefers-color-scheme: dark)')
-    dark = mq.matches
-    const onChange = (e: MediaQueryListEvent) => { dark = e.matches }
-    mq.addEventListener('change', onChange)
-    return () => mq.removeEventListener('change', onChange)
+    if (isApex) {
+      buildMatrix()
+    }
   })
 
-  /** 辐射层动画。reduced-motion 下只画一帧，不起 rAF。 */
-  $effect(() => {
-    const el = canvas
-    if (!el) return
-    const ctx = el.getContext('2d')
-    if (!ctx) return
-
-    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)')
-    let size = resizeCanvas(el)
-    let frame = 0
-
-    const stateOf = (): RadiationState => ({
-      progress: percent / 100,
-      dragging,
-      top: localIndex === MAX_INDEX,
-      dark,
-    })
-    const draw = (time = performance.now()) => {
-      drawRadiation(ctx, size.width, size.height, time, stateOf())
+  function commit(index: number) {
+    selected = Math.max(0, Math.min(MAX_INDEX, index))
+    live = selected
+    const nextVal = STOPS[selected]
+    if (nextVal !== value) {
+      lastExternal = nextVal
+      onchange(nextVal)
     }
-    const loop = (time: number) => {
-      draw(time)
-      frame = requestAnimationFrame(loop)
+  }
+
+  function travelFor(clientX: number): number {
+    if (!trackEl) return 0
+    const rect = trackEl.getBoundingClientRect()
+    const s = Math.max(0, rect.width - 18)
+    const raw = Math.max(0, Math.min(s, clientX - rect.left - 9))
+    if (MAX_INDEX < 1 || !s) return raw
+    const seg = s / MAX_INDEX
+    if (!seg) return raw
+    const i = Math.min(MAX_INDEX - 1, Math.floor(raw / seg))
+    const t = (raw - i * seg) / seg
+    return (i + t - (0.8 * Math.sin(2 * Math.PI * t)) / (2 * Math.PI)) * seg
+  }
+
+  function nearest(x: number): number {
+    if (!trackEl) return 0
+    const s = Math.max(0, trackEl.clientWidth - 18)
+    if (MAX_INDEX < 1 || !s) return 0
+    return Math.max(0, Math.min(MAX_INDEX, Math.round((x / s) * MAX_INDEX)))
+  }
+
+  function onPointerDown(e: PointerEvent) {
+    if (e.button !== 0 || !trackEl) return
+    pressed = true
+    dragging = false
+    try {
+      trackEl.setPointerCapture(e.pointerId)
+    } catch {}
+    live = nearest(travelFor(e.clientX))
+  }
+
+  function onPointerMove(e: PointerEvent) {
+    if (!pressed) return
+    dragging = true
+    live = nearest(travelFor(e.clientX))
+  }
+
+  function onPointerUp(e: PointerEvent) {
+    if (!pressed) return
+    if (dragging) {
+      live = nearest(travelFor(e.clientX))
     }
+    commit(live)
+    pressed = false
+    dragging = false
+    try {
+      trackEl?.releasePointerCapture(e.pointerId)
+    } catch {}
+  }
 
-    const observer = new ResizeObserver(() => {
-      size = resizeCanvas(el)
-      if (reduced.matches) draw()
-    })
-    observer.observe(el)
-
-    draw()
-    if (!reduced.matches) frame = requestAnimationFrame(loop)
-
-    return () => {
-      cancelAnimationFrame(frame)
-      observer.disconnect()
+  function onKeyDown(e: KeyboardEvent) {
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+      e.preventDefault()
+      commit(selected - 1)
+    } else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      commit(selected + 1)
+    } else if (e.key === 'Home') {
+      e.preventDefault()
+      commit(0)
+    } else if (e.key === 'End') {
+      e.preventDefault()
+      commit(MAX_INDEX)
     }
-  })
+  }
 </script>
 
-<!--
-  `dragging` 用外层容器的指针事件驱动，**不挂在 Slider.Root 上**：
-  bits-ui 的 Root 类型只接受它自己声明过的 props，`onPointerDown` 不在其中
-  （类型检查会报错，运行时也不会被转发到真正的 DOM 节点上）。
-  挂在容器上还能顺带覆盖「在轨道空白处按下」的情况——那同样该算拖拽中。
-
-  `pointercancel` / `lostpointercapture` 必须一起处理：拖到窗口外松手时
-  浏览器只发这两个事件，不补发 pointerup，否则 `dragging` 会永远卡在 true，
-  辐射层就一直保持「拖拽中」的高亮。
--->
 <div
-  class="effort"
+  class="effort level-{activeIndex}"
   class:is-compact={compact}
-  onpointerdown={() => (dragging = true)}
-  onpointerup={() => (dragging = false)}
-  onpointercancel={() => (dragging = false)}
-  onlostpointercapture={() => (dragging = false)}
+  class:is-apex={isApex}
+  class:is-hot={activeIndex >= 2}
 >
   <div class="effort-head">
-    {#if label}<span class="effort-title">{label}</span>{/if}
-    <span class="effort-readout">
-      <span class="effort-value num">{current}</span>
-      <span class="effort-tag">{labels[index]}</span>
+    <span class="effort-label">{label || t('settings.accel')}</span>
+    <span class="effort-value-wrap">
+      {#key currentName}
+        <span class="effort-value">{currentName}</span>
+      {/key}
+      {#if ghostText}
+        {#key ghostText}
+          <span class="effort-ghost" aria-hidden="true">{ghostText}</span>
+        {/key}
+      {/if}
     </span>
   </div>
 
-  <!--
-    bits-ui 的 Slider.Root 负责全部交互与无障碍：
-      - 指针拖拽（含 setPointerCapture）
-      - 键盘：←/→ 一档、Home/End 首末档
-      - aria-valuenow / aria-valuetext / role=slider
-    视觉完全由下面的元素决定。
-  -->
-  <!--
-    **必须用 `bind:value`，不能用 `value=`。**
+  {#if !compact}
+    <div class="effort-ends">
+      <span>轻量 (4)</span>
+      <span>均衡 (8)</span>
+      <span>高速 (16)</span>
+      <span>极速 (32)</span>
+    </div>
+  {/if}
 
-    这是能否拖动的**根本原因**，也是我排查最久的一处：
-    bits-ui 的 `updateValue()` 内部是
-
-        this.opts.value.current = snapValueToCustomSteps(...)
-
-    也就是说它**直接给 `value` 赋值**。单向 `value={localIndex}` 时，
-    `opts.value.current` 拿到的是 `$props()` 解构后的**普通变量快照**，
-    改它不会触发 Svelte 的响应式——表现为：
-
-      - 键盘能用（键盘走 `onValueChange` 回调，我手动赋值了）
-      - **鼠标拖拽完全不动**（走 `updateValue` 直接改内部引用）
-
-    `value` 在 bits-ui 里声明为 `$bindable()`，用 `bind:` 才能双向同步。
-  -->
-  <Slider.Root
-    type="single"
-    min={0}
-    max={MAX_INDEX}
-    step={1}
-    bind:value={localIndex}
-    onValueCommit={(v) => commit(v)}
-    aria-label={label || t('settings.maxConnections')}
-    class="effort-slider"
-    data-top={localIndex === MAX_INDEX ? '' : undefined}
+  <div
+    bind:this={trackEl}
+    class="effort-track"
+    role="slider"
+    tabindex="0"
+    aria-label={label || t('settings.accel')}
+    aria-valuemin={0}
+    aria-valuemax={MAX_INDEX}
+    aria-valuenow={activeIndex}
+    aria-valuetext={currentName}
+    data-dragging={dragging ? '' : undefined}
+    onpointerdown={onPointerDown}
+    onpointermove={onPointerMove}
+    onpointerup={onPointerUp}
+    onpointercancel={onPointerUp}
+    onkeydown={onKeyDown}
   >
-    {#snippet children({ thumbItems, tickItems })}
-      <div class="effort-track" class:is-hot={localIndex >= 2}>
-        <!-- 能量辐射层：裁剪在拇指左侧（见 lib/radiation.ts） -->
-        <canvas class="effort-radiation" bind:this={canvas} aria-hidden="true"></canvas>
+    <!-- 背景流光与填充条（纯 CSS 计算，零尺寸坍缩） -->
+    <div
+      class="effort-fill"
+      style="width: calc({activeIndex} * (100% - 18px) / {MAX_INDEX} + 18px)"
+    >
+      <span class="fill-shimmer" aria-hidden="true"></span>
+    </div>
 
-        <!-- 已填充区：从 0 到拇指 -->
-        <div class="effort-fill" style="width: {percent}%"></div>
+    <!-- 刻度点 -->
+    <div class="effort-ticks">
+      {#each STOPS as _, i}
+        <i
+          class="effort-tick"
+          class:is-active={i === activeIndex}
+          class:is-passed={i <= activeIndex}
+          style="left: calc({i} * (100% - 18px) / {MAX_INDEX} + 9px)"
+        ></i>
+      {/each}
+    </div>
 
-        <!-- 档位刻点 -->
-        {#each tickItems as tick (tick.value)}
-          <span
-            class="effort-stop"
-            class:is-passed={tick.value <= localIndex}
-            class:is-current={tick.value === localIndex}
-            style="left: {(tick.value / MAX_INDEX) * 100}%"
-          ></span>
-        {/each}
+    <!-- 32 档 Apex 矩阵 -->
+    <div bind:this={matrixEl} class="effort-matrix" aria-hidden="true"></div>
 
-        <!-- 拇指 -->
-        {#each thumbItems as thumb (thumb.index)}
-          <!-- `class:` 指令不能用在组件上（Svelte 5 限制），用条件字符串 -->
-          <Slider.Thumb
-            index={thumb.index}
-            class="effort-thumb{dragging ? ' is-dragging' : ''}"
-            aria-label={labels[localIndex]}
-            aria-valuetext="{current} · {labels[localIndex]}"
-          ></Slider.Thumb>
-        {/each}
-      </div>
-    {/snippet}
-  </Slider.Root>
-
-  <!-- 档位标签：可点（点标签也能选档，比拖更精确） -->
-  <div class="effort-labels">
-    {#each STOPS as stop, i (stop)}
-      <button
-        type="button"
-        class="effort-label"
-        class:is-current={i === index}
-        onclick={() => commit(i)}
-      >
-        {labels[i]}
-      </button>
-    {/each}
+    <!-- 滑块旋钮 -->
+    <div
+      class="effort-knob"
+      style="left: calc({activeIndex} * (100% - 18px) / {MAX_INDEX})"
+    >
+      <span class="knob-core"></span>
+    </div>
   </div>
 
-  {#if !compact && index < 2}
-    <p class="effort-hint">{hints[index]}</p>
+  {#if !compact}
+    <p class="effort-desc">{currentDesc}</p>
   {/if}
 </div>
 
 <style>
   .effort {
-    position: relative;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    width: 100%;
-    max-width: 320px;
-    min-width: 0;
-  }
-  .is-compact {
-    max-width: 268px;
     gap: 4px;
+    padding: 8px 12px 10px;
+    user-select: none;
+    border-radius: var(--radius-panel, 12px);
+    background: var(--paper-raised, #ffffff);
+    border: 1px solid var(--rule, rgba(0, 0, 0, 0.08));
+    width: 100%;
+    max-width: 520px;
+    transition:
+      border-color 0.22s ease,
+      box-shadow 0.22s ease,
+      background 0.22s ease;
   }
-
+  .effort.is-compact {
+    padding: 4px 6px 6px;
+    background: transparent;
+    border: none;
+    max-width: 480px;
+  }
   .effort-head {
     display: flex;
     align-items: baseline;
-    justify-content: space-between;
-    gap: 12px;
-    min-height: 16px;
+    gap: 8px;
+    position: relative;
+    min-width: 0;
   }
-  .effort:not(:has(.effort-title)) .effort-head {
-    justify-content: flex-end;
-  }
-  .effort-title {
-    font-family: var(--font-code);
-    font-size: 8.5px;
-    font-weight: 600;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--color-on-surface-variant);
-    white-space: nowrap;
-  }
-  .effort-readout {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
+  .effort-label {
     flex: none;
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 500;
+    color: var(--color-on-surface-variant, #666);
+    letter-spacing: 0.02em;
+  }
+  .effort-value-wrap {
+    position: relative;
+    min-width: 0;
+    flex: 0 1 auto;
+    display: inline-flex;
   }
   .effort-value {
-    font-size: 14px;
+    font-size: 13px;
+    line-height: 16px;
     font-weight: 600;
-    color: var(--color-on-surface);
-    font-variant-numeric: tabular-nums;
-  }
-  .effort-tag {
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    color: var(--color-primary);
-    text-transform: uppercase;
-  }
-
-  /* ===== 轨道容器 =====
-     
-     **必须用 :global()**：这个 class 传给了 `Slider.Root`（一个组件），
-     而 Svelte 的 scoped 样式只给**本文件里的原生元素**加作用域 hash。
-     组件内部渲染出的元素不带这个 hash，所以 `.effort-slider.s-xxx` 匹配不到
-     真实的 `.effort-slider` —— 表现是「高度 0、圆角丢失」，
-     而构建完全不报错（第一版就是这样，截图里滑块被压成一条线）。
-  */
-  :global(.effort-slider) {
-    position: relative;
-    display: block;
-    width: 100%;
-    height: 26px;
-    border-radius: 999px;
-    touch-action: none;
-    user-select: none;
-    -webkit-user-select: none;
-  }
-  :global(.effort-slider:focus-visible) {
-    outline: 2px solid color-mix(in oklab, var(--color-primary) 70%, transparent);
-    outline-offset: 3px;
-  }
-
-  /*
-    轨道**必须是深色**——这是参考实现的关键，我第一版搞反了。
-
-    能量辐射用的是 `mix-blend-mode: screen`（只增亮），它需要深色底才能显出来。
-    在浅色底上 screen 会把橙色叠到接近白，整条轨道糊成一片，
-    只剩竖条纹隐约可见——截图里的样子。
-
-    参考实现的轨道是 `#03040a → #5d35a0`（近黑 → 蓝紫）。
-    这里换成同结构的琥珀色系：近黑棕 → 深琥珀 → 亮琥珀。
-  */
-  .effort-track {
-    position: absolute;
-    inset: 0;
+    white-space: nowrap;
     overflow: hidden;
-    border-radius: inherit;
-    /* 整体压暗：能量层用 screen 叠加，底色越暗对比越强。
-       之前的 #7d4a12 太亮，右半段（未到的地方）看着像「已经满了」。 */
-    background: linear-gradient(
-      100deg,
-      #060402 0%,
-      #120b03 22%,
-      #24160a 45%,
-      #38220e 70%,
-      #4a2c12 100%
-    );
-    box-shadow:
-      inset 0 1px 0 rgba(255, 220, 180, 0.14),
-      inset 0 -1px 0 rgba(0, 0, 0, 0.5),
-      0 2px 8px rgba(40, 22, 6, 0.28);
-    isolation: isolate;
+    text-overflow: ellipsis;
+    transition: color 0.22s ease;
+    animation: effortSwapIn 0.22s cubic-bezier(0.2, 0.7, 0.2, 1);
   }
-  /* 轨道上的第二层：给深色底一点暖色不均匀，纯线性渐变太「塑料」 */
-  .effort-track::after {
+  .effort-ghost {
+    position: absolute;
+    left: 0;
+    top: 0;
+    font-size: 13px;
+    line-height: 16px;
+    font-weight: 600;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    animation: effortSwapOut 0.22s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+  }
+
+  /* 档位专属色彩体系与文字动效 */
+  .effort.level-0 .effort-value {
+    color: #059669;
+  }
+  .effort.level-1 .effort-value {
+    color: var(--primary, #2563eb);
+  }
+  .effort.level-2 .effort-value {
+    color: #d97706;
+  }
+  .effort.level-3 .effort-value {
+    color: #7c5ce6;
+  }
+
+  @keyframes effortSwapIn {
+    from {
+      opacity: 0;
+      filter: blur(4px);
+      transform: translateY(5px);
+    }
+    to {
+      opacity: 1;
+      filter: blur(0);
+      transform: translateY(0);
+    }
+  }
+  @keyframes effortSwapOut {
+    from {
+      opacity: 1;
+      filter: blur(0);
+      transform: translateY(0);
+    }
+    to {
+      opacity: 0;
+      filter: blur(4px);
+      transform: translateY(-5px);
+    }
+  }
+
+  .effort-ends {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 10.5px;
+    line-height: 14px;
+    color: var(--color-on-surface-variant, #888);
+    margin-top: 1px;
+    padding: 0 2px;
+  }
+
+  /* 轨道基础样式 */
+  .effort-track {
+    position: relative;
+    height: 30px;
+    margin-top: 2px;
+    cursor: pointer;
+    touch-action: none;
+    outline: none;
+  }
+  .effort-track::before {
     content: '';
     position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background:
-      radial-gradient(circle at 18% 45%, rgba(255, 168, 64, 0.1), transparent 24%),
-      linear-gradient(90deg, rgba(0, 0, 0, 0.28), transparent 42%, rgba(255, 152, 0, 0.12));
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 24px;
+    margin-top: -12px;
+    border-radius: 8px;
+    background: var(--paper-sunk, rgba(20, 20, 19, 0.07));
+    transition: background 0.2s ease;
+  }
+  .effort-track:focus-visible::before {
+    box-shadow: 0 0 0 2px var(--primary, #3b82f6);
   }
 
-  .effort-radiation {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    border-radius: inherit;
-    pointer-events: none;
-    z-index: 1;
-    mix-blend-mode: screen;
-    transition: filter 140ms var(--ease-out);
-  }
-  .is-dragging .effort-radiation {
-    filter: saturate(1.45) brightness(1.28) contrast(1.06);
-    transition: none;
-  }
-
-  /*
-    已填充区。深色轨道上它负责「走到哪了」的直觉，
-    但**不能太亮**——否则会盖掉 canvas 的辐射层。
-    放在 canvas 之下（z-index 0 vs 1），只做底色渐变。
-  */
+  /* 填充条（按档位渲染渐变光效） */
   .effort-fill {
     position: absolute;
-    inset: 0 auto 0 0;
+    left: 0;
+    top: 50%;
+    height: 24px;
+    margin-top: -12px;
+    border-radius: 8px;
+    overflow: hidden;
+    pointer-events: none;
+    transition:
+      width 0.24s cubic-bezier(0.2, 0.7, 0.2, 1),
+      background 0.24s ease,
+      box-shadow 0.24s ease,
+      opacity 0.2s ease;
+  }
+
+  .effort.level-0 .effort-fill {
+    background: linear-gradient(90deg, rgba(16, 185, 129, 0.3), rgba(16, 185, 129, 0.55));
+    box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+  }
+  .effort.level-1 .effort-fill {
+    background: linear-gradient(90deg, rgba(59, 130, 246, 0.32), rgba(37, 99, 235, 0.6));
+    box-shadow: 0 0 12px rgba(37, 99, 235, 0.24);
+  }
+  .effort.level-2 .effort-fill {
+    background: linear-gradient(90deg, rgba(245, 158, 11, 0.35), rgba(234, 88, 12, 0.65));
+    box-shadow: 0 0 14px rgba(234, 88, 12, 0.3);
+  }
+  .effort.level-3 .effort-fill {
+    background: linear-gradient(90deg, rgba(139, 122, 208, 0.35), rgba(124, 92, 230, 0.7));
+  }
+
+  /* 32 之前的动态光泽微流动 */
+  .fill-shimmer {
+    position: absolute;
+    inset: 0;
     background: linear-gradient(
       90deg,
-      rgba(140, 81, 0, 0.35) 0%,
-      rgba(255, 152, 0, 0.28) 100%
+      transparent 0%,
+      rgba(255, 255, 255, 0.22) 50%,
+      transparent 100%
     );
-    transition: width 190ms var(--ease-out);
-    z-index: 0;
-  }
-
-  .effort-stop {
-    position: absolute;
-    top: 50%;
-    width: 3px;
-    height: 3px;
-    border-radius: 50%;
-    transform: translate(-50%, -50%);
-    background: rgba(255, 214, 170, 0.32);
-    transition: background 160ms var(--ease-out), transform 160ms var(--ease-out);
-    z-index: 2;
+    background-size: 200% 100%;
+    animation: fillShimmer 3s infinite linear;
     pointer-events: none;
   }
-  .effort-stop.is-passed {
-    background: rgba(255, 190, 120, 0.75);
-  }
-  /*
-    当前档位的刻点**不该放大**：它就在 thumb 底下，放大后四个角会从
-    圆形 thumb 的边上露出来，看起来像「拇指是个圆角方块」——
-    截图里就是这样被骗了很久（thumb 的 radius 一直是 50%）。
-
-    参考实现里也没有这个放大的刻点：thumb 本身就是「当前位置」的指示。
-  */
-  .effort-stop.is-current {
-    opacity: 0;
+  @keyframes fillShimmer {
+    0% {
+      background-position: -200% 0;
+    }
+    100% {
+      background-position: 200% 0;
+    }
   }
 
-  /* ===== 拇指 ===== */
-  /* 拇指是纯白实心圆：深色轨道上唯一的「实」元素，视觉焦点。
-     同样必须 :global —— 它是 `Slider.Thumb` 组件渲染的，
-     Svelte 不会给它加本文件的作用域 hash（第一版这里高度 0，拇指不可见）。 */
-  :global(.effort-thumb) {
+  /* 刻度点 */
+  .effort-ticks {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .effort-tick {
+    position: absolute;
+    top: 50%;
+    width: 4px;
+    height: 4px;
+    margin-top: -2px;
+    transform: translateX(-50%);
+    border-radius: 50%;
+    background: var(--ink-faint, rgba(20, 20, 19, 0.22));
+    transition:
+      background 0.2s ease,
+      transform 0.2s ease,
+      box-shadow 0.2s ease;
+  }
+  .effort-tick.is-passed {
+    background: rgba(255, 255, 255, 0.7);
+    box-shadow: 0 0 4px rgba(255, 255, 255, 0.6);
+  }
+  .effort-tick.is-active {
+    background: #ffffff;
+    transform: translateX(-50%) scale(1.3);
+    box-shadow: 0 0 6px rgba(255, 255, 255, 0.9);
+  }
+
+  /* 旋钮 (Knob) */
+  .effort-knob {
     position: absolute;
     top: 50%;
     width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: #fff;
-    border: 1px solid rgba(255, 255, 255, 0.94);
+    height: 28px;
+    margin-top: -14px;
+    border-radius: 6px;
+    background: var(--paper-raised, #ffffff);
     box-shadow:
-      0 0 0 2px rgba(255, 176, 64, 0.25),
-      0 0 14px rgba(255, 152, 0, 0.55),
-      0 2px 7px rgba(0, 0, 0, 0.32);
-    transform: translate(-50%, -50%);
+      0 1px 3px rgba(20, 20, 19, 0.25),
+      0 0 0 1px rgba(20, 20, 19, 0.08);
     transition:
-      transform 160ms var(--ease-out),
-      box-shadow 160ms var(--ease-out);
-    z-index: 3;
-    cursor: grab;
+      left 0.24s cubic-bezier(0.2, 0.7, 0.2, 1),
+      transform 0.15s ease,
+      box-shadow 0.22s ease,
+      background 0.22s ease;
+    pointer-events: none;
+    display: grid;
+    place-items: center;
   }
-  :global(.effort-thumb:hover),
-  :global(.effort-thumb.is-dragging) {
+
+  .knob-core {
+    width: 4px;
+    height: 10px;
+    border-radius: 2px;
+    background: var(--color-on-surface-variant, #ccc);
+    transition: background 0.22s ease;
+  }
+
+  .effort.level-0 .effort-knob {
     box-shadow:
-      0 0 0 3px rgba(255, 176, 64, 0.32),
-      0 0 22px rgba(255, 152, 0, 0.85),
-      0 0 34px rgba(255, 120, 0, 0.45),
-      0 3px 8px rgba(0, 0, 0, 0.34);
+      0 1px 4px rgba(0, 0, 0, 0.22),
+      0 0 8px rgba(16, 185, 129, 0.4);
   }
-  :global(.effort-thumb.is-dragging) {
-    transform: translate(-50%, -50%) scale(1.07);
+  .effort.level-0 .knob-core {
+    background: #10b981;
+  }
+
+  .effort.level-1 .effort-knob {
+    box-shadow:
+      0 1px 5px rgba(0, 0, 0, 0.24),
+      0 0 10px rgba(37, 99, 235, 0.45);
+  }
+  .effort.level-1 .knob-core {
+    background: #2563eb;
+  }
+
+  .effort.level-2 .effort-knob {
+    box-shadow:
+      0 1px 5px rgba(0, 0, 0, 0.25),
+      0 0 12px rgba(234, 88, 12, 0.5);
+  }
+  .effort.level-2 .knob-core {
+    background: #ea580c;
+  }
+
+  .effort-track[data-dragging] .effort-knob,
+  .effort-track[data-dragging] .effort-fill {
     transition: none;
-    cursor: grabbing;
   }
-  :global(.effort-thumb:focus-visible) {
-    outline: 2px solid color-mix(in oklab, var(--color-primary) 70%, transparent);
-    outline-offset: 3px;
-  }
-
-  /* 最高档：整条轨道极缓呼吸（静置也有「满负荷」暗示） */
-  @keyframes effort-breathe {
-    0%, 100% { filter: brightness(1); }
-    50% { filter: brightness(1.06); }
-  }
-  .effort-slider[data-top] .effort-track {
-    animation: effort-breathe 1.9s ease-in-out infinite;
+  .effort-track[data-dragging] .effort-knob {
+    transform: scale(1.08, 1.04);
+    box-shadow:
+      0 3px 12px rgba(20, 20, 19, 0.35),
+      0 0 0 1px rgba(20, 20, 19, 0.1);
   }
 
-
-  /* ===== 档位标签 ===== */
-  .effort-labels {
-    display: flex;
-    justify-content: space-between;
-    gap: 2px;
-  }
-  .effort-label {
-    flex: 1;
-    min-width: 0;
-    font: inherit;
-    font-size: 9.5px;
-    font-weight: 500;
-    letter-spacing: 0.02em;
-    padding: 2px 0;
-    border: 0;
-    background: none;
-    color: var(--color-on-surface-variant);
-    opacity: 0.62;
-    cursor: pointer;
-    transition: color 160ms var(--ease-out), opacity 160ms var(--ease-out);
+  /* 32 档 Apex 矩阵特效 */
+  .effort-matrix {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    height: 24px;
+    margin-top: -12px;
+    border-radius: 8px;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    display: none;
+    padding: 1px;
+    box-sizing: border-box;
+    pointer-events: none;
   }
-  .effort-label:hover {
-    opacity: 0.9;
+  .effort.is-apex .effort-matrix {
+    display: grid;
   }
-  .effort-label.is-current {
-    color: var(--color-primary);
-    opacity: 1;
-    font-weight: 600;
+  .effort.is-apex .effort-fill,
+  .effort.is-apex .effort-ticks {
+    opacity: 0;
+  }
+  :global(.effort-cell) {
+    background: #8b7ad0;
+    border-radius: 1px;
+    animation: effortFlash 2.6s infinite ease-in-out;
+  }
+  @keyframes effortFlash {
+    0%, 14% {
+      background: #8b7ad0;
+    }
+    20%, 34% {
+      background: #d9d2f5;
+    }
+    100% {
+      background: #8b7ad0;
+    }
+  }
+  .effort.is-apex .effort-knob {
+    background: color-mix(in srgb, #8b7ad0 22%, #ffffff);
+    box-shadow:
+      0 0 12px color-mix(in srgb, #8b7ad0 80%, transparent),
+      0 0 0 1px color-mix(in srgb, #8b7ad0 40%, transparent);
+  }
+  .effort.is-apex .knob-core {
+    background: #7c5ce6;
   }
 
-  .effort-hint {
-    margin: 0;
-    font-size: 10px;
-    line-height: 1.45;
-    color: var(--color-on-surface-variant);
-    opacity: 0.78;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .effort-slider[data-top] .effort-track {
-      animation: none;
-    }
-    .effort-fill,
-    .effort-thumb,
-    .effort-stop,
-    .effort-radiation {
-      transition: none;
-    }
+  .effort-desc {
+    margin: 4px 2px 0;
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--color-on-surface-variant, #777);
+    min-height: 1.5em;
   }
 </style>

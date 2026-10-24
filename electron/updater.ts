@@ -157,7 +157,7 @@ export function stripOwnQuarantine() {
 
 async function downloadMacUpdate(info: UpdateInfo): Promise<void> {
   const isArm = process.arch === 'arm64'
-  const file = info.files.find(f => f.url.endsWith('.zip') && f.url.includes('arm64') === isArm)
+  const file = info.files.find(f => f.url.endsWith('.zip') && (f.url.includes('universal') || f.url.includes('arm64') === isArm))
   if (!file) throw new Error(`发布版本中缺少 ${process.arch} 架构的安装包`)
 
   const workDir = path.join(app.getPath('userData'), 'pending-update')

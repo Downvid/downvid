@@ -11,6 +11,7 @@
   import { parseInline, splitSummary } from '../lib/markdown'
   import { t } from '../lib/i18n.svelte'
   import { APP_VERSION, REPO_URL, WEBSITE_URL } from '../lib/constants'
+  import { openExternal } from '../lib/backend'
   // 邮箱与 mailto 拼装沿用应用现有的唯一来源，避免在演示里复制一份
   import { CONTACT_EMAIL, contactMailto } from '../../../../shared/app'
 
@@ -193,7 +194,7 @@
    *
    * 真机上只做第 1 条时，卡片仍有 824px —— 一屏放不下。
    */
-  const MAX_LISTED = 6
+  const MAX_LISTED = 4
   let showAllNotes = $state(false)
   $effect(() => {
     void selectedVersion
@@ -240,10 +241,6 @@
       url: LICENSE_URL,
     },
   ])
-
-  function openExternal(url: string): void {
-    window.open(url, '_blank', 'noopener')
-  }
 
   function onUpdateClick(): void {
     if (available) app.openUpdateDialog()
@@ -420,29 +417,62 @@
       <span class="section-label">{t('about.contributors')}</span>
       <span class="section-rule"></span>
     </div>
-    <div class="contributors">
-      {#each CONTRIBUTORS as person (person.login)}
-        <a
-          class="contributor"
-          href={'https://github.com/' + person.login}
-          target="_blank"
-          rel="noopener"
-        >
-          <span class="avatar">
-            <span class="avatar-fallback">{person.login.slice(0, 1).toUpperCase()}</span>
-            <img
-              src={'https://github.com/' + person.login + '.png?size=112'}
-              alt=""
-              loading="lazy"
-              onerror={(event) => {
-                ;(event.currentTarget as HTMLImageElement).style.display = 'none'
-              }}
-            />
-          </span>
-          <span class="contributor-name">{person.login}</span>
-          {#if person.role}<span class="contributor-role num">{person.role}</span>{/if}
-        </a>
-      {/each}
+    <div class="marquee-wrapper">
+      <div class="marquee-track">
+        <div class="marquee-group">
+          {#each CONTRIBUTORS as person (person.login)}
+            <button
+              type="button"
+              class="contributor-chip"
+              onclick={() => openExternal('https://github.com/' + person.login)}
+              title={'GitHub: ' + person.login}
+            >
+              <span class="chip-avatar">
+                <span class="chip-fallback">{person.login.slice(0, 1).toUpperCase()}</span>
+                <img
+                  src={'https://github.com/' + person.login + '.png?size=72'}
+                  alt=""
+                  loading="lazy"
+                  onerror={(event) => {
+                    ;(event.currentTarget as HTMLElement).style.display = 'none'
+                  }}
+                />
+              </span>
+              <span class="chip-name num">{person.login}</span>
+              {#if person.role}
+                <span class="chip-role num">{person.role}</span>
+              {/if}
+            </button>
+          {/each}
+        </div>
+        <div class="marquee-group" aria-hidden="true">
+          {#each CONTRIBUTORS as person (`dup-${person.login}`)}
+            <button
+              type="button"
+              class="contributor-chip"
+              tabindex="-1"
+              onclick={() => openExternal('https://github.com/' + person.login)}
+              title={'GitHub: ' + person.login}
+            >
+              <span class="chip-avatar">
+                <span class="chip-fallback">{person.login.slice(0, 1).toUpperCase()}</span>
+                <img
+                  src={'https://github.com/' + person.login + '.png?size=72'}
+                  alt=""
+                  loading="lazy"
+                  onerror={(event) => {
+                    ;(event.currentTarget as HTMLElement).style.display = 'none'
+                  }}
+                />
+              </span>
+              <span class="chip-name num">{person.login}</span>
+              {#if person.role}
+                <span class="chip-role num">{person.role}</span>
+              {/if}
+            </button>
+          {/each}
+        </div>
+      </div>
     </div>
   </section>
 
@@ -474,14 +504,28 @@
     <div class="contact-block">
       <p class="contact-hint">{t('about.contactHint')}</p>
       <div class="contact-grid">
-        <a class="contact" href={sponsorMailto}>
+        <a
+          class="contact"
+          href={sponsorMailto}
+          onclick={(e) => {
+            e.preventDefault()
+            openExternal(sponsorMailto)
+          }}
+        >
           <span class="contact-icon"><Icon name="handshake" size={16} /></span>
           <span class="contact-body">
             <span class="contact-title">{t('about.contactSponsor')}</span>
             <span class="contact-email num">{CONTACT_EMAIL}</span>
           </span>
         </a>
-        <a class="contact" href={businessMailto}>
+        <a
+          class="contact"
+          href={businessMailto}
+          onclick={(e) => {
+            e.preventDefault()
+            openExternal(businessMailto)
+          }}
+        >
           <span class="contact-icon"><Icon name="campaign" size={16} /></span>
           <span class="contact-body">
             <span class="contact-title">{t('about.contactBusiness')}</span>
@@ -806,70 +850,101 @@
     color: var(--accent-deep);
   }
 
-  /* ---------- 贡献者 ---------- */
+  /* ---------- 贡献者无限横幅滚动 ---------- */
   .contributors-section {
     margin-top: 24px;
   }
-  .contributors {
-    display: grid;
-    grid-template-columns: repeat(7, minmax(0, 1fr));
-    gap: 8px;
+  .marquee-wrapper {
+    overflow: hidden;
+    position: relative;
+    width: 100%;
+    padding: 8px 0;
+    mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
+    -webkit-mask-image: linear-gradient(to right, transparent, black 5%, black 95%, transparent);
   }
-  .contributor {
+  .marquee-track {
     display: flex;
-    flex-direction: column;
+    width: max-content;
+    animation: marquee-scroll 24s linear infinite;
+  }
+  .marquee-track:hover {
+    animation-play-state: paused;
+  }
+  .marquee-group {
+    display: flex;
     align-items: center;
-    gap: 5px;
-    min-width: 0;
-    padding: 10px 6px 9px;
-    border: 1px solid var(--rule);
-    border-radius: var(--radius-control);
+    gap: 12px;
+    padding-right: 12px;
+  }
+  @keyframes marquee-scroll {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+  .contributor-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 12px 5px 6px;
+    border-radius: 9999px;
     background: var(--paper-raised);
-    text-decoration: none;
+    border: 1px solid var(--rule);
+    color: var(--ink);
+    cursor: pointer;
     transition:
-      border-color var(--dur-base) var(--ease-out),
-      background-color var(--dur-base) var(--ease-out);
+      transform 0.16s ease,
+      border-color 0.16s ease,
+      box-shadow 0.16s ease,
+      background-color 0.16s ease;
+    white-space: nowrap;
+    user-select: none;
   }
-  .contributor:hover {
-    border-color: color-mix(in oklab, var(--accent-deep) 40%, transparent);
-    background: color-mix(in oklab, var(--accent-wash) 35%, var(--paper-raised));
+  .contributor-chip:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in oklab, var(--accent-deep) 50%, transparent);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    background: var(--paper);
   }
-  .avatar {
+  .chip-avatar {
     position: relative;
     display: grid;
     place-items: center;
-    width: 34px;
-    height: 34px;
-    overflow: hidden;
+    width: 24px;
+    height: 24px;
     border-radius: 50%;
+    overflow: hidden;
     background: var(--accent-wash);
+    flex-shrink: 0;
   }
-  .avatar img {
+  .chip-avatar img {
     position: absolute;
     inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
   }
-  .avatar-fallback {
+  .chip-fallback {
     font-family: var(--font-code);
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 700;
     color: var(--accent-deep);
   }
-  .contributor-name {
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-family: var(--font-code);
-    font-size: 9px;
+  .chip-name {
+    font-size: 12px;
+    font-weight: 500;
     color: var(--ink);
   }
-  .contributor-role {
-    font-size: 7px;
+  .chip-role {
+    font-size: 8px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: color-mix(in oklab, var(--accent-deep) 12%, transparent);
+    color: var(--accent-deep);
     letter-spacing: 0.04em;
-    color: color-mix(in oklab, var(--accent-deep) 78%, transparent);
   }
 
   /* ---------- 底部信息 ---------- */
@@ -1074,9 +1149,6 @@
     }
     .contact-grid {
       grid-template-columns: minmax(0, 1fr);
-    }
-    .contributors {
-      grid-template-columns: repeat(4, minmax(0, 1fr));
     }
     .card-head {
       flex-wrap: wrap;

@@ -867,8 +867,9 @@ select.field {
 }
 
 .view {
-  padding: 34px 34px 44px;
+  padding: clamp(14px, 2.2vh, 26px) clamp(18px, 3vw, 32px);
   min-height: 100%;
+  box-sizing: border-box;
 }
 
 .statusbar {

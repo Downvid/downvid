@@ -143,8 +143,8 @@
     position: relative;
     display: grid;
     grid-template-columns: minmax(0, 1fr) 184px;
-    padding: 16px 18px;
-    gap: 16px;
+    padding: clamp(10px, 1.4vh, 16px) clamp(12px, 1.8vw, 18px);
+    gap: clamp(10px, 1.5vw, 16px);
     overflow: visible;
   }
   .activity-panel::after {

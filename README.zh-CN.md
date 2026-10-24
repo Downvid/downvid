@@ -31,6 +31,8 @@
   ·
   <a href="https://github.com/Downvid/downvid/releases">下载 DownVid</a>
   ·
+  <a href="./docs/benchmark.html">性能评测</a>
+  ·
   <a href="https://github.com/Downvid/downvid/issues">反馈问题</a>
   ·
   <a href="mailto:xynrin@icloud.com?subject=%5BDownVid%5D%20%E8%B5%9E%E5%8A%A9">赞助 / 商务合作</a>
@@ -237,6 +239,7 @@ flowchart LR
 
 | 目录 | 作用 |
 | --- | --- |
+| `app/` | 全新架构：Go + Wails + Svelte 5 桌面端（15 个零耦合 Go 内部包，单文件内嵌产物） |
 | `backend/` | Go 依赖边车，探测并安装运行依赖 |
 | `electron/` | 主进程、IPC、下载实现、平台解析器与更新逻辑 |
 | `src/` | Vue 3 渲染进程与界面 |

@@ -155,6 +155,7 @@ type Bindings = {
   ChangelogHistory(): Promise<ChangelogEntry[]>
   ClassifyError(raw: string): Promise<string>
   Diagnostic(raw: string, ytdlp: string, runtime: string): Promise<string>
+  GetCookieStatus(): Promise<CookieStatus>
 }
 
 let cached: Bindings | null = null
@@ -179,6 +180,30 @@ export async function backend(): Promise<Bindings | null> {
   }
 }
 
+// ===== Cookie 状态 =====
+
+export interface CookieStatus {
+  manual: boolean
+  hasSnapshot: boolean
+  snapshotAgeMs: number
+  lastGoodBrowser: string
+  availableBrowsers: string[]
+  cookieReady: boolean
+}
+
+let cachedCookieStatus: CookieStatus | null = null
+
+export async function getCookieStatus(): Promise<CookieStatus | null> {
+  const b = await backend()
+  if (!b || typeof (b as any).GetCookieStatus !== 'function') return null
+  try {
+    cachedCookieStatus = await (b as any).GetCookieStatus()
+    return cachedCookieStatus
+  } catch {
+    return null
+  }
+}
+
 // ===== 适配：BackendVideoInfo → VideoInfo =====
 
 /**
@@ -188,7 +213,7 @@ export async function backend(): Promise<Bindings | null> {
  * 后端只给 `quality`（「1080P」这种与语言无关的事实）。
  * 让后端给死文案就没法翻译了。
  */
-export function toVideoInfo(info: BackendVideoInfo, url: string): VideoInfo {
+export function toVideoInfo(info: BackendVideoInfo, url: string, cookieReady = false): VideoInfo {
   const effectiveUrl = info.webpageUrl || url
   const platformId = detectPlatform(effectiveUrl)
   const platform = {
@@ -248,7 +273,7 @@ export function toVideoInfo(info: BackendVideoInfo, url: string): VideoInfo {
     audios,
     tracks,
     subtitles,
-    needsCookies: Boolean(info.isYoutube),
+    needsCookies: Boolean(info.isYoutube && !cookieReady),
     notice: info.parseNotice || undefined,
     cacheFile: info.cacheFile,
     // 直链原样带过去：后端据此决定走 yt-dlp 还是直连
@@ -282,8 +307,10 @@ export async function parseUrl(url: string, proxy = ''): Promise<ParseOutcome> {
   }
 
   try {
+    const status = await getCookieStatus()
+    const cookieReady = status ? status.cookieReady : false
     const info = await b.Parse(url, proxy)
-    return { ok: true, video: toVideoInfo(info, url) }
+    return { ok: true, video: toVideoInfo(info, url, cookieReady) }
   } catch (e) {
     const raw = String((e as Error)?.message ?? e)
     const marker = errorMarker(raw)

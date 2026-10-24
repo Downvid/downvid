@@ -29,7 +29,7 @@ import (
 	"github.com/Downvid/downvid/app/internal/server"
 )
 
-// version 由构建期注入：go build -ldflags "-X main.version=1.5.0"
+// version 由构建期注入：go build -ldflags "-X main.version=1.6.0"
 var version = "0.0.0-dev"
 
 func envOr(key, fallback string) string {

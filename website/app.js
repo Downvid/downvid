@@ -406,6 +406,24 @@ function formatSize(bytes) {
   if (!bytes || bytes < 1024) return '';
   return Math.round(bytes / 1024 / 1024) + ' MB';
 }
+
+/** 离线或 API 限流兜底：按给定的版本号与产物模板拼装确定性的下载产物列表 */
+function buildFallbackRelease(versionTag) {
+  const v = versionTag.replace(/^v/, '');
+  const assets = [];
+  const base = RELEASES_URL + '/download/' + versionTag + '/';
+  for (const os of Object.keys(ARTIFACTS)) {
+    for (const item of ARTIFACTS[os]) {
+      const name = item.name.replace('{version}', v);
+      assets.push({ name: name, url: base + name, size: 0 });
+    }
+  }
+  for (const os of Object.keys(WAILS_ARTIFACTS)) {
+    const name = WAILS_ARTIFACTS[os].replace('{version}', v);
+    assets.push({ name: name, url: base + name, size: 0 });
+  }
+  return { tag: versionTag, assets: assets };
+}
 // <<< 纯逻辑
 
 const CACHE_KEY = 'downvid.latestRelease';
@@ -610,7 +628,7 @@ function writeCachedRelease(value) {
   }
 }
 
-/** 拉一次最新 Release；失败就保持「去 Releases 页面」的兜底，不弹错误 */
+/** 拉一次最新 Release；按 GitHub API → gh-proxy 镜像链尝试，网络均失败时退回页面内置版本 */
 function loadRelease() {
   release = readCachedRelease();
   if (release) {
@@ -618,18 +636,43 @@ function loadRelease() {
     return;
   }
   renderDownload();
-  fetch(RELEASE_API, { headers: { Accept: 'application/vnd.github+json' } })
-    .then(res => {
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      return res.json();
-    })
-    .then(json => {
-      release = normalizeRelease(json);
-      if (!release) throw new Error('unexpected payload');
+
+  const endpoints = [
+    RELEASE_API,
+    'https://gh-proxy.com/' + RELEASE_API,
+    'https://ghproxy.net/' + RELEASE_API,
+  ];
+
+  function tryEndpoint(index) {
+    if (index >= endpoints.length) {
+      // 网络完全受阻（或处于断网/限流状态）：使用页面内置的版本号构造兜底产物
+      const versionEl = document.getElementById('dvAboutVersion');
+      const tagText = versionEl ? versionEl.textContent.trim() : '';
+      const fallbackTag = /^v\d/.test(tagText) ? tagText : 'v1.6.0';
+      release = buildFallbackRelease(fallbackTag);
+      releaseFailed = false;
       writeCachedRelease(release);
-    })
-    .catch(() => { releaseFailed = true; })
-    .then(() => renderDownload());
+      renderDownload();
+      return;
+    }
+
+    fetch(endpoints[index], { headers: { Accept: 'application/vnd.github+json' } })
+      .then(res => {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      })
+      .then(json => {
+        release = normalizeRelease(json);
+        if (!release) throw new Error('unexpected payload');
+        writeCachedRelease(release);
+        renderDownload();
+      })
+      .catch(() => {
+        tryEndpoint(index + 1);
+      });
+  }
+
+  tryEndpoint(0);
 }
 
 // 顶栏：滚起来之后加深底色与投影（浮动胶囊「钉住」的视觉反馈）

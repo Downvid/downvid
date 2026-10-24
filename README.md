@@ -31,6 +31,8 @@
   ·
   <a href="https://github.com/Downvid/downvid/releases">Download</a>
   ·
+  <a href="./docs/benchmark.html">Benchmark</a>
+  ·
   <a href="https://github.com/Downvid/downvid/issues">Report an issue</a>
   ·
   <a href="mailto:xynrin@icloud.com?subject=%5BDownVid%5D%20Business">Sponsorship / business</a>
@@ -248,6 +250,7 @@ An interactive diagram with more detail is in the [architecture doc](./docs/arch
 
 | Directory | Purpose |
 | --- | --- |
+| `app/` | New architecture: Go + Wails + Svelte 5 desktop app (15 decoupled internal Go packages) |
 | `backend/` | Go dependency sidecar: detects and installs runtime dependencies |
 | `electron/` | Main process, IPC, download implementations, site parsers, updater |
 | `src/` | Vue 3 renderer and UI |

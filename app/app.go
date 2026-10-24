@@ -24,7 +24,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -32,6 +34,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Downvid/downvid/app/internal/cookie"
 	"github.com/Downvid/downvid/app/internal/deps"
 	"github.com/Downvid/downvid/app/internal/download"
 	"github.com/Downvid/downvid/app/internal/history"
@@ -44,7 +47,7 @@ import (
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-// version 由构建期注入：-ldflags "-X main.version=1.5.0"
+// version 由构建期注入：-ldflags "-X main.version=1.6.0"
 var version = "0.0.0-dev"
 
 // arch 由构建期注入：-ldflags "-X main.arch=wails"
@@ -85,6 +88,9 @@ type App struct {
 
 	// 设置存储（惰性创建）
 	settings *settings.Store
+
+	// Cookie 管理器（惰性创建，见 bindings_download.go 的 cookieManager）
+	cookieMgr *cookie.Manager
 
 	// 图片抓取客户端（惰性创建）
 	imageClient *image.Client
@@ -282,9 +288,37 @@ func (a *App) ShouldOfferIssue(kind string) bool {
 //
 // **不抛错**：全挂时 `Release` 为 nil + 轨迹，前端据此显示人话提示。
 func (a *App) CheckUpdate(source string) map[string]any {
+	if source == "" {
+		st := a.GetSettings()
+		source = st.UpdateSource
+	}
+
+	httpClient := update.DefaultHTTPClient
+	if c, err := netx.Client(a.currentProxy(), 8*time.Second); err == nil && c != nil {
+		httpClient = func(ctx context.Context, url string, headers map[string]string) (update.HTTPResponse, error) {
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+			if err != nil {
+				return update.HTTPResponse{}, err
+			}
+			for k, v := range headers {
+				req.Header.Set(k, v)
+			}
+			resp, err := c.Do(req)
+			if err != nil {
+				return update.HTTPResponse{}, err
+			}
+			defer resp.Body.Close()
+			body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+			if err != nil {
+				return update.HTTPResponse{}, err
+			}
+			return update.HTTPResponse{OK: resp.StatusCode >= 200 && resp.StatusCode < 300, Status: resp.StatusCode, Body: body}, nil
+		}
+	}
+
 	result := update.LookupLatestRelease(update.LookupOptions{
 		Source:    update.NormalizeSource(source),
-		Client:    update.DefaultHTTPClient,
+		Client:    httpClient,
 		Repo:      update.Repo{Owner: "Downvid", Repo: "downvid"},
 		TimeoutMs: 8000,
 		Headers: map[string]string{

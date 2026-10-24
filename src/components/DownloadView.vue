@@ -12,6 +12,45 @@
           <UrlInput @parse="parseVideo" />
           <p v-if="store.videoInfo?.parseNotice" role="status" class="text-sm text-on-surface-variant">{{ store.videoInfo.parseNotice }}</p>
 
+          <!-- 全新轻量架构体验引导卡片（解析下载区） -->
+          <div
+            v-if="showMigrationCard"
+            class="rounded-xl border border-primary/20 bg-primary/5 p-4 flex items-center justify-between gap-4 transition-all"
+          >
+            <div class="flex items-start gap-3 min-w-0">
+              <div class="size-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 mt-0.5">
+                <MaterialIcon name="rocket_launch" :size="20" />
+              </div>
+              <div class="flex flex-col gap-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-semibold text-on-surface">{{ t('updateSettings.migrationTitle') }}</span>
+                  <span class="px-1.5 py-0.2 text-[10px] font-bold rounded bg-primary/20 text-primary">NEW</span>
+                </div>
+                <p class="text-xs text-on-surface-variant leading-relaxed">
+                  {{ t('updateSettings.migrationHint') }}
+                </p>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                class="px-3 py-1.5 text-xs font-semibold text-white bg-primary hover:bg-primary/90 rounded-lg shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
+                @click="openReleases"
+              >
+                <span>{{ t('updateSettings.migrationAction') }}</span>
+                <MaterialIcon name="arrow_forward" :size="14" />
+              </button>
+              <button
+                type="button"
+                class="p-1 rounded-md text-on-surface-variant/60 hover:text-on-surface hover:bg-surface-container-highest transition-colors cursor-pointer"
+                title="关闭提示"
+                @click="dismissMigrationCard"
+              >
+                <MaterialIcon name="close" :size="16" />
+              </button>
+            </div>
+          </div>
+
           <FormatSelector
             v-if="store.videoInfo"
             :video-info="store.videoInfo"
@@ -69,9 +108,19 @@ import { useDepsStore, readMissingKinds, stripDepMarkers } from '../stores/deps'
 import { readSettings } from '../stores/settings'
 import { useErrorModal } from '../composables/useErrorModal'
 import { classifyParseError, parseDiagnostic, PARSE_MESSAGES } from '../../shared/parse-error'
+import { RELEASES_URL } from '../../shared/app'
 
 const store = useDownloadStore()
 const { showError } = useErrorModal()
+
+const showMigrationCard = ref(!sessionStorage.getItem('downvid_dismiss_migration_card'))
+function dismissMigrationCard() {
+  showMigrationCard.value = false
+  sessionStorage.setItem('downvid_dismiss_migration_card', '1')
+}
+function openReleases() {
+  window.electronAPI?.shell?.openExternal?.(RELEASES_URL)
+}
 
 // 解析阶段拿不到真实进度（yt-dlp 只在下载阶段输出进度行），
 // 因此不显示百分比，改为不确定进度条 + 已用时间。

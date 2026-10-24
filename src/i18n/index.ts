@@ -197,6 +197,9 @@ const messages: Record<Locale, Record<string, string>> = {
     'updateSettings.source.ghproxy': 'gh-proxy（公共反代）',
     'updateSettings.source.gitee': 'Gitee（国内镜像）',
     'updateSettings.source.website': '软件官网',
+    'updateSettings.migrationTitle': '全新轻量架构（Go + Wails）现已推出',
+    'updateSettings.migrationHint': '新架构体积缩减 70%，内存减半，启动更快。macOS 已开启平滑过渡；Windows / Linux 用户可前往发布页下载免安装绿色版抢先体验。',
+    'updateSettings.migrationAction': '前往下载',
 
     // ===== 运行依赖 =====
     'deps.ready': '运行依赖已就绪',
@@ -530,6 +533,9 @@ const messages: Record<Locale, Record<string, string>> = {
     'updateSettings.source.ghproxy': 'gh-proxy (public proxy)',
     'updateSettings.source.gitee': 'Gitee (China mirror)',
     'updateSettings.source.website': 'Product website',
+    'updateSettings.migrationTitle': 'New lightweight architecture (Go + Wails) is available',
+    'updateSettings.migrationHint': '70% smaller bundle, half the memory usage, and faster startup. macOS auto-transition is active; Windows / Linux users can download portable builds from Releases.',
+    'updateSettings.migrationAction': 'Get it',
 
     // ===== Runtime dependencies =====
     'deps.ready': 'Runtime dependencies ready',

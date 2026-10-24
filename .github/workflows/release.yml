@@ -17,9 +17,9 @@ on:
         required: false
         default: false
       migrate_to_wails:
-        description: '把哪些平台的自动更新切到新架构（逗号分隔：macos,linux,windows；留空=不切）'
+        description: '把哪些平台的自动更新切到新架构（逗号分隔：macos,linux,windows；留空默认=macos）'
         required: false
-        default: ''
+        default: 'macos'
 
 permissions:
   contents: write
@@ -353,7 +353,7 @@ jobs:
       # 这是单向门：切了以后老用户会被换成新架构且回不到 Electron。
       - name: Generate update manifests
         env:
-          MIGRATE_TO_WAILS: ${{ inputs.migrate_to_wails }}
+          MIGRATE_TO_WAILS: ${{ inputs.migrate_to_wails != '' && inputs.migrate_to_wails || 'macos' }}
         run: node scripts/gen-update-manifests.mjs artifacts "$VERSION"
 
       # 正文顶部生成「点徽章即下载」的引导区：Release 里 CHANGELOG 内容较长，
@@ -560,6 +560,11 @@ jobs:
           # universal 产出的名字是 downvid.app；压成 zip 保留可执行权限
           ditto -c -k --sequesterRsrc --keepParent downvid.app \
             "../../../DownVid-Wails-${{ matrix.suffix }}-${{ needs.version.outputs.version }}.zip"
+          # 同时生成 arm64 与 x64 别名，使存量 Electron 客户端（根据 includes('arm64') 选包）顺利识别
+          cp "../../../DownVid-Wails-${{ matrix.suffix }}-${{ needs.version.outputs.version }}.zip" \
+            "../../../DownVid-Wails-mac-arm64-${{ needs.version.outputs.version }}.zip"
+          cp "../../../DownVid-Wails-${{ matrix.suffix }}-${{ needs.version.outputs.version }}.zip" \
+            "../../../DownVid-Wails-mac-x64-${{ needs.version.outputs.version }}.zip"
           ls -la ../../../DownVid-Wails-*.zip
 
       - name: Package Windows

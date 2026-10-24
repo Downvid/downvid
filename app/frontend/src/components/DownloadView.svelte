@@ -108,12 +108,14 @@
 
       <div class="capture-block">
         <CaptureBar />
-        <EffortSlider
-          compact
-          label={t('settings.accel')}
-          value={app.settings.maxConnections}
-          onchange={(value) => app.updateSetting('maxConnections', value)}
-        />
+        <div class="slider-row">
+          <EffortSlider
+            compact
+            label={t('settings.accel')}
+            value={app.settings.maxConnections}
+            onchange={(value) => app.updateSetting('maxConnections', value)}
+          />
+        </div>
       </div>
 
       <ActivityPanel />
@@ -186,7 +188,13 @@
   {:else if app.parseState === 'error'}
     <section class="working">
       <div class="working-head">
-        <span class="eyebrow">{t('error.eyebrow')}</span>
+        <div class="result-nav">
+          <button class="btn btn-ghost btn-sm back-btn" onclick={() => app.clearResult()}>
+            <Icon name="arrow_back" size={15} />
+            <span>{t('result.back')}</span>
+          </button>
+          <span class="eyebrow">{t('error.eyebrow')}</span>
+        </div>
       </div>
       <CaptureBar compact />
 
@@ -213,6 +221,10 @@
             <button class="btn btn-primary" onclick={() => app.parse()}>
               <Icon name="refresh" size={16} />
               <span>{t('error.retry')}</span>
+            </button>
+            <button class="btn btn-ghost" onclick={() => app.clearResult()}>
+              <Icon name="arrow_back" size={16} />
+              <span>{t('result.back')}</span>
             </button>
             <button class="btn btn-ghost" onclick={openCookieSettings}>
               <Icon name="cookie" size={16} />
@@ -277,7 +289,7 @@
   .home {
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: clamp(8px, 1.4vh, 14px);
     padding-top: 0;
   }
   .home-head {
@@ -291,7 +303,12 @@
   .capture-block {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 8px;
+  }
+  .slider-row {
+    display: flex;
+    align-items: center;
+    width: 100%;
   }
 
   .link-btn {
@@ -361,6 +378,7 @@
     position: relative;
     display: block;
     aspect-ratio: 21 / 9;
+    max-height: clamp(100px, 16vh, 145px);
     border-radius: var(--radius-card);
     border: 1px solid var(--rule);
     background: var(--paper-sunk);

@@ -15,12 +15,13 @@
   import { getLocale, t } from '../lib/i18n.svelte'
   import { loadLocalAnnouncement } from '../lib/announcement'
   import { REPO_URL } from '../lib/constants'
+  import { openExternal } from '../lib/backend'
 
   // store 里没有时（比如直接从 URL 打开对话框）退回本地，保证总有内容
   const doc = $derived(app.announcement ?? loadLocalAnnouncement(getLocale()))
 
   function openRepo(): void {
-    window.open(REPO_URL, '_blank', 'noopener')
+    openExternal(REPO_URL)
   }
 </script>
 

@@ -101,6 +101,9 @@ writeManifest('latest.yml', [
 writeManifest('latest-mac.yml', migrating('macos')
   ? [
       // 新架构：只列 zip（安装逻辑要解压后替换 .app，dmg 用不上）
+      // 列出 arm64/x64/universal，使存量 Electron 客户端（按 isArm 严格匹配）与新客户端均能识别
+      new RegExp(`^DownVid-Wails-mac-arm64-${v}\\.zip$`),
+      new RegExp(`^DownVid-Wails-mac-x64-${v}\\.zip$`),
       new RegExp(`^DownVid-Wails-mac-universal-${v}\\.zip$`),
     ]
   : [

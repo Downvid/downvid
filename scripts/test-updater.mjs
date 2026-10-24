@@ -416,6 +416,8 @@ suite.case('Wails 产物不得进入 electron-updater 清单', async (t) => {
     'DownVid-x86_64-Linux-9.9.9.AppImage',
     // Wails 版（新架构，独立下载，不过自动更新）
     'DownVid-Wails-mac-universal-9.9.9.zip',
+    'DownVid-Wails-mac-arm64-9.9.9.zip',
+    'DownVid-Wails-mac-x64-9.9.9.zip',
     'DownVid-Wails-windows-x64-9.9.9.zip',
     'DownVid-Wails-linux-x64-9.9.9.tar.gz',
   ]
@@ -450,6 +452,8 @@ suite.case('迁移开关：默认不切，指定平台才切', async (t) => {
     'DownVid-arm64-Mac-9.9.9.dmg',
     'DownVid-x86_64-Linux-9.9.9.AppImage',
     'DownVid-Wails-mac-universal-9.9.9.zip',
+    'DownVid-Wails-mac-arm64-9.9.9.zip',
+    'DownVid-Wails-mac-x64-9.9.9.zip',
     'DownVid-Wails-windows-x64-9.9.9.zip',
     'DownVid-Wails-linux-x64-9.9.9.tar.gz',
   ]
@@ -482,6 +486,10 @@ suite.case('迁移开关：默认不切，指定平台才切', async (t) => {
     t.ok(
       mac.includes('DownVid-Wails-mac-universal-9.9.9.zip'),
       '切了 macOS 后 latest-mac.yml 应指向 Wails 包',
+    )
+    t.ok(
+      mac.includes('DownVid-Wails-mac-arm64-9.9.9.zip'),
+      '切了 macOS 后 latest-mac.yml 应包含 arm64 别名（供老版本客户端识别）',
     )
     // dmg 不该再出现：Wails 的安装要解压 zip 替换 .app，dmg 用不上
     t.ok(!mac.includes('.dmg'), '迁移到 Wails 后不该再列 dmg')

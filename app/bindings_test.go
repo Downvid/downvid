@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Downvid/downvid/app/internal/changelog"
 	"github.com/Downvid/downvid/app/internal/download"
@@ -241,6 +242,17 @@ func TestBindingBuildFormatsHonorsAllowManifests(t *testing.T) {
 func TestStartDownloadWithoutYtdlp(t *testing.T) {
 	app := newTestApp(t)
 	app.runner = download.NewRunner()
+
+	depsCacheMu.Lock()
+	oldCache, oldAt := depsCache, depsCachedAt
+	depsCache = []Dependency{}
+	depsCachedAt = time.Now()
+	depsCacheMu.Unlock()
+	defer func() {
+		depsCacheMu.Lock()
+		depsCache, depsCachedAt = oldCache, oldAt
+		depsCacheMu.Unlock()
+	}()
 
 	res := app.StartDownload(DownloadRequest{
 		TaskID: "t1", URL: "https://example.com/v", FormatID: "137", OutputDir: t.TempDir(),

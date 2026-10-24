@@ -23,7 +23,7 @@ type Group = { os: string; items: { asset: Asset; variant: Variant }[] }
 
 const api = new Function(
   BLOCK +
-    '\nreturn { detectOS, archOf, archFromClientHints, templateToRegex, normalizeRelease, selectDownload, listDownloads, formatSize, ARTIFACTS, PLATFORMS, REPO }',
+    '\nreturn { detectOS, archOf, archFromClientHints, templateToRegex, normalizeRelease, selectDownload, selectWailsPreview, listDownloads, formatSize, buildFallbackRelease, ARTIFACTS, WAILS_ARTIFACTS, PLATFORMS, REPO }',
 )() as {
   detectOS: (nav: Record<string, unknown>) => string
   archOf: (nav: Record<string, unknown>, os: string) => string
@@ -31,9 +31,12 @@ const api = new Function(
   templateToRegex: (template: string) => RegExp
   normalizeRelease: (json: unknown) => Release | null
   selectDownload: (release: Release | null, os: string | null, arch: string) => Picked
+  selectWailsPreview: (release: Release | null, os: string) => Asset | null
   listDownloads: (release: Release | null, preferredOS?: string | null) => Group[]
   formatSize: (bytes: number) => string
+  buildFallbackRelease: (versionTag: string) => Release
   ARTIFACTS: Record<string, Variant[]>
+  WAILS_ARTIFACTS: Record<string, string>
   PLATFORMS: { os: string; key: string }[]
   REPO: { owner: string; repo: string }
 }
@@ -322,5 +325,38 @@ describe('formatSize', () => {
 describe('页面与仓库坐标', () => {
   it('REPO 指向 shared/app.ts 里的仓库（lint:website 也会比对，这里再兜一层）', () => {
     expect(api.REPO).toEqual({ owner: 'Downvid', repo: 'downvid' })
+  })
+})
+
+describe('buildFallbackRelease（离线/网络受阻兜底）', () => {
+  it('为各平台构造全部必需的产物与直链', () => {
+    const fallback = api.buildFallbackRelease('v1.6.0')
+    expect(fallback.tag).toBe('v1.6.0')
+    expect(fallback.assets.length).toBeGreaterThanOrEqual(11) // 8 electron + 3 wails
+
+    // Windows
+    const win = api.selectDownload(fallback, 'windows', 'x64')
+    expect(win.primary?.asset.name).toBe('DownVid-Setup-1.6.0.exe')
+    expect(win.primary?.asset.url).toContain('/download/v1.6.0/DownVid-Setup-1.6.0.exe')
+
+    // macOS arm64
+    const macArm = api.selectDownload(fallback, 'macos', 'arm64')
+    expect(macArm.primary?.asset.name).toBe('DownVid-arm64-Mac-1.6.0.dmg')
+
+    // macOS x64
+    const macIntel = api.selectDownload(fallback, 'macos', 'x64')
+    expect(macIntel.primary?.asset.name).toBe('DownVid-x64-Mac-1.6.0.dmg')
+
+    // Linux
+    const linux = api.selectDownload(fallback, 'linux', 'x64')
+    expect(linux.primary?.asset.name).toBe('DownVid-x86_64-Linux-1.6.0.AppImage')
+
+    // Wails preview packages
+    const wailsWin = api.selectWailsPreview(fallback, 'windows')
+    expect(wailsWin?.name).toBe('DownVid-Wails-windows-x64-1.6.0.zip')
+    const wailsMac = api.selectWailsPreview(fallback, 'macos')
+    expect(wailsMac?.name).toBe('DownVid-Wails-mac-universal-1.6.0.zip')
+    const wailsLinux = api.selectWailsPreview(fallback, 'linux')
+    expect(wailsLinux?.name).toBe('DownVid-Wails-linux-x64-1.6.0.tar.gz')
   })
 })
