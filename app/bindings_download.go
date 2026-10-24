@@ -101,10 +101,22 @@ func (a *App) DetectDependencies() []Dependency {
 	}
 
 	var payload struct {
+		Path    string       `json:"path"`
 		Results []Dependency `json:"results"`
 	}
 	if err := json.Unmarshal([]byte(out), &payload); err != nil {
 		return []Dependency{{Kind: "yt-dlp", Found: false, Reason: "探测结果解析失败"}}
+	}
+
+	// 采用边车解析好的 PATH（登录 shell 与当前进程合并后的那份）。
+	//
+	// 宿主要自己启动 yt-dlp / ffmpeg；GUI 进程的 PATH 通常只有系统目录，
+	// 而托管目录里的 yt-dlp 是 zipapp，需要用户的 python3（≥3.11）。
+	// 不接管这份 PATH 的话，检测（边车里跑）说「已就绪」，真正解析/下载
+	// （宿主里跑）却启动失败——两边看到的是同一个依赖，却给出相反结论。
+	// 空值表示边车版本较旧，不要覆盖现有 PATH。
+	if payload.Path != "" {
+		_ = os.Setenv("PATH", payload.Path)
 	}
 	return payload.Results
 }
@@ -115,6 +127,32 @@ func (a *App) ResolveYtdlp() string {
 		return d
 	}
 	return ""
+}
+
+// ytdlpMissing 在「没有可用 yt-dlp」时给出两句提示：纯文本与带标记的错误。
+//
+// 必须区分两种状态：
+//   - **没找到**：`[[deps-missing:yt-dlp]]`，引导用户下载
+//   - **找到了但版本过旧**：`[[deps-stale:yt-dlp]]`，引导用户更新
+//
+// 两者此前都返回 deps-missing，于是界面把「装了个旧版」说成「没装」。
+// 用户按提示重新下载、检测页也明明写着「版本过旧」，解析却仍说「未找到」——
+// 说的其实是同一件事，但看起来像两个互相矛盾的 bug。
+func (a *App) ytdlpMissing() (clean, marked string) {
+	for _, d := range a.detectCached() {
+		if d.Kind != "yt-dlp" || d.Found {
+			continue
+		}
+		if d.Stale {
+			reason := d.Reason
+			if reason == "" {
+				reason = "yt-dlp 版本过旧，请在「设置 → 运行依赖」中更新"
+			}
+			return reason, "[[deps-stale:yt-dlp]]" + reason
+		}
+	}
+	msg := "未找到可用的 yt-dlp，请在「设置 → 运行依赖」中下载后重试"
+	return msg, "[[deps-missing:yt-dlp]]" + msg
 }
 
 // pathOf 在**一次探测**里取某个依赖的路径。
@@ -399,8 +437,10 @@ func (a *App) StartDownload(opts DownloadRequest) StartDownloadResult {
 
 	ytdlp := a.ResolveYtdlp()
 	if ytdlp == "" {
-		return StartDownloadResult{OK: false, Error: "未找到可用的 yt-dlp，请在「设置 → 运行依赖」中下载",
-			MissingKind: "yt-dlp"}
+		// 「版本过旧」与「没找到」给不同的话；MissingKind 都带 yt-dlp，
+		// 因为前端据此打开依赖面板——两种情况的下一步都是在那里处理。
+		clean, _ := a.ytdlpMissing()
+		return StartDownloadResult{OK: false, Error: clean, MissingKind: "yt-dlp"}
 	}
 
 	// 与 electron/download/ytdlp.ts 一致：YouTube 没有可用的 JS 运行时就不起 yt-dlp。
@@ -828,8 +868,9 @@ func (a *App) Parse(url string, proxy string) (*parse.VideoInfo, error) {
 	ytdlp := a.ResolveYtdlp()
 	// 抖音和快手拥有专属原生 API 解析，不需要 yt-dlp
 	if ytdlp == "" && !parse.IsDouyin(url) && !parse.IsKuaishou(url) {
-		// 前端据此弹「一键下载」，而不是显示一句「解析失败」
-		return nil, fmt.Errorf("[[deps-missing:yt-dlp]]未找到可用的 yt-dlp，请在「设置 → 运行依赖」中下载后重试")
+		// 带标记返回：前端据此区分「去下载」与「去更新」，而不是显示一句「解析失败」
+		_, marked := a.ytdlpMissing()
+		return nil, fmt.Errorf("%s", marked)
 	}
 
 	a.mu.Lock()

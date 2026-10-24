@@ -32,7 +32,7 @@ func fakeSidecar(t *testing.T, script string) string {
 
 func TestDetectParsesSnapshot(t *testing.T) {
 	sidecar := fakeSidecar(t, `cat <<'JSON'
-{"platform":"darwin-arm64","managedDir":"/tmp/bin","results":[
+{"platform":"darwin-arm64","managedDir":"/tmp/bin","path":"/usr/bin:/opt/homebrew/bin","results":[
  {"kind":"yt-dlp","found":true,"path":"/x/yt-dlp","version":"2026.10.10.233141","source":"managed","form":"zipapp"},
  {"kind":"ffmpeg","found":true,"path":"/opt/ffmpeg","version":"9.0.2","source":"system"},
  {"kind":"ffprobe","found":false,"optional":true,"reason":"未找到"},
@@ -48,6 +48,10 @@ JSON
 	}
 	if snap.Platform != "darwin-arm64" || len(snap.Results) != 4 {
 		t.Fatalf("got %+v", snap)
+	}
+	// 宿主随后要用这份 PATH 起 yt-dlp（zipapp 依赖 python3 ≥3.11），不能丢
+	if snap.Path != "/usr/bin:/opt/homebrew/bin" {
+		t.Fatalf("应保留边车回传的 PATH，got %q", snap.Path)
 	}
 	// yt-dlp 的 form 字段决定启动速度（zipapp 0.4s / native 9~12s），不能丢
 	if snap.Results[0].Form != "zipapp" {

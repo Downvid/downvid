@@ -27,6 +27,15 @@ export interface RuntimeStatus {
   platform: string
   managedDir: string
   checkedAt: number
+  /**
+   * 边车合并「当前进程 + 登录 shell」后的 PATH。
+   *
+   * 主进程自己也会 spawn yt-dlp / ffmpeg（解析与下载），而 GUI 进程的 PATH
+   * 通常只有 /usr/bin:/bin:/usr/sbin:/sbin。托管目录里的 yt-dlp 是 zipapp，
+   * 靠 shebang 找 python3：只看到系统 Python 3.9 时会直接 ImportError，
+   * 表现为「检测说已就绪，解析却一直报缺依赖」。
+   */
+  path?: string
   results: DepStatus[]
 }
 
@@ -196,10 +205,16 @@ function parseDetectOutput(run: SidecarRun): RuntimeStatus {
 
   try {
     const payload = JSON.parse(line)
+    // 采用边车解析好的 PATH，供主进程后续 spawn 的 yt-dlp / ffmpeg 继承。
+    // 边车版本较旧时没有这个字段，不要覆盖现有 PATH。
+    if (typeof payload.path === 'string' && payload.path) {
+      process.env.PATH = payload.path
+    }
     return {
       platform: payload.platform || platformKey(),
       managedDir: payload.managedDir || getManagedDir(),
       checkedAt: Date.now(),
+      path: typeof payload.path === 'string' ? payload.path : undefined,
       results: (payload.results || []) as DepStatus[],
     }
   } catch {

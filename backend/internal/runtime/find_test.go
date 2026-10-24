@@ -365,6 +365,76 @@ func TestBinaryForm(t *testing.T) {
 }
 
 // 遇到多个过旧版本时，staleInfo / staleSource / staleErr 必须保持一致，
+// mergePath 必须去空、去重并保留顺序。
+//
+// 这不是格式化偏好：EnsureChildPath 会把结果写回 PATH，之后 livePath()
+// 的 current 里已经含有 shell 路径；不去重会每调用一次就变长一截。
+func TestMergePathDedupes(t *testing.T) {
+	sep := string(os.PathListSeparator)
+	got := mergePath("/a"+sep+"/b", []string{"/b", "/c", "", " /d "})
+	want := "/a" + sep + "/b" + sep + "/c" + sep + "/d"
+	if got != want {
+		t.Fatalf("mergePath 结果应为 %q，实际 %q", want, got)
+	}
+}
+
+// 写一个只回答 `--version` 的假 python3，返回它所在目录。
+func fakePython(t *testing.T, version string) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("用 shell 脚本做夹具，Windows 上跳过")
+	}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "python3")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\necho '"+version+"'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+// 系统 Python 3.9 排在 PATH 第一时，必须把 3.11+ 的目录提到最前。
+//
+// zipapp 的 shebang 是 `#!/usr/bin/env python3`：只合并 PATH 不做排序，
+// 仍然会命中 /usr/bin/python3（3.9）并直接 ImportError。
+func TestEnsureModernPythonPrefersSupported(t *testing.T) {
+	old := fakePython(t, "Python 3.9.6")
+	modern := fakePython(t, "Python 3.12.1")
+	sep := string(os.PathListSeparator)
+
+	got := ensureModernPython(old + sep + modern + sep + "/usr/bin")
+	if !strings.HasPrefix(got, modern+sep) {
+		t.Fatalf("应把 Python 3.12 的目录提到最前，got %q", got)
+	}
+
+	// 只有 3.9 时原样返回（不要凭空造出一个不存在的路径）
+	if got := ensureModernPython(old + sep + "/usr/bin"); got != old+sep+"/usr/bin" {
+		t.Fatalf("没有可用 python3 时不该改动 PATH，got %q", got)
+	}
+}
+
+// EnsureChildPath 只在第一次生效，且不能丢掉原有 PATH。
+func TestEnsureChildPathIsIdempotent(t *testing.T) {
+	before := os.Getenv("PATH")
+	EnsureChildPath()
+	first := os.Getenv("PATH")
+	if first == "" {
+		t.Fatal("EnsureChildPath 后 PATH 不该为空")
+	}
+	EnsureChildPath()
+	if second := os.Getenv("PATH"); second != first {
+		t.Fatalf("重复调用不该改变 PATH：%q → %q", first, second)
+	}
+	sep := string(os.PathListSeparator)
+	for _, dir := range filepath.SplitList(before) {
+		if dir == "" {
+			continue
+		}
+		if !strings.Contains(sep+first+sep, sep+dir+sep) {
+			t.Fatalf("原有 PATH 目录 %q 丢失，got %q", dir, first)
+		}
+	}
+}
+
 // 且优先保留较新的过旧版本，避免标题版本与原因说明版本不一致
 func TestStaleCandidateConsistency(t *testing.T) {
 	if runtime.GOOS == "windows" {

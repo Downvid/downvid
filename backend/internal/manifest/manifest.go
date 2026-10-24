@@ -17,11 +17,22 @@ import (
 	rt "github.com/yxxbc/downvid/backend/internal/runtime"
 )
 
+// pythonSupportsZipapp 判断 Python 版本是否满足 yt-dlp 的要求。
+//
+// 门槛是 **3.11**，不是 3.9：yt-dlp 在启动时自己就会拒绝更旧的版本
+// （`ImportError: Only Python versions 3.11 and above are supported`）。
+// 曾经这里写成 >= 309，于是 macOS 自带的 3.9 被当成「可用」，
+// 给用户下载了一个永远跑不起来的 zipapp，表现为「依赖下载成功却一直说缺失」。
+func pythonSupportsZipapp(version int) bool { return version >= 311 }
+
 // HasUsablePython 判断系统里是否有能跑 yt-dlp zipapp 的 python3。
 //
-// 门槛是 3.9：yt-dlp 的 nightly 用到了 3.9+ 的语法。macOS 自带的
-// /usr/bin/python3 是 3.9.6（Command Line Tools），够用；但很多机器上根本没装
-// （只是一个会弹安装提示的 stub），所以要真的执行一次 `--version` 才算数。
+// 门槛是 3.11（见 pythonSupportsZipapp）：macOS 自带的 /usr/bin/python3 是
+// 3.9.6（Command Line Tools），**跑不了** zipapp；很多机器上甚至只是一个会弹
+// 安装提示的 stub。所以要真的执行一次 `--version` 才算数，不能只看文件存在。
+//
+// 调用前 PATH 已经由 rt.EnsureChildPath 补齐（登录 shell + 3.11+ 前置），
+// 否则 GUI 进程会只看到 /usr/bin 里的 3.9，误判成「没有可用 Python」。
 //
 // 结果缓存：这个函数在每次 fetch 时都会被问一次，而 `python3 --version`
 // 要 spawn 一个进程。缓存 10 分钟足够（用户不会在中途换解释器）。
@@ -37,7 +48,7 @@ func HasUsablePython() bool {
 			if err != nil {
 				continue
 			}
-			if version := parsePythonVersion(string(out)); version >= 309 {
+			if version := parsePythonVersion(string(out)); pythonSupportsZipapp(version) {
 				pythonUsable = true
 				return
 			}
@@ -46,7 +57,7 @@ func HasUsablePython() bool {
 	return pythonUsable
 }
 
-// parsePythonVersion 把 "Python 3.9.6" 解析成 309 这种整数（便于比较）。
+// parsePythonVersion 把 "Python 3.11.9" 解析成 311 这种整数（便于比较）。
 // 解析失败返回 0 —— 宁可退回自包含包，也不要把跑不起来的 zipapp 装给用户。
 func parsePythonVersion(out string) int {
 	fields := strings.Fields(strings.TrimSpace(out))

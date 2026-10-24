@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -670,13 +671,116 @@ func systemDirs() []string {
 // （不含 /opt/homebrew/bin、~/.local/bin 等），所以补一次登录 shell 的输出。
 func livePath() string {
 	current := os.Getenv("PATH")
-	if runtime.GOOS != "windows" {
-		shellPathsOnce.Do(func() { shellPaths = loginShellPath() })
-		if len(shellPaths) > 0 {
-			current += string(os.PathListSeparator) + strings.Join(shellPaths, string(os.PathListSeparator))
-		}
+	if runtime.GOOS == "windows" {
+		return current
 	}
-	return current
+	shellPathsOnce.Do(func() { shellPaths = loginShellPath() })
+	return mergePath(current, shellPaths)
+}
+
+// mergePath 把 extra 并入 current：去空、去重、保留顺序。
+//
+// 去重不是洁癖：EnsureChildPath 会把它写回 os.PATH，之后再调 livePath()
+// 时 current 已经包含 shell 路径，没有去重就会一次次变长。
+func mergePath(current string, extra []string) string {
+	seen := make(map[string]struct{}, len(extra))
+	out := make([]string, 0, len(extra)+8)
+	for _, dir := range append(filepath.SplitList(current), extra...) {
+		dir = strings.TrimSpace(dir)
+		if dir == "" {
+			continue
+		}
+		if _, ok := seen[dir]; ok {
+			continue
+		}
+		seen[dir] = struct{}{}
+		out = append(out, dir)
+	}
+	return strings.Join(out, string(os.PathListSeparator))
+}
+
+// LivePath 返回合并后的 PATH（当前进程 + 登录 shell）。
+//
+// 边车把自己解析出的 PATH 一起回传，宿主（Wails）就能用同一份 PATH
+// 启动 yt-dlp，而不必再实现一遍登录 shell 解析。
+func LivePath() string { return livePath() }
+
+var childPathOnce sync.Once
+
+// EnsureChildPath 把合并后的 PATH 写回本进程，供**之后启动的子进程**继承。
+//
+// 为什么必须做：macOS 上从 Finder 启动的 GUI 只有 /usr/bin:/bin:/usr/sbin:/sbin。
+// 托管目录里的 yt-dlp 是 zipapp，shebang 是 `#!/usr/bin/env python3`；
+// PATH 里只有系统自带的 Python 3.9 时，它会在启动瞬间报
+// `ImportError: Only Python versions 3.11 and above are supported`。
+// 结果是「刚下载完、版本也是最新的依赖」被探测成跑不起来 → 界面一直说
+// 缺依赖，而用户无论重下多少次都一样。
+//
+// 光合并 PATH 不够：/usr/bin 通常排在第一位，里面就有 Python 3.9。
+// 所以再确保一个满足要求的 python3 目录排在 PATH 最前面。
+//
+// 只在启动时合并一次：重复调用会重复执行登录 shell，白白拖慢启动。
+func EnsureChildPath() {
+	childPathOnce.Do(func() {
+		merged := livePath()
+		if runtime.GOOS != "windows" {
+			merged = ensureModernPython(merged)
+		}
+		if merged != "" {
+			_ = os.Setenv("PATH", merged)
+		}
+	})
+}
+
+// pythonSuitable 判断 `python3 --version` 的输出是否满足 yt-dlp 的要求
+// （3.11+；yt-dlp 自己在启动时就会拒绝更旧的版本）。
+func pythonSuitable(out string) bool {
+	fields := strings.Fields(out)
+	if len(fields) < 2 || fields[0] != "Python" {
+		return false
+	}
+	parts := strings.Split(fields[1], ".")
+	if len(parts) < 2 {
+		return false
+	}
+	major, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return false
+	}
+	minor, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return false
+	}
+	return major > 3 || (major == 3 && minor >= 11)
+}
+
+// ensureModernPython 把满足 yt-dlp 要求的 python3 所在目录提到 PATH 最前。
+//
+// 只合并登录 shell 的 PATH 不够：/usr/bin 通常排第一，里面有系统自带的
+// Python 3.9；zipapp 的 shebang 会先命中它，于是用户机器上明明装着 3.15，
+// 仍然 `ImportError`。这里按 PATH 顺序找到第一个 3.11+ 的 python3，
+// 把它的目录前置；一个都没有时原样返回（探测会如实报「跑不起来」）。
+func ensureModernPython(path string) string {
+	sep := string(os.PathListSeparator)
+	dirs := filepath.SplitList(path)
+	for i, dir := range dirs {
+		if strings.TrimSpace(dir) == "" {
+			continue
+		}
+		cand := filepath.Join(dir, "python3")
+		if fi, err := os.Stat(cand); err != nil || fi.IsDir() {
+			continue
+		}
+		out, err := outputWithTimeout(exec.Command(cand, "--version"), 2*time.Second)
+		if err != nil || !pythonSuitable(string(out)) {
+			continue
+		}
+		if i == 0 {
+			return path
+		}
+		return dir + sep + path
+	}
+	return path
 }
 
 func loginShellPath() []string {

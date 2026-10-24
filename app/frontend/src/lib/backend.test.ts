@@ -110,6 +110,12 @@ describe('errorMarker', () => {
     expect(m.code).toBe('network')
   })
 
+  it('把「版本过旧」与「没装」分开（两者下一步不同）', () => {
+    const m = errorMarker('[[deps-stale:yt-dlp]]版本过旧（当前 2026.10.21）')
+    expect(m.kind).toBe('deps-stale')
+    expect(m.code).toBe('yt-dlp')
+  })
+
   it('没有标记时返回空（普通错误）', () => {
     expect(errorMarker('something broke').kind).toBe('')
   })
@@ -124,6 +130,7 @@ describe('stripMarker', () => {
   it('去掉标记只留说明', () => {
     expect(stripMarker('[[parse-error:network]]网络请求失败')).toBe('网络请求失败')
     expect(stripMarker('[[deps-missing:yt-dlp]]未找到 yt-dlp')).toBe('未找到 yt-dlp')
+    expect(stripMarker('[[deps-stale:yt-dlp]]版本过旧，请更新')).toBe('版本过旧，请更新')
   })
 
   it('没有标记时原样返回', () => {

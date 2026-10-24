@@ -91,11 +91,19 @@ export interface BackendProgress {
   error?: string
 }
 
-/** 后端解析失败时抛出的错误消息里的标记 */
-export type ParseErrorMarker = '[[parse-error:' | '[[deps-missing:'
+/**
+ * 后端解析失败时抛出的错误消息里的标记。
+ *
+ * `deps-missing` 与 `deps-stale` 必须分开：前者是「没装」，后者是
+ * 「装了但版本过旧」。合并成一个会让「检测页说版本过旧、解析说未找到」
+ * 同时出现，用户按提示重下也解决不了。
+ */
+export type ParseErrorMarker = '[[parse-error:' | '[[deps-missing:' | '[[deps-stale:'
 
 /** 从错误消息里取出标记的种类（没有标记时返回空串） */
-export function errorMarker(message: string): { kind: 'parse' | 'deps' | ''; code: string } {
+export function errorMarker(message: string): { kind: 'parse' | 'deps' | 'deps-stale' | ''; code: string } {
+  const stale = /\[\[deps-stale:([\w-]+)\]\]/.exec(message)
+  if (stale) return { kind: 'deps-stale', code: stale[1] }
   const deps = /\[\[deps-missing:([\w-]+)\]\]/.exec(message)
   if (deps) return { kind: 'deps', code: deps[1] }
   const parse = /\[\[parse-error:([\w-]+)\]\]/.exec(message)
@@ -106,7 +114,7 @@ export function errorMarker(message: string): { kind: 'parse' | 'deps' | ''; cod
 /** 去掉标记，只留人类可读的部分 */
 export function stripMarker(message: string): string {
   return message
-    .replace(/\[\[(?:parse-error|deps-missing):[\w-]+\]\]/g, '')
+    .replace(/\[\[(?:parse-error|deps-missing|deps-stale):[\w-]+\]\]/g, '')
     .trim()
 }
 
@@ -317,7 +325,8 @@ export async function parseUrl(url: string, proxy = ''): Promise<ParseOutcome> {
     return {
       ok: false,
       message: stripMarker(raw) || '解析失败',
-      missingKind: marker.kind === 'deps' ? marker.code : undefined,
+      // 版本过旧同样要打开依赖面板（下一步是「更新」而不是「下载」）
+      missingKind: marker.kind === 'deps' || marker.kind === 'deps-stale' ? marker.code : undefined,
     }
   }
 }

@@ -76,6 +76,13 @@ type Snapshot struct {
 	ManagedDir string   `json:"managedDir"`
 	CheckedAt  int64    `json:"checkedAt"`
 	Results    []Status `json:"results"`
+	// Path 是边车合并「当前进程 + 登录 shell」后的 PATH。
+	//
+	// 宿主 App 自己也会起 yt-dlp / ffmpeg（不是每次都经边车），而 GUI 进程
+	// 的 PATH 通常只有 /usr/bin:/bin:/usr/sbin:/sbin。托管目录里的 yt-dlp 是
+	// zipapp，靠 shebang 找 python3：只看到系统 Python 3.9 时会直接
+	// ImportError。用边车解析好的同一份 PATH，两端行为才一致。
+	Path string `json:"path,omitempty"`
 }
 
 // Progress 是下载过程中的一次事件（对应边车的 fetch.Event）。
@@ -159,6 +166,7 @@ func (m *Manager) Detect(force bool) (*Snapshot, error) {
 	var payload struct {
 		Platform   string   `json:"platform"`
 		ManagedDir string   `json:"managedDir"`
+		Path       string   `json:"path"`
 		Results    []Status `json:"results"`
 	}
 	if err := json.Unmarshal([]byte(out), &payload); err != nil {
@@ -170,6 +178,7 @@ func (m *Manager) Detect(force bool) (*Snapshot, error) {
 		ManagedDir: payload.ManagedDir,
 		CheckedAt:  time.Now().UnixMilli(),
 		Results:    payload.Results,
+		Path:       payload.Path,
 	}
 
 	m.mu.Lock()

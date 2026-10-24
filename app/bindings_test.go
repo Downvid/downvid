@@ -268,6 +268,54 @@ func TestStartDownloadWithoutYtdlp(t *testing.T) {
 	}
 }
 
+// 「找到了但版本过旧」不能报成「没找到」。
+//
+// 两者此前都返回 deps-missing：检测页明明写着「版本过旧」，解析却说
+// 「未找到可用的 yt-dlp」。用户按提示重新下载也解决不了，因为真正缺的
+// 不是安装，而是可用的新版。这里钉住两条出口各自的措辞与标记。
+func TestStaleYtdlpMessage(t *testing.T) {
+	app := newTestApp(t)
+	app.runner = download.NewRunner()
+
+	depsCacheMu.Lock()
+	oldCache, oldAt := depsCache, depsCachedAt
+	depsCache = []Dependency{{
+		Kind: "yt-dlp", Found: false, Stale: true, Version: "2026.10.21",
+		Reason: "版本过旧（当前 2026.10.21，需要 2026.10.23.233055 或更新）",
+	}}
+	depsCachedAt = time.Now()
+	depsCacheMu.Unlock()
+	defer func() {
+		depsCacheMu.Lock()
+		depsCache, depsCachedAt = oldCache, oldAt
+		depsCacheMu.Unlock()
+	}()
+
+	// 下载入口：给人看的话里不能残留标记，且必须说明是「过旧」
+	res := app.StartDownload(DownloadRequest{
+		TaskID: "t1", URL: "https://example.com/v", FormatID: "137", OutputDir: t.TempDir(),
+	})
+	if res.OK {
+		t.Fatal("yt-dlp 过旧时不该报告成功")
+	}
+	if !strings.Contains(res.Error, "版本过旧") {
+		t.Fatalf("应说明是版本过旧，got %q", res.Error)
+	}
+	if strings.Contains(res.Error, "[[") {
+		t.Fatalf("下载错误里不该出现内部标记，got %q", res.Error)
+	}
+	if res.MissingKind != "yt-dlp" {
+		t.Fatalf("MissingKind 应仍为 yt-dlp（前端据此打开依赖面板），got %q", res.MissingKind)
+	}
+
+	// 解析入口：带 deps-stale 标记，前端才能把它与「没装」区分开
+	if _, err := app.Parse("https://www.youtube.com/watch?v=abcdefghijk", ""); err == nil {
+		t.Fatal("应返回错误")
+	} else if !strings.Contains(err.Error(), "[[deps-stale:yt-dlp]]") {
+		t.Fatalf("解析错误应带 deps-stale 标记，got %q", err.Error())
+	}
+}
+
 // 缺 taskId / url 时立刻拒绝。
 func TestStartDownloadValidatesInput(t *testing.T) {
 	app := newTestApp(t)

@@ -19,6 +19,37 @@ func TestTasksCoverEveryPlatform(t *testing.T) {
 	}
 }
 
+// yt-dlp 的 zipapp 要求 Python 3.11+；3.9 曾被误判为可用。
+//
+// 判错的代价不是「慢一点」：下载下来的 zipapp 在用户机上直接 ImportError，
+// 探测永远找不到可用 yt-dlp，界面一直提示缺依赖。
+func TestPythonSupportsZipapp(t *testing.T) {
+	cases := []struct {
+		version int
+		want    bool
+	}{
+		{0, false},
+		{27, false},  // Python 2.7
+		{309, false}, // macOS 自带的 3.9：不能跑 zipapp
+		{310, false},
+		{311, true},
+		{312, true},
+		{400, true},
+	}
+	for _, c := range cases {
+		if got := pythonSupportsZipapp(c.version); got != c.want {
+			t.Errorf("pythonSupportsZipapp(%d) = %v，want %v", c.version, got, c.want)
+		}
+	}
+
+	if got := parsePythonVersion("Python 3.9.6"); got != 309 {
+		t.Errorf("parsePythonVersion 3.9.6 = %d，want 309", got)
+	}
+	if got := parsePythonVersion("Python 3.11.9"); got != 311 {
+		t.Errorf("parsePythonVersion 3.11.9 = %d，want 311", got)
+	}
+}
+
 func TestAssetNamesAndHashesWellFormed(t *testing.T) {
 	// 清单文件是生成出来的；哈希必须齐全，否则校验形同虚设
 	for platform, a := range ytdlpAssets {

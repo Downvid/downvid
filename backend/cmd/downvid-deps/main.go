@@ -34,6 +34,14 @@ import (
 const Version = "1.0.0"
 
 func main() {
+	// 先补齐 PATH，再探测或启动任何子进程。
+	//
+	// GUI 应用从 Finder 启动时只有精简 PATH，而托管目录里的 yt-dlp 是
+	// zipapp（`#!/usr/bin/env python3`）：找不到用户的 Python 3.11+ 就会
+	// 退回系统 3.9 并直接 ImportError。表现为「下载成功、版本也对，却始终
+	// 显示缺依赖」。
+	rt.EnsureChildPath()
+
 	// 把清单里 pin 的版本注入 runtime 作为最低门槛。
 	// 放这里是因为 runtime 不能 import manifest（会形成 import cycle），
 	// 而 CLI 同时依赖两者。
@@ -117,7 +125,10 @@ func runDetect(args []string) {
 		// （曾经因此让所有 x64 平台的依赖下载失效，见 issue #40）
 		"goPlatform": runtime.GOOS + "/" + runtime.GOARCH,
 		"managedDir": *managedDir,
-		"results":    results,
+		// 合并后的 PATH（当前进程 + 登录 shell）。宿主 App 之后要自己启动
+		// yt-dlp/ffmpeg，用同一份 PATH 才不会在 GUI 环境里找不到 python3。
+		"path":    rt.LivePath(),
+		"results": results,
 	}
 
 	if *jsonOutput {
