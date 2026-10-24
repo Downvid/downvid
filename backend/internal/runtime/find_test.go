@@ -401,13 +401,15 @@ func TestEnsureModernPythonPrefersSupported(t *testing.T) {
 	modern := fakePython(t, "Python 3.12.1")
 	sep := string(os.PathListSeparator)
 
-	got := ensureModernPython(old + sep + modern + sep + "/usr/bin")
+	// 只用临时目录：CI 的 /usr/bin/python3 本身可能就是 3.12，
+	// 把它写进 PATH 会让「没有可用 python3」那条断言依赖宿主环境。
+	got := ensureModernPython(old + sep + modern)
 	if !strings.HasPrefix(got, modern+sep) {
 		t.Fatalf("应把 Python 3.12 的目录提到最前，got %q", got)
 	}
 
 	// 只有 3.9 时原样返回（不要凭空造出一个不存在的路径）
-	if got := ensureModernPython(old + sep + "/usr/bin"); got != old+sep+"/usr/bin" {
+	if got := ensureModernPython(old); got != old {
 		t.Fatalf("没有可用 python3 时不该改动 PATH，got %q", got)
 	}
 }
