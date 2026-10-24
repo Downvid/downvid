@@ -37,18 +37,37 @@ AUR 包只依赖 `gtk3`、`webkit2gtk-4.1`、`libsoup3`，不依赖 4.0。
 
 ## 提交到 AUR
 
-网页（不需要 SSH，适合网络受限的环境）：<https://aur.archlinux.org/submit/>，
-上传只含 `PKGBUILD`、`.SRCINFO`、`downvid.desktop` 的 tar.gz。
+AUR **已经移除了网页提交页**（`/submit/` 现在返回 404）。新包通过 Git over SSH
+创建：包不存在时，克隆对应的 pkgbase 会得到一个空仓库。
 
-或者用 git：
+1. 注册/登录 <https://aur.archlinux.org/register>，在 **My Account** 里添加 SSH 公钥
+   （建议专用密钥，例如 `~/.ssh/aur_downvid`）。
+2. 克隆（此时是空仓库）：
 
-```bash
-git clone ssh://aur@aur.archlinux.org/downvid-wails-bin.git
-cd downvid-wails-bin
-# 复制 PKGBUILD / .SRCINFO / downvid.desktop
-git add -A && git commit -m "1.6.3-1"
-git push
+   ```bash
+   git -c init.defaultBranch=master clone ssh://aur@aur.archlinux.org/downvid-wails-bin.git
+   ```
+
+3. 放入 `PKGBUILD`、`.SRCINFO`、`downvid.desktop`，提交并推送：
+
+   ```bash
+   cd downvid-wails-bin
+   cp /path/to/packaging/aur/downvid-wails-bin/{PKGBUILD,.SRCINFO,downvid.desktop} .
+   git add -A
+   git commit -m "1.6.3-1"
+   git push
+   ```
+
+`~/.ssh/config` 建议固定使用专用密钥：
+
 ```
+Host aur.archlinux.org
+  IdentityFile ~/.ssh/aur_downvid
+  User aur
+```
+
+> 本仓库的 `README.md` 曾写「网页上传 tar.gz」，那是旧版 AUR 的流程；
+> aurweb 6.x 起 `/submit/` 已不存在。
 
 ## 已知问题
 
