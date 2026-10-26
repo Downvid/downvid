@@ -1,20 +1,13 @@
 <div align="center">
-<!-- 这里到下面一个字都不能改 -->
 
-<table>
-  <tr>
-    <td width="30%" align="center" valign="middle">
-      <img src="app/build/appicon.png" alt="DownVid Logo" width="116" />
-      <h1>DownVid</h1>
-      <p><strong>Save the videos you like, locally.</strong></p>
-      <p>Open source · Cross-platform · Simple</p>
-    </td>
-    <td width="70%" align="center" valign="middle">
-      <img src="docs/asses/image.png" alt="DownVid desktop app preview" width="100%" />
-    </td>
-  </tr>
-</table>
-<!-- 上面一个字都不能改 -->
+<img src="app/build/appicon.png" alt="DownVid Logo" width="116" />
+
+<h1>DownVid</h1>
+
+<p><strong>Save the videos you like, locally.</strong></p>
+<p>Open source · Cross-platform · Simple</p>
+
+<img src="docs/asses/appview.png" alt="DownVid desktop app preview" width="100%" />
 
 <p>
   <a href="https://github.com/Downvid/downvid/releases"><img src="https://img.shields.io/github/downloads/Downvid/downvid/total?style=flat&label=Downloads&logo=github&logoColor=white&color=2563eb" alt="Downloads" /></a>

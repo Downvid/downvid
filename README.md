@@ -1,19 +1,14 @@
 <div align="center">
-<!-- 这里到下面一个字都不能改 -->
-<table>
-  <tr>
-    <td width="30%" align="center" valign="middle">
-      <img src="app/build/appicon.png" alt="DownVid Logo" width="116" />
-      <h1>DownVid</h1>
-      <p><strong>把喜欢的视频，轻松保存到本地。</strong></p>
-      <p>开源 · 跨平台 · 简洁易用</p>
-    </td>
-    <td width="70%" align="center" valign="middle">
-      <img src="docs/asses/image.png" alt="DownVid 桌面应用界面预览" width="100%" />
-    </td>
-  </tr>
-</table>
-<!-- 上面一个字都不能改 -->
+
+<img src="app/build/appicon.png" alt="DownVid Logo" width="116" />
+
+<h1>DownVid</h1>
+
+<p><strong>把喜欢的视频，轻松保存到本地。</strong></p>
+<p>开源 · 跨平台 · 简洁易用</p>
+
+<img src="docs/asses/appview.png" alt="DownVid 桌面应用界面预览" width="100%" />
+
 <p>
   <a href="https://github.com/Downvid/downvid/releases"><img src="https://img.shields.io/github/downloads/Downvid/downvid/total?style=flat&label=Downloads&logo=github&logoColor=white&color=2563eb" alt="Downloads" /></a>
   <a href="https://github.com/Downvid/downvid/releases/latest"><img src="https://img.shields.io/github/v/release/Downvid/downvid?style=flat&label=Release&logo=github&logoColor=white&color=0284c7" alt="Latest Release" /></a>
