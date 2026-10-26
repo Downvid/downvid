@@ -147,7 +147,7 @@ func (a *App) startup(ctx context.Context) {
 	// 用户会以为「代理设置丢了」，实际是从来没被读回来。
 	a.syncRuntimeSettings()
 
-	log.Printf("[downvid] version=%s dataDir=%s downloads=%s", version, a.dataDir, a.downloadsDir)
+	log.Printf("[downvid] version=%s dataDir=%s downloads=%s", effectiveVersion(), a.dataDir, a.downloadsDir)
 }
 
 // shutdown 在退出时清理。
@@ -158,11 +158,18 @@ func (a *App) shutdown(ctx context.Context) {
 
 // ===== 应用信息 =====
 
-// GetVersion 返回应用版本。
-func (a *App) GetVersion() string {
+// effectiveVersion 是「当前这个二进制是哪个版本」的**唯一判定处**。
+//
+// 开发构建（`go build` / `wails build` / `wails dev`，都没有 `-X main.version`）
+// 的版本号是 `0.0.0-dev`，界面不能把它显示出来，更新检查也不能拿它去比：
+// 否则界面写着 1.6.4、更新检查却拿 0.0.0-dev 去比最新 Release（1.6.4），
+// 得出「有新版本」——用户点进去发现版本号和自己的完全一样。
+// 所以两条路径必须共用这一个函数。
+func effectiveVersion() string {
 	if version != "" && version != "0.0.0-dev" {
 		return version
 	}
+	// 退回 CHANGELOG 里最近一条已发布版本
 	if entries, err := changelog.Local(); err == nil {
 		for _, e := range entries {
 			if !e.Unreleased && e.Version != "" {
@@ -172,6 +179,17 @@ func (a *App) GetVersion() string {
 	}
 	return version
 }
+
+// hasNewerRelease 判断最新 Release 是否比「本机这个二进制」新。
+//
+// 单独成函数是为了能被单测钉住：判定里用哪个版本号（effectiveVersion 还是
+// 原始的 `0.0.0-dev`）直接决定开发构建会不会一直提示「有新版本」。
+func hasNewerRelease(latest string) bool {
+	return update.CompareVersions(latest, effectiveVersion()) > 0
+}
+
+// GetVersion 返回应用版本。
+func (a *App) GetVersion() string { return effectiveVersion() }
 
 // GetBuildDate 返回应用构建日期（格式形如 2026.10.26）。
 func (a *App) GetBuildDate() string {
@@ -355,21 +373,22 @@ func (a *App) CheckUpdate(source string) map[string]any {
 		TimeoutMs: 8000,
 		Headers: map[string]string{
 			// GitHub API 缺 UA 会直接 403
-			"User-Agent": "DownVid/" + version,
+			"User-Agent": "DownVid/" + effectiveVersion(),
 		},
 	})
 
+	current := effectiveVersion()
 	out := map[string]any{
 		"attempts": result.Attempts,
 		"summary":  update.SummarizeFailures(result.Attempts),
-		"version":  version,
+		"version":  current,
 		// 当前这个二进制是哪个架构（electron / wails）。前端据此决定
 		// 「要不要提示迁移到新架构」以及「该读哪套更新通道」。
 		"architecture": string(update.CurrentArchitecture),
 	}
 	if result.Release != nil {
 		out["release"] = result.Release
-		out["hasUpdate"] = update.CompareVersions(result.Release.Version, version) > 0
+		out["hasUpdate"] = hasNewerRelease(result.Release.Version)
 		// 新架构迁移检测：这一版有没有发布适合本机的 Wails 包。
 		//
 		// 刻意只**告知**、不自动迁移 —— 迁移是单向门：装上新架构后

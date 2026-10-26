@@ -143,3 +143,34 @@ func TestResolvePathsOnFreshInstall(t *testing.T) {
 		t.Errorf("全新安装不该创建 ~/.downvid，err = %v", err)
 	}
 }
+
+// 开发构建下「界面显示的版本」与「更新检查用的版本」必须是同一个。
+//
+// 变异点：GetVersion 会退回 CHANGELOG 的最近发布版本（界面上写 1.6.4），
+// 而 CheckUpdate 直接拿 `version`（0.0.0-dev）去比最新 Release（也是 1.6.4），
+// 于是每次启动都提示「有新版本」，点进去版本号一模一样。
+func TestEffectiveVersionMatchesDisplayedVersion(t *testing.T) {
+	old := version
+	defer func() { version = old }()
+
+	version = "0.0.0-dev" // 与 go build / wails dev 的默认值一致
+	got := effectiveVersion()
+	if got == "" || got == "0.0.0-dev" {
+		t.Fatalf("开发构建应退回 CHANGELOG 的已发布版本，got %q", got)
+	}
+	if (&App{}).GetVersion() != got {
+		t.Errorf("GetVersion 与 effectiveVersion 必须一致")
+	}
+	// 与最新 Release 比较时不能得出「有更新」
+	if hasNewerRelease(got) {
+		t.Errorf("本机版本 %q 不应被判定为落后于同版本 %q", got, got)
+	}
+	if !hasNewerRelease("99.0.0") {
+		t.Errorf("更新的版本必须被识别出来")
+	}
+
+	version = "9.9.9" // 正式构建注入的版本优先
+	if got := effectiveVersion(); got != "9.9.9" {
+		t.Errorf("注入的版本应优先，got %q", got)
+	}
+}

@@ -1265,7 +1265,7 @@ func (a *App) ChangelogCurrent() *changelog.Entry {
 		log.Printf("[downvid] 读取更新日志失败：%v", err)
 		return nil
 	}
-	if e, ok := changelog.Find(entries, version); ok {
+	if e, ok := changelog.Find(entries, effectiveVersion()); ok {
 		return &e
 	}
 	for _, e := range entries {
@@ -1282,7 +1282,7 @@ func (a *App) ChangelogHistory() []changelog.Entry {
 	if err != nil {
 		return []changelog.Entry{}
 	}
-	out := changelog.History(entries, version)
+	out := changelog.History(entries, effectiveVersion())
 	if out == nil {
 		return []changelog.Entry{}
 	}
