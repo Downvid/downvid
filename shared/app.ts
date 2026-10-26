@@ -38,6 +38,12 @@ export const ISSUES_URL = `${REPO_URL}/issues`
 export const WEBSITE_URL = 'https://downvid-coral.vercel.app'
 
 /**
+ * 赞助入口（爱发电）。README 的赞助章节与「关于」页都用它，
+ * 换地址时不必在界面里再找一遍。
+ */
+export const AFDIAN_URL = 'https://afdian.com/a/xynrin'
+
+/**
  * 商务合作与赞助接洽邮箱。
  *
  * 用途**仅限**合作/赞助这类需要私下沟通的事：功能建议与缺陷请走 Issues，

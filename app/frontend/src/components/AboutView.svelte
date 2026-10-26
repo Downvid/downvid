@@ -13,12 +13,11 @@
   import { APP_VERSION, BUILD_DATE, REPO_URL, WEBSITE_URL } from '../lib/constants'
   import { openExternal } from '../lib/backend'
   // 邮箱与 mailto 拼装沿用应用现有的唯一来源，避免在演示里复制一份
-  import { CONTACT_EMAIL, contactMailto } from '../../../../shared/app'
+  import { AFDIAN_URL, CONTACT_EMAIL, contactMailto } from '../../../../shared/app'
 
   const ISSUES_URL = REPO_URL + '/issues/new'
   const LICENSE_URL = REPO_URL + '/blob/main/LICENSE'
   const year = new Date().getFullYear()
-  let showDonate = $state(false)
 
   const sponsorMailto = $derived(contactMailto({ subject: t('about.mailSubjectSponsor') }))
   const businessMailto = $derived(contactMailto({ subject: t('about.mailSubjectBusiness') }))
@@ -483,57 +482,65 @@
         <h2>{t('about.support')}</h2>
         <p>{t('about.supportHint')}</p>
       </div>
-      <button
-        type="button"
-        class="btn btn-ghost btn-sm support-toggle"
-        aria-expanded={showDonate}
-        onclick={() => (showDonate = !showDonate)}
-      >
-        <Icon name={showDonate ? 'expand_less' : 'qr_code_2'} size={15} />
-        <span>{showDonate ? t('about.hideDonate') : t('about.showDonate')}</span>
-      </button>
     </div>
 
-    {#if showDonate}
-      <div class="donate-body">
+    <div class="support-grid">
+      <!-- 微信赞赏：码直接放进卡片，与 README 的赞助章节一致 -->
+      <div class="support-card support-qr">
         <img src={donate} alt={t('about.donateAlt')} />
-        <p>{t('about.donateCaption')}</p>
+        <span class="support-card-title">{t('about.cardWechat')}</span>
+        <span class="support-card-note">{t('about.donateCaption')}</span>
       </div>
-    {/if}
 
-    <div class="contact-block">
-      <p class="contact-hint">{t('about.contactHint')}</p>
-      <div class="contact-grid">
+      <div class="support-side">
         <a
-          class="contact"
+          class="support-card"
+          href={AFDIAN_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          onclick={(e) => {
+            e.preventDefault()
+            openExternal(AFDIAN_URL)
+          }}
+        >
+          <span class="support-card-icon"><Icon name="favorite" size={15} /></span>
+          <span class="support-card-body">
+            <span class="support-card-title">{t('about.cardAfdian')}</span>
+            <span class="support-card-note">{t('about.cardAfdianNote')}</span>
+          </span>
+        </a>
+        <a
+          class="support-card"
           href={sponsorMailto}
           onclick={(e) => {
             e.preventDefault()
             openExternal(sponsorMailto)
           }}
         >
-          <span class="contact-icon"><Icon name="handshake" size={16} /></span>
-          <span class="contact-body">
-            <span class="contact-title">{t('about.contactSponsor')}</span>
-            <span class="contact-email num">{CONTACT_EMAIL}</span>
+          <span class="support-card-icon"><Icon name="mail" size={15} /></span>
+          <span class="support-card-body">
+            <span class="support-card-title">{t('about.cardOtherSponsor')}</span>
+            <span class="support-card-email num">{CONTACT_EMAIL}</span>
           </span>
         </a>
         <a
-          class="contact"
+          class="support-card"
           href={businessMailto}
           onclick={(e) => {
             e.preventDefault()
             openExternal(businessMailto)
           }}
         >
-          <span class="contact-icon"><Icon name="campaign" size={16} /></span>
-          <span class="contact-body">
-            <span class="contact-title">{t('about.contactBusiness')}</span>
-            <span class="contact-email num">{CONTACT_EMAIL}</span>
+          <span class="support-card-icon"><Icon name="campaign" size={15} /></span>
+          <span class="support-card-body">
+            <span class="support-card-title">{t('about.contactBusiness')}</span>
+            <span class="support-card-email num">{CONTACT_EMAIL}</span>
           </span>
         </a>
       </div>
     </div>
+
+    <p class="support-note">{t('about.supportNoAds')}</p>
   </section>
 
   <section class="meta-row">
@@ -989,89 +996,88 @@
     line-height: 1.6;
     color: var(--color-on-surface-variant);
   }
-  .support-toggle {
-    flex: none;
+  /* ---------- 赞助卡片（对齐 README 的赞助章节） ---------- */
+  .support-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    gap: 10px;
+    margin-top: 14px;
   }
-  .donate-body {
+  .support-side {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    padding-top: 14px;
-  }
-  .donate-body img {
-    width: 188px;
-    max-width: 70%;
-    border-radius: 8px;
-    border: 1px solid var(--rule);
-    background: #fff;
-  }
-  .donate-body p {
-    margin: 0;
-    font-size: 10px;
-    color: var(--color-on-surface-variant);
-  }
-  .contact-block {
-    margin-top: 14px;
-    padding-top: 12px;
-    border-top: 1px solid var(--rule-soft);
-  }
-  .contact-hint {
-    margin: 0 0 8px;
-    font-size: 10.5px;
-    line-height: 1.6;
-    color: var(--color-on-surface-variant);
-  }
-  .contact-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
   }
-  .contact {
+  .support-card {
     display: flex;
     align-items: center;
-    gap: 9px;
+    gap: 10px;
     min-width: 0;
-    padding: 9px 10px;
+    padding: 10px 12px;
     border: 1px solid var(--rule);
-    border-radius: var(--radius-control);
+    border-radius: var(--radius-card);
     background: var(--paper-raised);
     text-decoration: none;
     transition:
       border-color var(--dur-base) var(--ease-out),
       background-color var(--dur-base) var(--ease-out);
   }
-  .contact:hover {
+  a.support-card:hover {
     border-color: color-mix(in oklab, var(--accent-deep) 40%, transparent);
     background: color-mix(in oklab, var(--accent-wash) 35%, var(--paper-raised));
   }
-  .contact-icon {
+  .support-qr {
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 12px 10px;
+    text-align: center;
+    justify-content: center;
+  }
+  .support-qr img {
+    width: 118px;
+    max-width: 100%;
+    border-radius: 8px;
+    border: 1px solid var(--rule);
+    background: #fff;
+  }
+  .support-card-icon {
     display: grid;
     place-items: center;
-    width: 26px;
-    height: 26px;
+    width: 28px;
+    height: 28px;
     flex: none;
-    border-radius: 6px;
-    background: var(--paper-deep);
-    color: var(--color-on-surface-variant);
+    border-radius: var(--radius-control);
+    background: var(--accent-wash);
+    color: var(--accent-deep);
   }
-  .contact-body {
+  .support-card-body {
     display: flex;
     flex-direction: column;
-    gap: 1px;
+    gap: 2px;
     min-width: 0;
   }
-  .contact-title {
-    font-size: 11px;
+  .support-card-title {
+    font-size: 12px;
     font-weight: 600;
-    color: var(--ink);
+    color: var(--ink-strong);
   }
-  .contact-email {
-    font-size: 9.5px;
+  .support-card-note,
+  .support-card-email {
+    font-size: 10px;
+    line-height: 1.5;
     color: var(--color-on-surface-variant);
-    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .support-note {
+    margin: 12px 0 0;
+    padding-top: 10px;
+    border-top: 1px solid var(--rule-soft);
+    font-size: 10.5px;
+    line-height: 1.6;
+    color: var(--color-on-surface-variant);
   }
 
   .tech-chip {
@@ -1143,11 +1149,7 @@
     .support-head {
       flex-wrap: wrap;
     }
-    .support-toggle {
-      width: 100%;
-      justify-content: center;
-    }
-    .contact-grid {
+    .support-grid {
       grid-template-columns: minmax(0, 1fr);
     }
     .card-head {

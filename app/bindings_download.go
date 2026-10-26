@@ -643,28 +643,38 @@ func (a *App) managedBinDir() string {
 
 // sidecarPath 定位 Go 边车。
 //
-// 打包后放在 `resources/downvid-deps/`（与 Electron 版一致），开发时回落到
-// 仓库的 `backend/build/<platform>-<arch>/`。
+// 顺序是有讲究的，别随手调：
+//
+//  1. **带 sidecar 的构建（正式包）只认内嵌那份** —— 解到
+//     `~/.downvid/runtime/bin/downvid-deps` 并用它。早先这里先找
+//     `<app>/Contents/Resources/downvid-deps`，而 macOS 的 .app 恰好有 Resources
+//     目录：从 Electron 版升级上来的用户，那里可能躺着一份**旧版边车**，于是
+//     探测与安装跑的都是旧代码，界面还看不出来。内嵌那份永远与主程序同版本。
+//  2. 开发构建（`wails dev` / `go run`，没有 `-tags withsidecar`）走仓库
+//     `backend/build/<platform>-<arch>/`：那份是刚编的，才能测到当前改动。
+//  3. 最后才是 Electron 时代的 Resources 位置，纯兜底。
 func (a *App) sidecarPath() string {
 	name := "downvid-deps"
 	if runtime.GOOS == "windows" {
 		name += ".exe"
 	}
 
-	exe, err := os.Executable()
-	if err == nil {
-		bundle := filepath.Join(filepath.Dir(exe), "..", "Resources", "downvid-deps", name)
-		if fileExists(bundle) {
-			return bundle
-		}
-		// 直接跑 `go run` / `wails dev` 时的位置
-		dev := filepath.Join(filepath.Dir(exe), name)
-		if fileExists(dev) {
-			return dev
+	// 1. 正式包：内嵌边车 → 落到托管目录（~/.downvid/runtime/bin）
+	if sidecar.Available {
+		dir := a.managedBinDir()
+		if p, err := sidecar.Extract(dir); err == nil {
+			return p
+		} else {
+			log.Printf("[downvid] 解出内嵌边车失败：%v", err)
 		}
 	}
 
-	// 仓库内开发：backend/build/<platform>-<arch>/
+	// 2. 开发：先看可执行文件同目录，再看仓库 backend/build/
+	if exe, err := os.Executable(); err == nil {
+		if dev := filepath.Join(filepath.Dir(exe), name); fileExists(dev) {
+			return dev
+		}
+	}
 	wd, _ := os.Getwd()
 	for _, base := range []string{wd, filepath.Join(wd, "..")} {
 		p := filepath.Join(base, "backend", "build", platformKey(), name)
@@ -673,19 +683,11 @@ func (a *App) sidecarPath() string {
 		}
 	}
 
-	// 打包后的正式路径：边车**内嵌在主二进制里**，运行时落到数据目录。
-	//
-	// 这是 Wails 版最关键的一处：早先只找 `Resources/downvid-deps/`，
-	// 而 Wails 没有 electron-builder 的 extraResources 机制 —— 打出来的
-	// app 里根本没有边车，于是 `DetectDependencies` 只返回一条
-	// 「探测程序缺失」。用户看到的是「依赖页怎么只剩这么一点」，
-	// 而代码里没有任何一处会报错。
-	if sidecar.Available {
-		dir := a.managedBinDir()
-		if p, err := sidecar.Extract(dir); err == nil {
-			return p
-		} else {
-			log.Printf("[downvid] 解出内嵌边车失败：%v", err)
+	// 3. 兜底：Electron 时代的 Resources/downvid-deps/（迁移过来的老安装才有）
+	if exe, err := os.Executable(); err == nil {
+		bundle := filepath.Join(filepath.Dir(exe), "..", "Resources", "downvid-deps", name)
+		if fileExists(bundle) {
+			return bundle
 		}
 	}
 	return ""

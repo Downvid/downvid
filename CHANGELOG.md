@@ -6,10 +6,13 @@
 
 ### 变更
 
+- **「关于」页的赞助区块改成卡片**：微信赞赏码、爱发电、其他赞助方式、商务合作 / 广告位各一张卡片，与 README 的赞助章节一一对应；并明确「软件本身不含任何商业广告，广告位指项目层面的展示合作」。
+
 - **下载历史与运行依赖统一到 `~/.downvid`**：下载历史从系统数据目录（macOS `~/Library/Application Support/downvid/`、Windows `%APPDATA%\downvid\`、Linux `~/.config/downvid/`）迁到 `~/.downvid/download-history.json`，与 yt-dlp / ffmpeg / 边车本体放在一起，三端路径一致。升级时自动搬迁，新位置已有文件则不覆盖。
 
 ### 修复
 
+- **正式包可能用到 Electron 时代遗留的旧边车**：边车定位原先先找 `<app>/Contents/Resources/downvid-deps`，而 macOS 的 `.app` 本来就有 `Resources` 目录——从 Electron 版升级上来的用户那里可能躺着一份旧二进制，探测与安装都在跑旧代码。现在带 sidecar 的构建只认内嵌那份并解到 `~/.downvid/runtime/bin`（与主程序同版本）；开发构建仍走仓库 `backend/build/`，Resources 位置只作最后兜底。
 - **开发构建一直提示「有新版本」**：界面版本号走「退回 CHANGELOG 最近发布版本」（`1.6.4`），而更新检查直接拿未注入的 `0.0.0-dev` 去比最新 Release，于是每次启动都弹「有新版本」，点进去版本号和自己的完全一样。现在两条路径共用 `effectiveVersion()`，判定收敛到 `hasNewerRelease()` 并有单测钉住。
 - **旧版本托管依赖「搬一半」后静默丢失**：依赖目录的迁移原先只在目标目录不存在时才执行，用户手动建过空目录或上次迁移失败时，旧 `userData/runtime/bin` 里的 yt-dlp / ffmpeg 会一直留在原地，探测只认新目录 → 依赖像是消失了、白重下 80MB。现在按项逐个搬迁，目标已有同名文件时以目标为准；跨挂载点 `rename` 失败时退回复制，失败原因落日志而不是静默跳过。
 
