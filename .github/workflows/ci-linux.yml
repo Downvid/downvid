@@ -26,8 +26,37 @@ env:
   GOTOOLCHAIN: local
 
 jobs:
+  # 变更范围：文档/官网/图片-only 的 push 不跑重活（交叉编译、三平台产物、
+  # 真实依赖端到端），只保留跑 lint / 单测的 frontend job —— lint:docs 与
+  # lint:website 恰好就是校验这些文件的，所以它们不能被跳过。
+  changes:
+    name: 变更范围
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - id: filter
+        shell: bash
+        run: |
+          base='${{ github.event.before }}'
+          if [ -z "$base" ] || [ "$base" = "0000000000000000000000000000000000000000" ]; then
+            echo "code=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if git diff --quiet "$base" "$GITHUB_SHA" -- . \
+              ':(exclude)docs/**' ':(exclude)**.md' ':(exclude)website/**'; then
+            echo "code=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          fi
+
   backend:
     name: 后端 · Go 侧车 + Go 核心
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -183,6 +212,8 @@ jobs:
 
   integration:
     name: 集成 · 真实 yt-dlp / ffmpeg
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -196,6 +227,8 @@ jobs:
 
   build:
     name: 构建 · Wails 单文件产物
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
     # 必须用 22.04：24.04 的软件源里只剩 webkit2gtk-4.1，而 Wails v2.16
     # 默认找 4.0（要加 `-tags webkit2_41` 才用 4.1），装不上就直接 exit 100。
     # release.yml 的构建矩阵同样固定在 22.04。

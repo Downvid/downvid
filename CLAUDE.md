@@ -94,6 +94,11 @@ by responsibility:
 | `frontend` | icons / website / docs / provenance / boundaries / repo coords / i18n / workflows / root tests; plus `wails generate module` → svelte-check and frontend tests |
 | `integration` / `build` | Linux only for real-dependency E2E; each platform has a `build` job that compiles the single-file artifact once |
 
+Each of the three workflows starts with a `changes` job: a **docs / website / Markdown-only push**
+runs only `frontend` (lint, unit tests, i18n, icons), while cross-compilation, per-platform artifacts
+and the real-dependency e2e are skipped. `frontend` must never be skipped — `lint:docs` and
+`lint:website` are exactly what verify those files.
+
 Releases are done by `.github/workflows/release.yml`. `.github/workflows/release-audit.yml` checks
 daily and independently that "latest tag <-> Release" match. `.github/workflows/update-deps.yml`
 refreshes the dependency manifest. `.github/workflows/triage.yml` classifies issues.
