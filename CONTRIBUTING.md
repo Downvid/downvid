@@ -32,13 +32,14 @@ pnpm dev
 ### 构建
 
 ```bash
-# 当前平台构建
-pnpm build
+# 当前平台构建（前端 + 依赖边车都内嵌进单文件产物）
+bash app/scripts/build.sh
 
 # 指定平台
-pnpm build:mac
-pnpm build:win
-pnpm build:linux
+bash app/scripts/build.sh -platform darwin/arm64
+bash app/scripts/build.sh -platform darwin/universal
+bash app/scripts/build.sh -platform windows/amd64
+bash app/scripts/build.sh -platform linux/amd64
 ```
 
 ### 代码检查

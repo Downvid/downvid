@@ -31,16 +31,13 @@ aria2 片段隔离在 `.downvid-aria2`，避免关闭加速或更换引擎时把
 
 ## 复现验证
 
-```powershell
-pnpm test
-pnpm test:download:integration
-$env:DOWNVID_BENCH_BASELINE = 'origin/main'
-$env:DOWNVID_TEST_ARIA2 = '你的 aria2c 绝对路径'
-$env:DOWNVID_TEST_YTDLP = '你的 yt-dlp 绝对路径'
-pnpm test:acceleration
+```bash
+pnpm test                                  # 根目录纯逻辑单测
+(cd app && go test ./internal/download/)    # 进度行解析 / aria2 进度 / yt-dlp 参数组装
+pnpm test:e2e:real                          # 真实 yt-dlp / ffmpeg（缺失时明确跳过）
 ```
 
-未提供外部工具路径时仍运行内置基准，只明确跳过外部引擎。基准在临时目录运行，本地 HTTP
+未安装外部工具时，端到端用例明确跳过而不是伪造结果。基准在临时目录运行，本地 HTTP
 服务模拟每连接限速；逐字节检查完整文件、检查并发上限与连接复用。可选旧版本引用应存在于本地 Git 历史。
 
 Windows 环境三轮 16 MiB 受控测试中位耗时：
