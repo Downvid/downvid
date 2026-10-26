@@ -25,7 +25,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -266,6 +265,7 @@ func (m *Manager) Install(opts FetchOptions, onProgress func(Progress)) error {
 
 	cmd := exec.CommandContext(runCtx, m.sidecarPath, args...)
 	hideWindow(cmd)
+	setProcessGroup(cmd)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -362,7 +362,8 @@ func (m *Manager) Install(opts FetchOptions, onProgress func(Progress)) error {
 
 // Cancel 取消正在进行的下载。
 //
-// 边车收到 SIGTERM 后会自己清理 `.part`，所以这里不需要额外清理。
+// 边车收到 SIGTERM 后会自己清理 `.part`。信号必须发给**整个进程组**：边车自己
+// 会再起子进程，只杀直接子进程会让孙进程变孤儿、继续写 `.part`。
 func (m *Manager) Cancel() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -372,7 +373,14 @@ func (m *Manager) Cancel() bool {
 	}
 	m.canceling = true
 	if m.active.Process != nil {
-		_ = m.active.Process.Signal(os.Interrupt)
+		signalTree(m.active, false)
+		// 宽限期后再强杀：SIGTERM 未必被处理（边车在解压时可能卡在 I/O 上）
+		go func(cmd *exec.Cmd) {
+			time.Sleep(3 * time.Second)
+			if cmd.ProcessState == nil { // 还在跑才强杀，避免 pid 复用误伤
+				signalTree(cmd, true)
+			}
+		}(m.active)
 	}
 	return true
 }
