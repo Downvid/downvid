@@ -7,6 +7,7 @@
 package parse
 
 import (
+	"encoding/json"
 	"math"
 	"os"
 	"strconv"
@@ -35,6 +36,13 @@ func ParseCookiesFile(filePath string) []Cookie {
 	raw, err := os.ReadFile(filePath)
 	if err != nil {
 		return []Cookie{}
+	}
+
+	// 浏览器扩展（Cookie-Editor / EditThisCookie 等）导出的是 **JSON 数组**，
+	// 不是 Netscape 文本。早先这里只按制表符切，整份文件一条都解析不出来，
+	// 表现就是「明明配了 cookies.txt，却还是匿名请求」。
+	if jsonCookies, ok := parseJSONCookies(raw); ok {
+		return jsonCookies
 	}
 
 	cookies := []Cookie{}
@@ -120,4 +128,62 @@ func EstimateFileSize(height int, durationMs int64) int64 {
 // download 要 import parse（为了 Format），反向 import 会成环。
 func IsYouTube(u string) bool {
 	return strings.Contains(u, "youtube.com") || strings.Contains(u, "youtu.be")
+}
+
+// jsonCookieExport 是浏览器扩展导出的单个 cookie。
+//
+// 字段名来自 Chrome 扩展的通用格式；`hostOnly` 为 true 表示只对当前主机生效，
+// Netscape 格式里对应「是否包含子域」那一列。
+type jsonCookieExport struct {
+	Domain         string  `json:"domain"`
+	Name           string  `json:"name"`
+	Value          string  `json:"value"`
+	Path           string  `json:"path"`
+	Secure         bool    `json:"secure"`
+	HostOnly       *bool   `json:"hostOnly"`
+	ExpirationDate float64 `json:"expirationDate"`
+}
+
+// parseJSONCookies 尝试把 JSON 导出解析成 Cookie 列表。
+//
+// 只有整份文件是一个 JSON 数组、且至少有一个条目带 name 时才认；
+// 否则返回 ok=false，让调用方继续走 Netscape 解析。
+func parseJSONCookies(raw []byte) ([]Cookie, bool) {
+	trimmed := strings.TrimSpace(string(raw))
+	if !strings.HasPrefix(trimmed, "[") {
+		return nil, false
+	}
+	var items []jsonCookieExport
+	if err := json.Unmarshal([]byte(trimmed), &items); err != nil {
+		return nil, false
+	}
+	cookies := make([]Cookie, 0, len(items))
+	for _, it := range items {
+		if it.Name == "" || it.Domain == "" {
+			continue
+		}
+		path := it.Path
+		if path == "" {
+			path = "/"
+		}
+		hostOnly := it.HostOnly != nil && *it.HostOnly
+		domain := it.Domain
+		// Netscape 用前导点表示「包含子域」；JSON 里是 hostOnly=false
+		if !hostOnly && !strings.HasPrefix(domain, ".") {
+			domain = "." + domain
+		}
+		cookies = append(cookies, Cookie{
+			Domain:            domain,
+			IncludeSubdomains: !hostOnly,
+			Path:              path,
+			Secure:            it.Secure,
+			Expiry:            int64(it.ExpirationDate),
+			Name:              it.Name,
+			Value:             it.Value,
+		})
+	}
+	if len(cookies) == 0 {
+		return nil, false
+	}
+	return cookies, true
 }

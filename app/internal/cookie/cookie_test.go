@@ -136,3 +136,49 @@ func TestCookieFailureHint(t *testing.T) {
 		t.Errorf("提示应点名失败的浏览器，got %q", hint)
 	}
 }
+
+// 扩展导出的 JSON 必须被转成 Netscape 再交给 yt-dlp。
+//
+// 变异点：yt-dlp 的 `--cookies` 只认 Netscape，喂 JSON 不报错但一条 cookie 都不带，
+// 界面表现为「配了 cookie 还是解析不了」，无从排查。
+func TestNormalizeCookieFileConvertsJSON(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "cookies.json")
+	raw := `[{"domain":".douyin.com","hostOnly":false,"name":"ttwid","path":"/","secure":true,"expirationDate":1793010826,"value":"1%7Cabc"}]`
+	if err := os.WriteFile(src, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	out, converted, err := NormalizeCookieFile(src, dir)
+	if err != nil {
+		t.Fatalf("转换失败：%v", err)
+	}
+	if !converted || out == src {
+		t.Fatalf("JSON 应被转换成新文件，got %q converted=%v", out, converted)
+	}
+	body, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := strings.TrimSpace(strings.Split(strings.TrimSpace(string(body)), "\n")[1])
+	fields := strings.Split(line, "\t")
+	if len(fields) != 7 {
+		t.Fatalf("Netscape 行应为 7 列，got %d：%q", len(fields), line)
+	}
+	if fields[0] != ".douyin.com" || fields[1] != "TRUE" || fields[5] != "ttwid" || fields[6] != "1%7Cabc" {
+		t.Errorf("转换结果不对：%q", line)
+	}
+}
+
+// Netscape 文件不该被改写（否则每次解析都多一份临时文件）。
+func TestNormalizeCookieFileLeavesNetscapeAlone(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "cookies.txt")
+	if err := os.WriteFile(src, []byte("# Netscape HTTP Cookie File\n.douyin.com\tTRUE\t/\tFALSE\t0\ta\tb\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	out, converted, err := NormalizeCookieFile(src, dir)
+	if err != nil || converted || out != src {
+		t.Fatalf("Netscape 输入应原样返回，got %q converted=%v err=%v", out, converted, err)
+	}
+}

@@ -19,6 +19,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -177,10 +178,21 @@ func (m *Manager) tempPath(tag string) string {
 func (m *Manager) GetAttempts(manualFile string, preferSnapshot bool) []Attempt {
 	if manualFile != "" {
 		if st, err := os.Stat(manualFile); err == nil && !st.IsDir() && st.Size() > 0 {
+			// 扩展导出的 JSON 必须先转成 Netscape，否则 yt-dlp 会**静默地**
+			// 不带任何 cookie（不报错），表现为「配了 cookie 还是解析不了」。
+			path := manualFile
+			temp := ""
+			if converted, ok, err := NormalizeCookieFile(manualFile, m.CookieDir()); err != nil {
+				log.Printf("[downvid] cookies 文件转换失败（按原格式使用）：%v", err)
+			} else if ok {
+				path = converted
+				temp = converted
+			}
 			return []Attempt{
 				{
-					Label: "manual",
-					Args:  []string{"--cookies", manualFile},
+					Label:    "manual",
+					Args:     []string{"--cookies", path},
+					TempFile: temp,
 				},
 				{
 					Label: "none",

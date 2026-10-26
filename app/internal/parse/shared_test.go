@@ -153,3 +153,47 @@ func TestBuildCookieHeaderEmpty(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+// 浏览器扩展导出的是 JSON 数组，不是 Netscape 文本。
+//
+// 变异点：早先只按制表符切分，JSON 文件一条都解析不出来 → 直连解析器
+// 拿到空 Cookie 头，抖音对匿名请求直接回首页/403，用户看到「配了 cookies
+// 还是用不了」，而且没有任何提示说格式不对。
+func TestParseCookiesFileJSONExport(t *testing.T) {
+	raw := `[
+		{"domain":".douyin.com","hostOnly":false,"name":"ttwid","path":"/","secure":true,"expirationDate":1824114971,"value":"1%7Cabc"},
+		{"domain":"www.douyin.com","hostOnly":true,"name":"__ac_nonce","path":"/","secure":false,"value":"06adf2"}
+	]`
+	path := filepath.Join(t.TempDir(), "cookies.txt")
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cookies := ParseCookiesFile(path)
+	if len(cookies) != 2 {
+		t.Fatalf("应解析出 2 条 cookie，got %d", len(cookies))
+	}
+	if cookies[0].Name != "ttwid" || cookies[0].Domain != ".douyin.com" {
+		t.Errorf("第一条解析错误：%+v", cookies[0])
+	}
+	if cookies[1].Domain != "www.douyin.com" || cookies[1].IncludeSubdomains {
+		t.Errorf("hostOnly 的域名不该加前导点、也不包含子域：%+v", cookies[1])
+	}
+	header := BuildCookieHeader(cookies, DouyinCookieDomains)
+	if !strings.Contains(header, "ttwid=1%7Cabc") || !strings.Contains(header, "__ac_nonce=06adf2") {
+		t.Errorf("Cookie 头应包含抖音的两条 cookie，got %q", header)
+	}
+}
+
+// Netscape 文本仍要照旧可解析（不能因为加了 JSON 分支就把老格式弄坏）。
+func TestParseCookiesFileStillReadsNetscape(t *testing.T) {
+	raw := "# Netscape HTTP Cookie File\n.douyin.com\tTRUE\t/\tTRUE\t1793010826\tttwid\t1%7Cabc\n"
+	path := filepath.Join(t.TempDir(), "cookies.txt")
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cookies := ParseCookiesFile(path)
+	if len(cookies) != 1 || cookies[0].Name != "ttwid" || cookies[0].Value != "1%7Cabc" {
+		t.Fatalf("Netscape 解析坏了：%+v", cookies)
+	}
+}

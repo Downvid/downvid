@@ -20,6 +20,7 @@
 
 ### 修复
 
+- **手动指定的 cookies.txt 是浏览器扩展导出的 JSON 时完全不生效**：yt-dlp 的 `--cookies` 只认 Netscape 文本，喂它 JSON **不报错也不带任何 cookie**；直连解析器按制表符切分，同样一条都读不出来。现在两种格式都认：手动路径的 JSON 会先转成 Netscape 临时文件再交给 yt-dlp，平台直连解析也能直接读 JSON。
 - **抖音/快手「需要新鲜 Cookie」被报成「无法解析该链接」**：yt-dlp 对无 cookie 的抖音请求只回 `Fresh cookies (not necessarily logged in) are needed`，既不含 "Sign in" 也不含 "登录"，早先落到 unknown。现在归类为需要登录态，界面会指向「设置 → Cookie」。
 - **抖音/快手直连解析拿不到登录态**：自动模式下浏览器 Cookie 由 yt-dlp 自己导出（`--cookies-from-browser`），而抖音/快手的直连 API 走的是应用自己的 HTTP 请求，之前只认可「手动模式」的 cookies.txt。现在已有的浏览器 Cookie 快照也会一并交给直连解析。
 - **失效的抖音短链被误报成「无法解析该链接」**：抖音会把过期的分享链接 302 到站点首页（跳转结果里没有视频 ID），旧逻辑随后把跳转后的首页地址交给 yt-dlp，只换来一句 `Unsupported URL`。现在直接判定：带 Cookie 仍拿不到视频 ID → 「短链已失效或视频不存在」；没带 Cookie → 「可能失效，也可能需要登录 Cookie」（抖音对匿名请求一律跳到首页，而浏览器里带登录态同一条链接能打开）。
