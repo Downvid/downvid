@@ -910,6 +910,16 @@ func (a *App) Parse(url string, proxy string) (*parse.VideoInfo, error) {
 	if st.CookieMode == "manual" {
 		manualFile = st.CookiesFile
 	}
+	// 抖音 / 快手的直连解析器走的是自己的 HTTP 请求，拿不到
+	// `--cookies-from-browser` 这种只对 yt-dlp 生效的参数。自动模式下若已经有
+	// 一份浏览器 Cookie 快照（上次 yt-dlp 成功导出的），就把它一并交给直连解析——
+	// 否则直连那条永远是匿名请求，而抖音对匿名请求只会把短链重定向到站点首页。
+	directAPICookies := manualFile
+	if directAPICookies == "" {
+		if snap := a.cookieManager().SnapshotPath(); fileExists(snap) {
+			directAPICookies = snap
+		}
+	}
 
 	attempts := a.cookieManager().GetAttempts(manualFile, false)
 	var lastErr error
@@ -922,7 +932,7 @@ func (a *App) Parse(url string, proxy string) (*parse.VideoInfo, error) {
 			URL:         url,
 			Proxy:       effectiveProxy,
 			CookieArgs:  att.Args,
-			CookiesFile: manualFile,
+			CookiesFile: directAPICookies,
 			// 原始 info JSON 落在数据目录下而不是 /tmp：
 			// 桌面端可能长期运行，/tmp 会被系统清理，而下载时要读它
 			CacheDir:  filepath.Join(a.dataDir, "parse-cache"),

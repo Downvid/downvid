@@ -91,6 +91,15 @@ func newHTTPClient(proxyStr string, timeout time.Duration) *http.Client {
 var errDouyinDeadLink = errors.New(
 	"[[parse-error:not-found]]抖音短链已失效或视频不存在（平台把该链接重定向到了站点首页），请从 App 重新复制分享链接")
 
+// errDouyinNeedsCookie 是同一个跳转结果，但**这次没带任何 Cookie**。
+//
+// 实测：匿名请求访问短链，抖音一律 302 到站点首页；浏览器里带着登录态点同一
+// 条链接却能落到 /video/<id>。所以无 Cookie 时报「可能失效、也可能需要登录」，
+// 别把缺登录态说成链接坏了。
+var errDouyinNeedsCookie = errors.New(
+	"[[parse-error:authentication]]抖音把该短链重定向到了站点首页：链接可能已失效，也可能需要登录 Cookie。" +
+		"请先在浏览器里确认能打开，再到「设置 → Cookie」配置登录信息后重试")
+
 // ParseDouyinAPI 用直接 HTTP API 快速解析抖音视频（耗时约 200ms）。
 func ParseDouyinAPI(rawURL string, cookiesFile string, proxyStr string) (*VideoInfo, error) {
 	client := newHTTPClient(proxyStr, 15*time.Second)
@@ -129,6 +138,9 @@ func ParseDouyinAPI(rawURL string, cookiesFile string, proxyStr string) (*VideoI
 	}
 
 	if videoID == "" {
+		if cookieHeader == "" {
+			return nil, errDouyinNeedsCookie
+		}
 		return nil, errDouyinDeadLink
 	}
 

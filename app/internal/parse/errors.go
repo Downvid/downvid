@@ -125,7 +125,27 @@ type Versions struct {
 // **诊断只输出允许公开的类别和版本，绝不拼接原始子进程输出。**
 // 这条约束是 Issue 模板的基础：用户把诊断贴出来时，不该连带泄露 URL 与 Cookie。
 func ParseDiagnostic(raw string, versions Versions) string {
+	return ParseDiagnosticWithKind(raw, ClassifyParseError(raw), versions)
+}
+
+// classifyForURL 在通用分类之上补一层「站点上下文」。
+//
+// 抖音 / 快手的分享短链对**匿名请求**会被重定向到站点首页（带登录态才跳到视频页），
+// yt-dlp 收到首页地址只会说 `Unsupported URL`。那不是「不支持该网站」——这两个站点
+// 明明支持——而是缺登录态，所以按 authentication 报，界面才会提示去检查 Cookie。
+func classifyForURL(raw, pageURL string) ErrorKind {
 	kind := ClassifyParseError(raw)
+	if kind == KindUnsupportedURL && (IsDouyin(pageURL) || IsKuaishou(pageURL)) {
+		return KindAuthentication
+	}
+	return kind
+}
+
+// ParseDiagnosticWithKind 用调用方已经判定的类别生成诊断文本。
+//
+// 单独开一个入口是因为有两处需要「按上下文改判」：抖音/快手短链的
+// Unsupported URL 要改判成 authentication（见 classifyForURL）。
+func ParseDiagnosticWithKind(raw string, kind ErrorKind, versions Versions) string {
 	lines := []string{"错误类别：" + string(kind), ParseMessages[kind]}
 
 	ytdlp := versions.Ytdlp

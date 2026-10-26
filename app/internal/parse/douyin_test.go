@@ -94,4 +94,12 @@ func TestDouyinDeadShortLinkClassified(t *testing.T) {
 	if !strings.Contains(errDouyinDeadLink.Error(), "短链已失效") {
 		t.Error("错误文案应说清「短链失效」，而不是笼统的「无法解析」")
 	}
+	// 没带 Cookie 时不能断言「链接坏了」——抖音对匿名请求会给首页，
+	// 而同一个链接在浏览器里带着登录态是能打开视频的。
+	if got := ClassifyParseError(errDouyinNeedsCookie.Error()); got != KindAuthentication {
+		t.Errorf("无 Cookie 时应归类为 %s，got %s", KindAuthentication, got)
+	}
+	if !strings.Contains(errDouyinNeedsCookie.Error(), "Cookie") {
+		t.Error("无 Cookie 的提示必须点明可能是登录态问题")
+	}
 }

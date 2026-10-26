@@ -192,7 +192,7 @@ func (p *Parser) Parse(opts ParseOptions) (*VideoInfo, error) {
 		}
 		// 短链本身已经失效（跳转后拿不到视频 ID）：再交给 yt-dlp 只会得到
 		// 一句 `Unsupported URL`，把「链接过期」误报成「不支持该网站」。
-		if errors.Is(err, errDouyinDeadLink) {
+		if errors.Is(err, errDouyinDeadLink) || errors.Is(err, errDouyinNeedsCookie) {
 			return nil, err
 		}
 
@@ -281,8 +281,8 @@ func (p *Parser) Parse(opts ParseOptions) (*VideoInfo, error) {
 		if opts.RawStderr != nil {
 			*opts.RawStderr = stderr
 		}
-		kind := ClassifyParseError(stderr)
-		return nil, fmt.Errorf("[[parse-error:%s]]%s", kind, ParseDiagnostic(stderr, Versions{Runtime: runtimeVersion}))
+		kind := classifyForURL(stderr, opts.URL)
+		return nil, fmt.Errorf("[[parse-error:%s]]%s", kind, ParseDiagnosticWithKind(stderr, kind, Versions{Runtime: runtimeVersion}))
 	}
 
 	if opts.RawStderr != nil && stderr != "" {

@@ -160,3 +160,22 @@ func TestShouldOfferIssue(t *testing.T) {
 		t.Error("未分类错误应给 Issue 入口")
 	}
 }
+
+// 抖音/快手短链的 Unsupported URL 必须改判成「需要登录」。
+//
+// 实测：匿名请求访问 v.douyin.com 的短链，抖音一律 302 到 https://www.douyin.com/
+// （首页，不带视频 ID），yt-dlp 于是只回 `Unsupported URL`。若照原样显示
+// 「暂不支持该网站或链接类型」，用户会以为应用不支持抖音，而不是去检查 Cookie。
+func TestClassifyForURLDouyinShortLink(t *testing.T) {
+	raw := "ERROR: Unsupported URL: https://www.douyin.com/"
+	if got := classifyForURL(raw, "https://v.douyin.com/x4G02LFmUiU"); got != KindAuthentication {
+		t.Errorf("抖音短链应改判为 %s，got %s", KindAuthentication, got)
+	}
+	if got := classifyForURL(raw, "https://v.kuaishou.com/abc"); got != KindAuthentication {
+		t.Errorf("快手短链应改判为 %s，got %s", KindAuthentication, got)
+	}
+	// 其它站点保持原判，别把「不支持」说成「要登录」
+	if got := classifyForURL(raw, "https://example.com/v/1"); got != KindUnsupportedURL {
+		t.Errorf("非抖音/快手应保持 %s，got %s", KindUnsupportedURL, got)
+	}
+}
