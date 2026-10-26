@@ -56,6 +56,11 @@ jobs:
         working-directory: backend
         run: go test -shuffle=on -count=1 ./...
 
+      # main.go 里有 `//go:embed all:frontend/dist`：目录不存在时 vet/测试
+      # 直接编译失败（pattern all:frontend/dist: no matching files found）
+      - name: 准备 embed 目录
+        run: bash app/scripts/prepare-embed-dir.sh
+
       - name: go vet（核心）
         working-directory: app
         run: go vet ./...
