@@ -184,6 +184,32 @@
       </div>
       <CaptureBar compact />
       <ParsePanel />
+
+      <!-- 结果骨架：解析要等 2~11 秒（yt-dlp 首次执行更久），空等一片白最容易
+           让人以为卡死。这里先把**即将出现的那张卡片**画出来，占位条用同一套
+           排版，结果一到就直接换成真数据，不闪。 -->
+      <section class="skeleton sheet" aria-hidden="true">
+        <span class="sk-thumb sk-shimmer"></span>
+        <div class="sk-body">
+          <span class="sk-line sk-line--title sk-shimmer"></span>
+          <span class="sk-line sk-line--sub sk-shimmer"></span>
+          <div class="sk-chips">
+            <span class="sk-chip sk-shimmer"></span>
+            <span class="sk-chip sk-shimmer"></span>
+            <span class="sk-chip sk-shimmer"></span>
+          </div>
+        </div>
+      </section>
+
+      <div class="skeleton-rows" aria-hidden="true">
+        {#each [0, 1, 2, 3] as row (row)}
+          <div class="sk-row">
+            <span class="sk-badge sk-shimmer"></span>
+            <span class="sk-line sk-line--row sk-shimmer" style="width:{72 - row * 9}%"></span>
+            <span class="sk-line sk-line--tail sk-shimmer"></span>
+          </div>
+        {/each}
+      </div>
     </section>
   {:else if app.parseState === 'error'}
     <section class="working">
@@ -360,6 +386,107 @@
   }
 
   /* ---------- 最近下载：主卡 + 列表 ---------- */
+  /* ---------- 解析中：结果骨架 ---------- */
+  .skeleton {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    padding: 14px;
+  }
+  .sk-thumb {
+    width: 148px;
+    height: 83px;
+    flex: none;
+    border-radius: var(--radius-control);
+    background: var(--paper-sunk);
+  }
+  .sk-body {
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+    flex: 1;
+    min-width: 0;
+  }
+  .sk-line {
+    display: block;
+    height: 11px;
+    border-radius: 6px;
+    background: var(--paper-sunk);
+  }
+  .sk-line--title {
+    width: 62%;
+    height: 15px;
+  }
+  .sk-line--sub {
+    width: 38%;
+  }
+  .sk-chips {
+    display: flex;
+    gap: 6px;
+    margin-top: 2px;
+  }
+  .sk-chip {
+    width: 66px;
+    height: 20px;
+    border-radius: 999px;
+    background: var(--paper-sunk);
+  }
+  .sk-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 14px;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-control);
+    background: var(--paper-raised);
+  }
+  .sk-badge {
+    width: 44px;
+    height: 18px;
+    flex: none;
+    border-radius: 5px;
+    background: var(--paper-sunk);
+  }
+  .sk-line--row {
+    height: 10px;
+  }
+  .sk-line--tail {
+    width: 52px;
+    height: 10px;
+    margin-left: auto;
+    flex: none;
+  }
+  .skeleton-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  /* 微光：只在 `prefers-reduced-motion: no-preference` 下跑，尊重系统设置 */
+  .sk-shimmer {
+    position: relative;
+    overflow: hidden;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .sk-shimmer::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        100deg,
+        transparent 20%,
+        color-mix(in oklab, var(--paper-raised) 78%, transparent) 50%,
+        transparent 80%
+      );
+      transform: translateX(-100%);
+      animation: sk-sweep 1.5s var(--ease-out) infinite;
+    }
+  }
+  @keyframes sk-sweep {
+    to {
+      transform: translateX(100%);
+    }
+  }
+
   /* 「最近下载」吃掉余下的纵向空间：条目少时主卡跟着长高，
      而不是底部留一大片空白（原先主卡被 max-height:145px 钉死）。 */
   .recent {

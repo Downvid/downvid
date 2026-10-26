@@ -12,8 +12,15 @@
 
 - **下载历史与运行依赖统一到 `~/.downvid`**：下载历史从系统数据目录（macOS `~/Library/Application Support/downvid/`、Windows `%APPDATA%\downvid\`、Linux `~/.config/downvid/`）迁到 `~/.downvid/download-history.json`，与 yt-dlp / ffmpeg / 边车本体放在一起，三端路径一致。升级时自动搬迁，新位置已有文件则不覆盖。
 
+### 新增 / 界面
+
+- **「解析中」页面重做**：除了三段进度条，现在直接画出**结果卡片的骨架**（缩略图、标题、格式行），解析完成即原地替换成真数据，不再对着一片空白等 2~11 秒（`prefers-reduced-motion` 下不跑微光动画）。
+- **下载历史**：缩略图 72×40 → 96×54、行距与信息层次重整；**删除单条记录改成两段式确认**（6 秒不操作自动收回），清空历史同样会在 6 秒后自动收回确认态。
+- **禁用 WebView 右键菜单**：输入框与文本域内保留原生菜单（否则没法粘贴）。
+
 ### 修复
 
+- **抖音/快手「需要新鲜 Cookie」被报成「无法解析该链接」**：yt-dlp 对无 cookie 的抖音请求只回 `Fresh cookies (not necessarily logged in) are needed`，既不含 "Sign in" 也不含 "登录"，早先落到 unknown。现在归类为需要登录态，界面会指向「设置 → Cookie」。
 - **抖音/快手直连解析拿不到登录态**：自动模式下浏览器 Cookie 由 yt-dlp 自己导出（`--cookies-from-browser`），而抖音/快手的直连 API 走的是应用自己的 HTTP 请求，之前只认可「手动模式」的 cookies.txt。现在已有的浏览器 Cookie 快照也会一并交给直连解析。
 - **失效的抖音短链被误报成「无法解析该链接」**：抖音会把过期的分享链接 302 到站点首页（跳转结果里没有视频 ID），旧逻辑随后把跳转后的首页地址交给 yt-dlp，只换来一句 `Unsupported URL`。现在直接判定：带 Cookie 仍拿不到视频 ID → 「短链已失效或视频不存在」；没带 Cookie → 「可能失效，也可能需要登录 Cookie」（抖音对匿名请求一律跳到首页，而浏览器里带登录态同一条链接能打开）。
 - **正式包可能用到 Electron 时代遗留的旧边车**：边车定位原先先找 `<app>/Contents/Resources/downvid-deps`，而 macOS 的 `.app` 本来就有 `Resources` 目录——从 Electron 版升级上来的用户那里可能躺着一份旧二进制，探测与安装都在跑旧代码。现在带 sidecar 的构建只认内嵌那份并解到 `~/.downvid/runtime/bin`（与主程序同版本）；开发构建仍走仓库 `backend/build/`，Resources 位置只作最后兜底。

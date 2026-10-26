@@ -76,7 +76,11 @@ var classifyRules = []struct {
 	{KindFormatUnavailable, regexp.MustCompile(`(?i)Requested format is not available|No video formats found|Only images are available`)},
 	{KindPageReload, regexp.MustCompile(`(?i)The page needs to be reloaded`)},
 	{KindChallengeFailed, regexp.MustCompile(`(?i)challenge.*fail|signature.*fail|No supported JavaScript runtime`)},
-	{KindAuthentication, regexp.MustCompile(`(?i)Sign in|private video|登录|authentication`)},
+	// 抖音 / 快手的 API 对「没有新鲜 cookie」的请求直接返回空，yt-dlp 的原话是
+	// `Fresh cookies (not necessarily logged in) are needed`：不需要登录，但必须有
+	// 一次真实浏览器会话产生的 cookie（ttwid / msToken 等）。归到 authentication，
+	// 界面才会提示去配置 Cookie，而不是说「无法解析该链接」。
+	{KindAuthentication, regexp.MustCompile(`(?i)Sign in|private video|登录|authentication|cookies? .{0,40}needed`)},
 	{KindRateLimit, regexp.MustCompile(`(?i)429|Too Many Requests`)},
 	{KindAccessDenied, regexp.MustCompile(`(?i)403|Forbidden`)},
 	{KindNetwork, regexp.MustCompile(`(?i)timed? out|timeout|network|Unable to download.*page|ConnectionError`)},

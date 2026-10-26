@@ -42,9 +42,22 @@
       }
     }
 
+    // WebView 自带的右键菜单只有「重新加载 / 检查元素 / 另存为」，对用户没用，
+    // 还会把界面状态弄丢（重载等于清空任务队列）。输入框里保留原生菜单，
+    // 否则连「粘贴」都没有了。
+    function oncontextmenu(event: MouseEvent): void {
+      const target = event.target as HTMLElement | null
+      const editable =
+        !!target &&
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+      if (!editable) event.preventDefault()
+    }
+
     window.addEventListener('keydown', onkeydown)
+    window.addEventListener('contextmenu', oncontextmenu)
     return () => {
       window.removeEventListener('keydown', onkeydown)
+      window.removeEventListener('contextmenu', oncontextmenu)
       app.destroy()
     }
   })

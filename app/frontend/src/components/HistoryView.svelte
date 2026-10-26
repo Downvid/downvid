@@ -6,8 +6,32 @@
 
   type FilterId = 'all' | 'done' | 'missing'
 
-  /** 清空是两段式的：第一下只是亮出确认，第二下才真的清空。 */
+  /**
+   * 危险操作一律两段式：第一下只亮出「确认」，第二下才真的动手。
+   *
+   * 两段确认还必须**会自动收回**：亮着不放的红色确认按钮，下一次误点就直接
+   * 生效了，等于回到一段确认。
+   */
   let confirmingClear = $state(false)
+  let deletingId = $state('')
+  let confirmTimer: ReturnType<typeof setTimeout> | undefined
+
+  const CONFIRM_TTL = 6000
+
+  function armConfirm(arm: () => void): void {
+    clearTimeout(confirmTimer)
+    arm()
+    confirmTimer = setTimeout(() => {
+      confirmingClear = false
+      deletingId = ''
+    }, CONFIRM_TTL)
+  }
+
+  function disarmConfirm(): void {
+    clearTimeout(confirmTimer)
+    confirmingClear = false
+    deletingId = ''
+  }
 
   const filters = $derived([
     { id: 'all', label: t('history.filterAll'), icon: 'history' },
@@ -23,12 +47,21 @@
 
   function pickFilter(id: FilterId): void {
     app.historyFilter = id
-    confirmingClear = false
+    disarmConfirm()
   }
 
   function confirmClear(): void {
     app.clearHistory()
-    confirmingClear = false
+    disarmConfirm()
+  }
+
+  function requestDelete(id: string): void {
+    if (deletingId === id) {
+      app.removeHistory(id)
+      disarmConfirm()
+      return
+    }
+    armConfirm(() => (deletingId = id))
   }
 </script>
 
@@ -63,7 +96,7 @@
           <button
             type="button"
             class="btn btn-quiet btn-sm"
-            onclick={() => (confirmingClear = false)}
+            onclick={disarmConfirm}
           >
             {t('history.cancelClear')}
           </button>
@@ -72,7 +105,7 @@
             type="button"
             class="btn btn-ghost btn-sm"
             disabled={app.history.length === 0}
-            onclick={() => (confirmingClear = true)}
+            onclick={() => armConfirm(() => (confirmingClear = true))}
           >
             <Icon name="delete_sweep" size={15} />
             <span>{t('history.clear')}</span>
@@ -173,15 +206,27 @@
                   >
                     <Icon name="replay" size={17} />
                   </button>
-                  <button
-                    type="button"
-                    class="icon-btn act act-delete"
-                    title={t('history.delete')}
-                    aria-label={t('history.delete')}
-                    onclick={() => app.removeHistory(item.id)}
-                  >
-                    <Icon name="delete" size={17} />
-                  </button>
+                  {#if deletingId === item.id}
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-danger act-confirm"
+                      title={t('history.confirmDelete')}
+                      onclick={() => requestDelete(item.id)}
+                    >
+                      <Icon name="delete_forever" size={15} />
+                      <span>{t('history.confirmDelete')}</span>
+                    </button>
+                  {:else}
+                    <button
+                      type="button"
+                      class="icon-btn act act-delete"
+                      title={t('history.delete')}
+                      aria-label={t('history.delete')}
+                      onclick={() => requestDelete(item.id)}
+                    >
+                      <Icon name="delete" size={17} />
+                    </button>
+                  {/if}
                 </div>
               </li>
             {/each}
@@ -336,8 +381,9 @@
   .row {
     display: flex;
     align-items: center;
-    gap: 13px;
-    padding: 10px 12px;
+    gap: 14px;
+    padding: 12px 14px;
+    position: relative;
     transition: background-color var(--dur-base) var(--ease-out);
   }
   .row + .row {
@@ -348,8 +394,8 @@
   }
 
   .thumb {
-    width: 72px;
-    height: 40px;
+    width: 96px;
+    height: 54px;
     flex: none;
     border-radius: 4px;
     border: 1px solid var(--rule-soft);
@@ -370,7 +416,7 @@
     min-width: 0;
   }
   .row-title {
-    font-size: 12.5px;
+    font-size: 13px;
     font-weight: 600;
     line-height: 1.4;
     color: var(--ink);
@@ -397,8 +443,9 @@
   .row-meta {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 14px;
     flex: none;
+    padding-left: 6px;
   }
   .row-meta .chip.quality {
     height: 21px;
@@ -409,7 +456,7 @@
     border-color: var(--rule);
   }
   .row-size {
-    min-width: 62px;
+    min-width: 70px;
     text-align: right;
     font-size: 10px;
     color: var(--ink);
@@ -433,7 +480,8 @@
       transform var(--dur-base) var(--ease-out);
   }
   .row:hover .row-actions,
-  .row:focus-within .row-actions {
+  .row:focus-within .row-actions,
+  .row:has(.act-confirm) .row-actions {
     opacity: 1;
     transform: none;
   }
@@ -444,6 +492,19 @@
   .row-actions .act-delete:hover {
     color: var(--danger);
     background: color-mix(in oklab, var(--danger) 9%, transparent);
+  }
+  /* 确认态在行内常显（不靠 hover），否则鼠标一移开就点不到 */
+  .row-actions .act-confirm {
+    white-space: nowrap;
+    height: 26px;
+    padding: 0 9px;
+    animation: confirm-in 140ms var(--ease-out);
+  }
+  @keyframes confirm-in {
+    from {
+      opacity: 0;
+      transform: scale(0.96);
+    }
   }
 
   /* ---------- 空态 ---------- */

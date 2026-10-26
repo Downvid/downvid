@@ -179,3 +179,18 @@ func TestClassifyForURLDouyinShortLink(t *testing.T) {
 		t.Errorf("非抖音/快手应保持 %s，got %s", KindUnsupportedURL, got)
 	}
 }
+
+// 抖音/快手要求「新鲜 cookie」时必须归类为需要登录，而不是 unknown。
+//
+// 实测 yt-dlp 对无 cookie 的抖音请求只回：
+//
+//	ERROR: [Douyin] 7677476892161050292: Fresh cookies (not necessarily logged in) are needed
+//
+// 这条既不含 "Sign in" 也不含 "登录"，早先落到 unknown，界面显示「无法解析该链接」，
+// 用户完全不知道要去做 Cookie 配置。
+func TestClassifyFreshCookiesNeeded(t *testing.T) {
+	raw := "ERROR: [Douyin] 7677476892161050292: Fresh cookies (not necessarily logged in) are needed"
+	if got := ClassifyParseError(raw); got != KindAuthentication {
+		t.Errorf("应归类为 %s，got %s", KindAuthentication, got)
+	}
+}
