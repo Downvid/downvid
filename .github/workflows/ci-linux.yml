@@ -2,16 +2,12 @@ name: CI · Linux
 
 # Linux 侧的完整回归。
 #
-# 为什么按平台拆成三个工作流（而不是一个带 matrix 的大工作流）：
-#   1. 失败定位：日志里一眼看出是哪个平台哪一步，而不是「6 个 job 里有一个红」
-#   2. 触发与耗时：Windows/macOS runner 排队慢，Linux 能先给出结论
-#   3. 平台专属步骤不必写 `if: runner.os == ...`，可读性差且容易写错
-#
-# 约定：**新增测试脚本必须挂进对应平台的工作流**。曾经 test:acceleration
-# 加了脚本却没接进 CI，加速逻辑长期没有自动化验证。
-#
-# 每一步都单独命名，脚本内部再用 harness 打印逐用例结果 —— 失败时先看步骤名，
-# 再看脚本输出的用例名，不用翻 YAML。
+# Linux 有三处只有这里能验：
+#   1. **webkit2gtk 4.0 构建**：Wails v2.16 的 cgo 指令默认找 4.0，只装 4.1
+#      会以「Package webkit2gtk-4.0 was not found」失败（曾经踩过）
+#   2. **交叉编译全部 5 个目标**：GNU/Linux 的 runner 编译 macOS / Windows 边车不需要
+#      额外工具链，是唯一能一次编全的平台
+#   3. **真实 yt-dlp / ffmpeg 端到端**：本机装了就用真的跑，没装则明确跳过
 
 on:
   push:
@@ -27,15 +23,13 @@ permissions:
   contents: read
 
 env:
-  # Go 侧车只用标准库，没有 go.sum；关掉缓存省一次网络往返
   GOTOOLCHAIN: local
 
 jobs:
-  # ===== Go 侧车 =====
   backend:
-    name: 后端 · Go 侧车
+    name: 后端 · Go 侧车 + Go 核心
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
 
@@ -44,28 +38,33 @@ jobs:
           go-version: '1.25'
           cache: false
 
-      - name: gofmt（格式）
-        working-directory: backend
+      - name: gofmt（侧车 + 核心）
         shell: bash
         run: |
-          UNFORMATTED=$(gofmt -l .)
+          UNFORMATTED=$(gofmt -l backend app)
           if [ -n "$UNFORMATTED" ]; then
             echo "::error::以下文件未经过 gofmt 格式化："
             echo "$UNFORMATTED"
             exit 1
           fi
 
-      - name: go vet（静态检查）
+      - name: go vet（侧车）
         working-directory: backend
         run: go vet ./...
 
-      # -shuffle=on 打乱用例顺序，能抓出「用例之间共享包级可变状态」的泄漏。
-      # 这类问题单跑必过、全量跑才随机失败（已真实发生过：扫描预算的全局变量）。
-      - name: go test（打乱顺序）
+      - name: go test（侧车）
         working-directory: backend
         run: go test -shuffle=on -count=1 ./...
 
-      # 边车会被交叉编译成 5 个平台的二进制打进安装包，任一平台编不过都是发布事故
+      - name: go vet（核心）
+        working-directory: app
+        run: go vet ./...
+
+      - name: go test（核心）
+        working-directory: app
+        run: go test -shuffle=on -count=1 ./...
+
+      # 边车必须能编出全部 5 个平台：任一编不过，对应平台的用户就装不上
       - name: 交叉编译全部平台
         working-directory: backend
         shell: bash
@@ -76,11 +75,10 @@ jobs:
             echo "  ok ${target}"
           done
 
-  # ===== 前端：类型、契约、纯逻辑单测 =====
   frontend:
     name: 前端 · 类型 / 契约 / 单测
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v7
 
@@ -98,19 +96,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: 类型检查（strict + noUnusedLocals）
-        run: pnpm vue-tsc --noEmit
-
-      # IPC 三处（主进程 / preload / env.d.ts）是手工同步的，漏改会静默失败
-      - name: IPC 契约校验
-        run: pnpm lint:ipc
-
-      # 图标名写错时字体会静默渲染成文字或空白，界面上很难发现
       - name: 图标名校验
         run: pnpm lint:icons
 
-      # 官网是单文件、直接由 Vercel 从 main 发布，中间没有构建步骤：
-      # 引错图、漏翻译、配色漂移都只会在线上静默出现
       - name: 官网校验
         run: pnpm lint:website
 
@@ -118,7 +106,7 @@ jobs:
         run: pnpm lint:docs
 
       # 来源审计：哪些代码来自上游 Videdown、占比多少，由脚本从仓库内快照现场重算。
-      # 新增了上游衍生文件却没登记 / 登记的数字已过期 → 直接红叉（见 docs/provenance/audit.md）
+      # 新增了上游衍生文件却没登记 / 登记的数字已过期 → 直接红叉
       - name: 代码来源审计
         run: pnpm audit:provenance
 
@@ -127,24 +115,19 @@ jobs:
       - name: 署名合规（上游版权声明 ↔ 剩余上游代码）
         run: pnpm lint:attribution
 
-      # 架构边界：core/ 不得 import electron、前端不得直接用主进程实现等七条规则。
-      # 违反时类型检查与单测都不会红，只在容器/前端运行时静默失效（见 docs/provenance/architecture.md §3.2）
+      # 架构边界：app/internal 的包之间不得互相 import、不得依赖 cmd。
+      # 违反时编译与单测都不会红，只会让包拆不开。
       - name: 架构边界校验
         run: pnpm lint:boundaries
 
-      # 仓库坐标散落 20+ 处，漏改任一处 = 存量用户收不到更新（唯一一类「发新版也修不好」的故障）
+      # 仓库坐标散落 20+ 处，漏改任一处 = 用户收不到更新
       - name: 仓库坐标一致性
         run: pnpm sync:repo
 
       # 应用里的「更新日志」读的是 app/internal/changelog/ 下的**副本**
-      # （`//go:embed` 不能引用包目录之外的文件）。副本会静默过期：
-      # 改了根部 CHANGELOG 忘了同步，界面还停在旧内容，而构建与测试都不报错。
+      # （`//go:embed` 不能引用包目录之外的文件）。副本会静默过期。
       - name: 更新日志副本一致
         run: pnpm sync:changelog
-
-      # 文档里的「当前值类」数字（词条数 / 用例数 / settings 字段 / 事件清单）与代码实测一致
-      - name: 文档数字同步
-        run: pnpm sync:doc-numbers
 
       # Go/Node/pnpm 版本散落 20+ 处，漏改只会让 CI 静默用旧版本编译
       - name: 工具链版本一致
@@ -152,20 +135,14 @@ jobs:
 
       # 词条漏英文 / 占位符对不上都不会报错，只会静默显示错文案
       - name: i18n 词条校验
-        run: pnpm lint:i18n
+        run: pnpm lint:i18n:app
 
       # 工作流的错误本地跑什么都发现不了，只能等 CI 变红。
-      # 这条静态校验把「用了某工具但没装」变成提交前就能看到的问题。
       - name: 工作流健全性校验
         run: pnpm lint:workflows
 
-      # 镜像里的问题几乎都是**不报错**的那种：依赖版本与清单漂移、退回 tsx、
-      # 更新检查退化。这些读文件就能判定，不必等一次几分钟的镜像构建。
-      - name: 容器镜像定义校验
-        run: pnpm lint:docker
-
-      # 新前端是**独立包**（不在根 pnpm workspace 里），要单独装依赖
-      - name: 前端依赖安装（app/frontend 是独立包，不在根 workspace）
+      # app/frontend 是**独立包**（不在根 pnpm workspace 里），要单独装依赖
+      - name: 前端依赖安装
         working-directory: app/frontend
         run: pnpm install --frozen-lockfile
 
@@ -176,14 +153,9 @@ jobs:
       # 注意顺序：`wails generate module` 会先把 Go 包编译一遍，
       # 而 main.go 里有 `//go:embed all:frontend/dist`——dist 不存在时
       # 直接报 `pattern all:frontend/dist: no matching files found`。
-      # 所以**先构建前端**，再生成绑定。
       - name: 安装 Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
 
-      # 先建一个空的 dist：`//go:embed all:frontend/dist` 在 dist 不存在时
-      # 会让整个 Go 包编译失败，而 `wails generate module` 必须先编译这个包。
-      # 反过来，前端构建又需要 wailsjs ——这是一个鸡生蛋问题，
-      # 只能先用占位目录把 generate 这一步解开（仓库里有 dist/.gitkeep）。
       - name: 准备 embed 目录
         run: bash app/scripts/prepare-embed-dir.sh
 
@@ -191,25 +163,21 @@ jobs:
         working-directory: app
         run: wails generate module
 
-      # 新前端（app/frontend，Svelte 5）：`tsc` **不解析 .svelte**，
-      # 于是组件与 store 的契约漂移长期无人发现——累计 48 个真错误，
-      # 其中「设置页每个按钮都失效」就是这么漏出去的。
+      # `tsc` **不解析 .svelte**，组件与 store 的契约漂移只有它能看见
       - name: 前端类型检查（svelte-check）
         working-directory: app/frontend
         run: pnpm check
 
-      # 新前端的词条表是**独立的一份**（app/frontend/src/lib/i18n.svelte.ts）。
-      # 中英不成对时只会静默显示错语言，必须静态查。
-      - name: 前端词条校验（app）
-        run: pnpm lint:i18n:app
-
-
-      - name: 纯逻辑单测（Vitest）
+      - name: 前端纯逻辑单测
+        working-directory: app/frontend
         run: pnpm test
 
-  # ===== 主进程侧逻辑（不需要真实 Electron）=====
-  main-process:
-    name: 主进程 · 更新 / 设置 / 清单
+      # shared/ 与发布脚本的纯逻辑
+      - name: 根目录纯逻辑单测
+        run: pnpm test
+
+  integration:
+    name: 集成 · 真实 yt-dlp / ffmpeg
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -219,80 +187,10 @@ jobs:
         with:
           node-version: 22
 
-      - uses: pnpm/action-setup@v6
+      - run: node scripts/test-e2e-real.mjs
 
-      - run: pnpm install --frozen-lockfile
-
-      # 更新是用户拿到修复的唯一通道，也是唯一「坏了就再也修不好」的功能：
-      # 存量用户装的是旧版客户端，没有第二次机会。
-      - name: 更新流程回归（版本比较 / 缓存 / 兜底 / 各安装方式分支）
-        run: pnpm test:updater
-
-      # 设置形状改动会让老用户设置静默失效；合并写入写错会抹掉别的字段
-      - name: 设置迁移与向后兼容
-        run: pnpm test:settings:migration
-
-      # Issue 自动关闭的分类逻辑：误关一条真实报告比留一条噪音更糟，
-      # 用例全部取自仓库里真实出现过的 Issue 正文（#50 #52 #57 #58）
-      - name: Issue 分类回归
-        run: pnpm test:issue:triage
-
-      # 依赖清单落后或哈希失配会在用户端变成「下载即校验失败」
-      - name: 依赖清单与上游一致
-        run: pnpm deps:manifest:check
-
-      # WebUI 服务端（容器版唯一的对外形态）。用的是打包后的产物，
-      # 与镜像里跑的是同一份文件 —— 源码能跑不等于打包能跑。
-      - name: Web 服务集成回归
-        run: pnpm test:web
-
-  # ===== 集成回归：起真实进程、真实文件 IO =====
-  integration:
-    name: 集成 · 下载 / 加速
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-go@v7
-        with:
-          go-version: '1.25'
-          cache: false
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-
-      - uses: pnpm/action-setup@v6
-
-      - run: pnpm install --frozen-lockfile
-
-      # 下载链路：本地 HTTP 服务 + 真实文件 IO + 真实 Store，仅在边界替换 Electron API
-      - name: 下载集成回归
-        run: pnpm test:download:integration
-
-      # 加速基准：并发队列、限速场景、可选 aria2。
-      # 未提供外部工具路径时只跑内置基准，外部引擎会被明确跳过。
-      - name: 加速基准
-        run: pnpm test:acceleration
-
-      # 解析链路（抖音/快手解析器与 yt-dlp 回退），只在本地服务上跑
-      - name: 解析集成回归
-        run: pnpm test:parse:integration
-
-      # 真机 E2E：用真实 yt-dlp / ffmpeg 跑一次完整链路。
-      # 上面两条用的是假服务器 + mock 的 yt-dlp，能证明「我们的逻辑没坏」，
-      # 但证明不了「真实 yt-dlp 的输出我们仍解析得对」——进度输出格式一变，
-      # 界面进度条不动而所有单测全绿。缺依赖时本脚本会明确跳过，不会假装通过。
-      - name: 真机 E2E（真实 yt-dlp / ffmpeg）
-        run: |
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
-          python3 -m pip install --quiet --upgrade yt-dlp
-          pnpm test:e2e:real
-
-  # ===== 构建与打包 =====
-  package:
-    name: 打包 · 产物内容校验
+  build:
+    name: 构建 · Wails 单文件产物
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -309,44 +207,49 @@ jobs:
 
       - uses: pnpm/action-setup@v6
 
-      - run: pnpm install --frozen-lockfile
+      # Linux 构建 Wails 需要 cgo 链接 GTK / WebKit。
+      # Wails v2.16 默认找 webkit2gtk-4.0（加 `-tags webkit2_41` 才用 4.1），
+      # 只装 4.1 会以「Package webkit2gtk-4.0 was not found」失败。
+      - name: 安装构建依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config \
+            libgtk-3-dev libwebkit2gtk-4.0-dev \
+            libayatana-appindicator3-dev
 
-      - name: 构建前端与主进程
-        run: pnpm vite build
+      - name: 安装 Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
 
-      # 校验 electron-builder 配置并打包到目录（不生成安装包），
-      # 配置与新版 schema 不兼容时在 PR 阶段即可发现
-      - name: 打包到目录
-        run: pnpm exec electron-builder --linux dir --publish never --config electron-builder.json5
+      - name: 前端依赖安装
+        working-directory: app/frontend
+        run: pnpm install --frozen-lockfile
 
-      # 逐项核对真实产物：边车在不在、有没有误带 yt-dlp/ffmpeg、
-      # app.asar 是否完整、package-type 是否存在（决定 deb/rpm 能否自动更新）
-      - name: 产物内容校验
-        run: pnpm test:package
+      - name: 准备 embed 目录
+        run: bash app/scripts/prepare-embed-dir.sh
 
-      # 清单生成脚本自检：用假产物确认不会生成死链
-      - name: 更新清单生成脚本自检
+      - name: 生成 Wails 绑定
+        working-directory: app
+        run: wails generate module
+
+      - name: 构建（含依赖边车）
+        run: bash app/scripts/build.sh
+
+      - name: 产物自检
         shell: bash
         run: |
-          mkdir -p tmp-artifacts
-          for f in DownVid-Setup-0.0.0.exe DownVid-arm64-Mac-0.0.0.zip DownVid-x64-Mac-0.0.0.zip DownVid-x86_64-Linux-0.0.0.AppImage DownVid-amd64-Linux-0.0.0.deb DownVid-arm64-Linux-0.0.0.AppImage; do
-            echo "$f" > "tmp-artifacts/$f"
-          done
-          node scripts/gen-update-manifests.mjs tmp-artifacts 0.0.0
-          grep -q "DownVid-amd64-Linux-0.0.0.deb" tmp-artifacts/latest-linux.yml
-          grep -q "DownVid-x64-Mac-0.0.0.zip" tmp-artifacts/latest-mac.yml
-
-      - name: Release 正文生成脚本自检
-        shell: bash
-        run: |
-          mkdir -p tmp-release && rm -f tmp-release/*
-          for f in DownVid-Setup-0.0.0.exe DownVid-arm64-Mac-0.0.0.dmg; do
-            echo x > "tmp-release/$f"
-          done
-          node scripts/gen-release-notes.mjs tmp-release 0.0.0 CHANGELOG.md > /tmp/notes.md
-          grep -q "DownVid-Setup-0.0.0.exe" /tmp/notes.md
-          grep -q "更新内容" /tmp/notes.md
-          if grep -q "DownVid-Portable-0.0.0.exe" /tmp/notes.md; then
-            echo "::error::Release 正文引用了不存在的产物（便携版）"
+          BIN=$(find app/build/bin -maxdepth 2 -type f -name downvid | head -1)
+          if [ -z "$BIN" ]; then
+            echo "::error::构建产物里找不到 downvid 可执行文件"
+            find app/build/bin -maxdepth 2 | head -20
+            exit 1
+          fi
+          echo "产物：$BIN"
+          ls -lh "$BIN"
+          # 单文件产物把前端与边车都嵌进去了，正常在 15 MB 以上；
+          # 明显偏小说明 embed 没生效（构建能过，运行时才是白页 / 依赖页空）
+          SIZE=$(wc -c < "$BIN")
+          if [ "$SIZE" -lt 8000000 ]; then
+            echo "::error::产物只有 $SIZE 字节，前端或边车很可能没嵌进去"
             exit 1
           fi

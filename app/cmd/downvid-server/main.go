@@ -4,7 +4,7 @@
 //
 //	DOWNVID_WEB_PORT      监听端口，默认 6080
 //	DOWNVID_WEB_HOST      监听地址，默认 127.0.0.1（容器里由 compose 改成 0.0.0.0）
-//	DOWNVID_WEB_DIST      前端构建产物目录，默认 docker/dist-web
+//	DOWNVID_WEB_DIST      前端构建产物目录，默认 app/frontend/dist
 //	DOWNVID_DATA_DIR      数据目录（历史、日志），默认 ./data/userdata
 //	DOWNVID_DOWNLOADS     下载目录，默认 ./data/downloads
 //	DOWNVID_DATA_FILE     保持这个名字不变：用户的 compose 里已经写了它
@@ -51,7 +51,7 @@ func main() {
 
 	dataDir := envOr("DOWNVID_DATA_DIR", filepath.Join("data", "userdata"))
 	downloadsDir := envOr("DOWNVID_DOWNLOADS", filepath.Join("data", "downloads"))
-	staticDir := envOr("DOWNVID_WEB_DIST", filepath.Join("docker", "dist-web"))
+	staticDir := envOr("DOWNVID_WEB_DIST", filepath.Join("app", "frontend", "dist"))
 
 	// 数据目录必须存在：历史写入会自己 MkdirAll，但下载目录不会，
 	// 而用户第一次下载时目录不存在会被 yt-dlp 报成一个难懂的错误。

@@ -10,7 +10,6 @@
 - [macOS 安装](#macos-安装)
 - [Windows 安装](#windows-安装)
 - [Linux 安装](#linux-安装)
-- [Docker 安装](#docker-安装)
 - [从源码构建](#从源码构建)
 
 ---
@@ -25,15 +24,16 @@
 
 ### 选择正确的文件
 
-推荐优先下载**全新架构（Wails）产物**（体积约 18 MB，仅为旧版的 1/7，原生 Webview 渲染，启动更快，内存占用低至 60~80 MB）：
+产物是单文件（约 18 MB，原生 Webview 渲染，启动快，待机内存低），依赖边车已内嵌：
 
-| 你的系统 | 推荐下载（Wails 全新架构） | 存量下载（Electron） |
-|----------|---------------------------|---------------------|
-| macOS Apple 芯片 / Intel 通用 | `DownVid-Wails-macOS-universal.zip` | `DownVid-arm64-Mac-*.dmg` / `DownVid-x64-Mac-*.dmg` |
-| Windows x64 | `DownVid-Wails-windows-amd64.exe`（单文件免安装） | `DownVid-Setup-*.exe`（安装版） / 便携版 |
-| Linux x64 / ARM64 | `DownVid-Wails-linux-amd64` | `DownVid-*-Linux-*.AppImage` / `.deb` |
+| 你的系统 | 下载 |
+|----------|------|
+| macOS（Apple 芯片 / Intel 通用） | `DownVid-Wails-mac-universal-<版本>.zip` |
+| Windows x64 | `DownVid-Wails-windows-x64-<版本>.zip` |
+| Linux x64 | `DownVid-Wails-linux-x64-<版本>.tar.gz` |
 
-> 💡 **提示**：macOS 推荐下载 `DownVid-Wails-macOS-universal.zip`，解压即得 `DownVid.app`，直接拖入「应用程序」文件夹即可运行，包含完整的运行依赖边车。旧架构 `.dmg` 与 `.exe` 仍在并行发布以保证现有用户的自动更新通道。
+> 💡 **提示**：macOS 包解压即得 `DownVid.app`，直接拖入「应用程序」即可运行；
+> Windows / Linux 包解压后直接运行目录里的可执行文件，无需安装。
 
 > ⚠️ **怎么知道自己是 Apple Silicon 还是 Intel？**
 > 点击左上角苹果图标 → "关于本机" → 查看"芯片"一栏。如果显示 Apple M1/M2/M3/M4 就是 Apple Silicon，如果显示 Intel 就是 x64。
@@ -42,11 +42,9 @@
 
 ## macOS 安装
 
-### 方法一：DMG 安装（推荐）
-
-1. 双击下载的 `.dmg` 文件
-2. 将 `DownVid` 图标拖到 `Applications` 文件夹
-3. 首次打开时，macOS 可能会阻止你运行
+1. 解压下载的 `DownVid-Wails-mac-universal-<版本>.zip`
+2. 把解压出的 `DownVid.app` 拖到「应用程序」文件夹
+3. 首次打开时，macOS 可能会阻止你运行（见下）
 
 ### 解决 macOS "无法打开" 警告
 
@@ -102,196 +100,75 @@ DownVid **不需要**任何特殊权限：
 
 ## Windows 安装
 
-### 方法一：EXE 安装程序（推荐）
+产物是绿色版 `DownVid-Wails-windows-x64-<版本>.zip`：
 
-1. 双击下载的 `DownVid-Setup-*.exe` 文件
-2. 按照安装向导提示操作
-3. 可以选择安装目录（默认安装到 `C:\Users\你的用户名\AppData\Local\Programs\DownVid`）
-4. 安装完成后，桌面和开始菜单都会有快捷方式
+1. 解压到任意目录
+2. 双击目录里的 `downvid.exe` 运行
+3. 不写注册表、不创建快捷方式；要常驻可以自己建一个快捷方式
 
 ### Windows Defender / 杀毒软件警告
 
-由于 DownVid 是开源项目，没有代码签名证书，Windows Defender 或其他杀毒软件可能会弹出警告。
+开源项目没有代码签名证书，Defender 可能弹出警告：
 
-**解决方法：**
-
-1. 当 SmartScreen 弹出"Windows 已保护你的电脑"时：
-   - 点击 **"更多信息"**
-   - 然后点击 **"仍要运行"**
-
-2. 如果杀毒软件隔离了文件：
-   - 打开杀毒软件的"隔离区"或"病毒库"
-   - 找到 DownVid 相关文件
-   - 选择 **"恢复"** 或 **"添加信任"**
-
-### 便携版
-
-如果你不想安装，可以下载 `DownVid-*-win-x64.zip` 便携版：
-1. 解压到任意目录
-2. 双击 `DownVid.exe` 运行
-3. 便携版不会写入注册表，不会创建开始菜单快捷方式
+1. SmartScreen 提示「Windows 已保护你的电脑」时 → **更多信息** → **仍要运行**
+2. 若被隔离 → 在杀毒软件的隔离区恢复，并添加信任
 
 ### Windows 常见路径
 
 | 内容 | 路径 |
 |------|------|
-| 安装目录 | `C:\Users\用户名\AppData\Local\Programs\DownVid\` |
 | 用户数据 | `C:\Users\用户名\AppData\Roaming\DownVid\` |
-| 日志文件 | `C:\Users\用户名\AppData\Roaming\DownVid\downvid.log` |
-
-> ⚠️ **重要：** 用户数据目录中的 `download-history.json` 保存了你的下载历史，`settings` 相关配置保存在 localStorage 中。
+| 下载历史 | 同上目录下的 `download-history.json` |
+| 设置 | 同上目录下的 `settings.json` |
 
 ---
 
 ## Linux 安装
 
-### AppImage（所有 Linux 发行版通用）
-
-AppImage 是最通用的格式，不需要安装，下载即可运行。
-
-#### 安装步骤
+产物是便携包 `DownVid-Wails-linux-x64-<版本>.tar.gz`（x64）。
 
 ```bash
-# 1. 下载 AppImage（替换为实际版本号）
-# 从 https://github.com/Downvid/downvid/releases/latest 下载
+# 解压
+tar -xzf DownVid-Wails-linux-x64-*.tar.gz
 
-# 2. 添加可执行权限
-chmod +x DownVid-*-x64-Linux-*.AppImage
-
-# 3. 运行
-./DownVid-*-x64-Linux-*.AppImage
+# 运行
+chmod +x downvid
+./downvid
 ```
 
-#### 集成到桌面环境（可选）
+### 集成到桌面环境（可选）
 
 ```bash
-# 安装 appimaged 工具（如果还没装）
-# Ubuntu/Debian:
-sudo apt install appimagelauncher
-
-# 或者手动创建桌面入口
 mkdir -p ~/.local/share/applications
 cat > ~/.local/share/applications/downvid.desktop << 'EOF'
 [Desktop Entry]
 Name=DownVid
-Exec=/path/to/DownVid-x64-Linux-*.AppImage
+Exec=/path/to/downvid
 Icon=downvid
 Type=Application
 Categories=Utility;
 EOF
 ```
 
-#### AppImage 无法运行？
+### 运行期依赖
+
+Linux 上没有 GTK / WebKit 运行库时应用起不来：
 
 ```bash
-# 检查 FUSE 是否安装（AppImage 需要 FUSE）
-# Ubuntu/Debian:
-sudo apt install fuse libfuse2
+# Ubuntu / Debian
+sudo apt install libgtk-3-0 libwebkit2gtk-4.0-37
 
-# Fedora:
-sudo dnf install fuse fuse-libs
-
-# Arch Linux:
-sudo pacman -S fuse2
+# Arch Linux
+sudo pacman -S gtk3 webkit2gtk-4.1
 ```
 
-### DEB 包（Ubuntu / Debian）
+### ARM64 用户
+
+当前只发布 x64 产物。ARM64 设备（树莓派、ARM 服务器）需要自行从源码构建：
 
 ```bash
-# 安装
-sudo dpkg -i DownVid-*-x64-Linux-*.deb
-
-# 修复依赖（如果安装后提示缺少依赖）
-sudo apt install -f
-
-# 卸载
-sudo apt remove downvid
+bash app/scripts/build.sh -platform linux/arm64
 ```
-
-### RPM 包（Fedora / CentOS / openSUSE）
-
-```bash
-# Fedora / CentOS
-sudo rpm -i DownVid-*-x64-Linux-*.rpm
-
-# openSUSE
-sudo zypper install DownVid-*-x64-Linux-*.rpm
-
-# 卸载
-sudo rpm -e downvid
-```
-
-### TAR.GZ 包（通用）
-
-```bash
-# 解压
-tar -xzf DownVid-*-x64-Linux-*.tar.gz
-
-# 进入目录
-cd DownVid-*-x64-Linux-*
-
-# 运行
-./DownVid
-```
-
-### Linux ARM64 用户
-
-如果你使用的是 ARM64 架构（如树莓派 4/5、Apple Silicon 通过虚拟机运行 Linux），请下载 `arm64` 版本。
-
-```bash
-# 检查你的架构
-uname -m
-# 输出 aarch64 或 arm64 = ARM64
-# 输出 x86_64 或 amd64 = x64
-```
-
----
-
-## Docker 安装
-
-如果你有一台常开的机器，或者不想在主机上装 Electron 与运行时库，可以用容器跑 DownVid。
-
-容器镜像跑的是**原生 WebUI**：由轻量 Node 服务托管前端页面与下载引擎，浏览器直接访问
-即可——**打开网页就是完整应用**，不需要虚拟显示，也没有远程桌面延迟。
-
-### 前置条件
-
-- Docker 24+ 与 Docker Compose v2（`docker compose version` 能输出版本即可）
-- amd64 或 arm64 均可
-
-### 启动
-
-```bash
-# 官方多架构镜像（amd64 + arm64），不需要先 clone 仓库
-docker run -d --name downvid -p 6080:6080 \
-  -v "$PWD/data/downloads:/data/downloads" \
-  -v "$PWD/data/userdata:/data/userdata" \
-  ghcr.io/Downvid/downvid:latest
-```
-
-或用 compose（推荐，升级只要 `docker compose pull && docker compose up -d`）：
-
-```bash
-git clone https://github.com/Downvid/downvid.git
-cd downvid
-docker compose up -d
-```
-
-然后打开 <http://127.0.0.1:6080/>。从其他设备访问时把 `127.0.0.1` 换成本机 IP。
-
-### 下载文件在哪
-
-默认落在宿主机当前目录的 `data/downloads/` 下，也就是 compose 文件里声明的卷。
-可以直接进这个目录取文件，不需要额外工具。
-
-### 已内置运行依赖
-
-镜像里已装好 yt-dlp 与 FFmpeg（Debian 仓库 + pip），DownVid 的依赖边车会识别为
-「系统安装」。因此不需要（也不建议）再在界面里点一次下载。
-
-### 更多内容
-
-端口说明、SFTP 取文件、分辨率调整、代理、故障排除见：[Docker 指南](./docker.md)。
 
 ---
 
@@ -305,4 +182,3 @@ docker compose up -d
 
 - 遇到问题？查看 [故障排除指南](./troubleshooting.md)
 - 有疑问？查看 [常见问题](./faq.md)
-- 在容器中运行？查看 [Docker 指南](./docker.md)

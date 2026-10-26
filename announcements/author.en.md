@@ -1,21 +1,16 @@
 ---
-title: A note from the author
-date: 2026-10-17
+title: The Future of DownVid
+date: 2026-10-25
 signature: Black Cat
 ---
 
-I'm Black Cat, the author of DownVid.
+## New Architecture
+The brand-new architecture you are experiencing with this announcement is a much better fit compared to the legacy version.
+However, I do not have spare machines. If Windows users encounter issues, they are hard to detect without filed issues. If you run into any problems using the new version, please submit an issue on GitHub — we will fix them and release updates promptly.
 
-The reason for building this is simple: some videos I want to keep locally — a landscape from a trip, or a tutorial that could disappear tomorrow. Platforms delist things, throttle them, or put them behind a login. A file already on your disk does not.
+## Legacy Architecture
+The legacy version was excessively bloated and very slow, taking up to 23 seconds to parse links in real-world tests.
+The contribution value of legacy version users is low. I will gradually wind down iterations on the legacy version over the next few releases and focus fully on the new architecture. In the meantime, legacy users receiving updates will see prompts encouraging them to switch to the new version.
 
-So DownVid tries to keep parsing, downloading, merging and subtitles on your own machine. It also ships without yt-dlp or ffmpeg, preferring the copy already installed on your system. It is not perfect, but the direction is: your files, your rules.
-
-## What I try to hold on to
-
-- Parsing and downloading happen locally, not through a third-party server
-- Prefer the yt-dlp / ffmpeg you already have instead of bundling another copy
-- Keep several fallback routes for updates, so one broken route does not cut everyone off
-
-If it helps you, a GitHub star or a coffee is appreciated. If something breaks, open an issue with the log and I will read it.
-
-Thanks for keeping DownVid on your desktop.
+## Looking Forward
+If you have great ideas or suggestions, pull requests and issues are warmly welcomed!

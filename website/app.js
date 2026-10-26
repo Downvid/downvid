@@ -21,14 +21,12 @@ const I18N = {
     'dl.offline': '暂时拿不到最新版本信息，点击将打开 Releases 页面。',
     'dl.missing': '最新版里没有找到对应安装包，请到 Releases 页面查看。',
     'dl.unknown': '没识别出桌面系统，请从下面的列表里选。',
-    'dl.win.setup': 'Windows 安装版 (.exe)',
-    'dl.win.portable': 'Windows 便携版 (.exe)',
-    'dl.mac.arm': 'Apple 芯片 (.dmg)',
-    'dl.mac.intel': 'Intel 芯片 (.dmg)',
-    'dl.linux.appimage': 'x64 AppImage',
-    'dl.linux.appimage.arm': 'arm64 AppImage',
-    'dl.linux.deb': 'x64 .deb',
-    'dl.linux.rpm': 'x64 .rpm',
+    'dl.win.installer': 'Windows x64 安装程序 (.exe)',
+    'dl.win.zip': 'Windows x64 便携版 (.zip)',
+    'dl.mac.dmg': 'macOS 通用版安装器 (.dmg)',
+    'dl.mac.universal': 'macOS 通用版 (.zip)',
+    'dl.linux.deb': 'Linux x64 安装包 (.deb)',
+    'dl.linux.targz': 'Linux x64 便携包 (.tar.gz)',
     'dev.copy': '复制',
     'dev.copied': '已复制',
     'demo.start': '开始',
@@ -116,9 +114,6 @@ const I18N = {
     'hero.download': 'Download latest',
     'hero.source': 'View source',
     'dl.menu': 'All platforms and formats',
-    'dl.preview.link': 'Try the new-architecture preview',
-    'dl.preview.badge': 'preview',
-    'dl.preview.note': 'About 1/7 the size and faster to start; no auto-update and no Douyin/Kuaishou yet',
     'dl.all': 'All releases and artifacts',
     'dl.for': 'Download for {platform}',
     'dl.latest': 'Latest',
@@ -127,14 +122,12 @@ const I18N = {
     'dl.offline': "Couldn't fetch the latest version; the button opens the Releases page instead.",
     'dl.missing': 'No matching package in the latest release — see the Releases page.',
     'dl.unknown': 'Could not detect a desktop OS — pick one from the list below.',
-    'dl.win.setup': 'Windows installer (.exe)',
-    'dl.win.portable': 'Windows portable (.exe)',
-    'dl.mac.arm': 'Apple silicon (.dmg)',
-    'dl.mac.intel': 'Intel (.dmg)',
-    'dl.linux.appimage': 'x64 AppImage',
-    'dl.linux.appimage.arm': 'arm64 AppImage',
-    'dl.linux.deb': 'x64 .deb',
-    'dl.linux.rpm': 'x64 .rpm',
+    'dl.win.installer': 'Windows x64 Installer (.exe)',
+    'dl.win.zip': 'Windows x64 Portable (.zip)',
+    'dl.mac.dmg': 'macOS Universal Installer (.dmg)',
+    'dl.mac.universal': 'macOS Universal (.zip)',
+    'dl.linux.deb': 'Linux x64 Package (.deb)',
+    'dl.linux.targz': 'Linux x64 Portable (.tar.gz)',
     'plat.macos': 'macOS',
     'plat.windows': 'Windows',
     'plat.linux': 'Linux',
@@ -293,42 +286,22 @@ const PLATFORMS = [
   { os: 'linux', key: 'plat.linux' },
 ];
 
-// 产物名模板：{version} 是版本号的位置。前缀与扩展名必须与 electron-builder.json5 的
-// artifactName 对得上（pnpm lint:website 会逐条比对），否则改名后官网会静默挑不到产物。
-// primary = 该平台主推的产物；arch 用来在 macOS / Linux 上区分芯片。
+// 产物名模板：{version} 是版本号的位置。名字必须与 release.yml 的 build-wails
+// 产物对得上（pnpm lint:website 会逐条比对），否则改名后官网会静默挑不到产物。
+// primary = 该平台主推的产物（每个平台只有一份，macOS 的 universal 包同时覆盖两种芯片）。
 const ARTIFACTS = {
   windows: [
-    { name: 'DownVid-Setup-{version}.exe', key: 'dl.win.setup', arch: 'x64', primary: true },
-    { name: 'DownVid-Portable-{version}.exe', key: 'dl.win.portable', arch: 'x64' },
+    { name: 'DownVid-Wails-windows-x64-{version}-installer.exe', key: 'dl.win.installer', arch: 'x64', primary: true },
+    { name: 'DownVid-Wails-windows-x64-{version}.zip', key: 'dl.win.zip', arch: 'x64' },
   ],
   macos: [
-    { name: 'DownVid-arm64-Mac-{version}.dmg', key: 'dl.mac.arm', arch: 'arm64', primary: true },
-    { name: 'DownVid-x64-Mac-{version}.dmg', key: 'dl.mac.intel', arch: 'x64', primary: true },
+    { name: 'DownVid-Wails-mac-universal-{version}.dmg', key: 'dl.mac.dmg', arch: 'arm64', primary: true },
+    { name: 'DownVid-Wails-mac-universal-{version}.zip', key: 'dl.mac.universal', arch: 'arm64' },
   ],
   linux: [
-    { name: 'DownVid-x86_64-Linux-{version}.AppImage', key: 'dl.linux.appimage', arch: 'x64', primary: true },
-    { name: 'DownVid-arm64-Linux-{version}.AppImage', key: 'dl.linux.appimage.arm', arch: 'arm64', primary: true },
-    { name: 'DownVid-amd64-Linux-{version}.deb', key: 'dl.linux.deb', arch: 'x64' },
-    { name: 'DownVid-x86_64-Linux-{version}.rpm', key: 'dl.linux.rpm', arch: 'x64' },
+    { name: 'DownVid-Wails-linux-x64-{version}.deb', key: 'dl.linux.deb', arch: 'x64', primary: true },
+    { name: 'DownVid-Wails-linux-x64-{version}.tar.gz', key: 'dl.linux.targz', arch: 'x64' },
   ],
-};
-
-/**
- * 新架构（Wails）预览版的产物模板。
- *
- * ## 为什么单独一张表，不并进 ARTIFACTS
- *
- * 主按钮必须继续指向 **Electron 版** —— 那是有自动更新的版本。
- * 新架构版目前**没有自更新**（点了「检查更新」只是打开下载页），
- * 如果它成了主按钮，新用户装完以后每出一版都要自己回来下载。
- *
- * 所以它只作为一个次级入口出现，并且明确标注「预览」。
- * `pnpm lint:website` 会核对这里的产物名与 release.yml 的 build-wails 一致。
- */
-const WAILS_ARTIFACTS = {
-  windows: 'DownVid-Wails-windows-x64-{version}.zip',
-  macos: 'DownVid-Wails-mac-universal-{version}.zip',
-  linux: 'DownVid-Wails-linux-x64-{version}.tar.gz',
 };
 
 /**
@@ -411,19 +384,6 @@ function selectDownload(release, os, arch) {
   return { primary: primary, others: matches.filter(m => m !== primary) };
 }
 
-/**
- * 挑选当前平台可用的新架构预览包。
- *
- * 返回 null 表示这一版没发该平台的 Wails 产物 —— 调用方据此隐藏入口，
- * 而不是留一个死链。
- */
-function selectWailsPreview(release, os) {
-  if (!release || !os || !WAILS_ARTIFACTS[os]) return null;
-  const re = templateToRegex(WAILS_ARTIFACTS[os]);
-  const asset = release.assets.find(a => re.test(a.name));
-  return asset ? asset : null;
-}
-
 /** 菜单用的全量列表：每个平台里所有能匹配到的产物，识别出的平台排在最前面 */
 function listDownloads(release, preferredOS) {
   if (!release) return [];
@@ -461,10 +421,6 @@ function buildFallbackRelease(versionTag) {
       const name = item.name.replace('{version}', v);
       assets.push({ name: name, url: base + name, size: 0 });
     }
-  }
-  for (const os of Object.keys(WAILS_ARTIFACTS)) {
-    const name = WAILS_ARTIFACTS[os].replace('{version}', v);
-    assets.push({ name: name, url: base + name, size: 0 });
   }
   return { tag: versionTag, assets: assets };
 }
@@ -590,20 +546,6 @@ function renderDownload() {
   btnEl.setAttribute('href', href);
   if (installEl) installEl.setAttribute('href', href);
   noteEl.textContent = note;
-
-  // 新架构预览入口：只有这一版真的发了**本平台**的 Wails 包时才出现。
-  // 否则隐藏 —— 留一个点不开的链接比不显示更糟。
-  const previewEl = document.getElementById('dlPreview');
-  const previewLink = document.getElementById('dlPreviewLink');
-  if (previewEl && previewLink) {
-    const preview = os && release ? selectWailsPreview(release, os) : null;
-    if (preview) {
-      previewLink.setAttribute('href', preview.url);
-      previewEl.hidden = false;
-    } else {
-      previewEl.hidden = true;
-    }
-  }
 
   renderMenu(os);
 }

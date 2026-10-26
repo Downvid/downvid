@@ -5,7 +5,7 @@
  * ## 为什么
  *
  * 实测升级 Go 1.24 → 1.25 时，要改 **20 处**：`ci-linux/macos/windows` 各 2–3 处、
- * `release.yml` 6 处、`codeql.yml`、`update-deps.yml`、`docker/Dockerfile`、`backend/go.mod`。
+ * `release.yml` 6 处、`codeql.yml`、`update-deps.yml`、`backend/go.mod`。
  * 漏改一处不会报错——CI 只是用旧版本编译，而 Wails 要求 Go ≥ 1.25，
  * 表现为「本地能编、CI 编不过」或者更糟：两个版本编出来的二进制行为不同。
  *
@@ -15,7 +15,7 @@
  *
  * | 工具 | 唯一来源 | 镜像位置 |
  * | --- | --- | --- |
- * | Go  | `backend/go.mod` 的 `go 1.x`（最低版本） | 各 workflow 的 `go-version`、Dockerfile 的 `GO_VERSION` |
+ * | Go  | `backend/go.mod` 的 `go 1.x`（最低版本） | 各 workflow 的 `go-version` |
  * | Node | `package.json` 的 `engines.node` | 各 workflow 的 `node-version` |
  * | pnpm | `package.json` 的 `packageManager`（`pnpm@11`） | 各 workflow 的 `version:` |
  *
@@ -113,25 +113,10 @@ for (const file of workflows) {
   }
 }
 
-// Dockerfile 的 GO_VERSION（补丁版，只要求主次与 go.mod 一致）
-const dockerPath = 'docker/Dockerfile'
-const docker = read(dockerPath)
-const dv = /ARG GO_VERSION=(\d+\.\d+)(\.\d+)?/.exec(docker)
-if (dv) {
-  if (dv[1] !== goMin) {
-    problems.push(`${dockerPath}  ARG GO_VERSION=${dv[1]} → 主次版本应为 ${goMin}（与 backend/go.mod 一致）`)
-    if (FIX) {
-      write(dockerPath, docker.replace(/ARG GO_VERSION=[\d.]+/, `ARG GO_VERSION=${dv[1] === goMin ? dv[1] : `${goMin}${dv[2] ?? ''}`}`))
-    }
-  }
-} else {
-  problems.push(`${dockerPath}：找不到 ARG GO_VERSION`)
-}
-
 // ===== 输出 =====
 if (problems.length === 0) {
   console.log(
-    `工具链版本一致：Go ${goMin}、Node ${nodeMin}、pnpm ${pnpmMajor}（扫描 ${workflows.length} 个工作流 + Dockerfile）。`,
+    `工具链版本一致：Go ${goMin}、Node ${nodeMin}、pnpm ${pnpmMajor}（扫描 ${workflows.length} 个工作流）。`,
   )
   process.exit(0)
 }

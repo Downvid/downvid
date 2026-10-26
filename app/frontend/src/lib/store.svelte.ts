@@ -1471,11 +1471,6 @@ class AppStore {
   openAnnouncement(): void {
     this.announcementRead = true
     this.dialog = 'announcement'
-    // 打开时确保有内容：先给本地（立即可见），同时后台拉远端
-    if (!this.announcement) {
-      this.announcement = loadLocalAnnouncement(getLocale())
-      this.announcementSource = 'local'
-    }
     void this.refreshAnnouncement()
   }
 

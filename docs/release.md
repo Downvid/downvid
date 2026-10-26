@@ -16,14 +16,14 @@
 
 ### 属于 MAJOR 的典型改动
 
-- 更换 GitHub 仓库、组织，或改变发布渠道（`electron/constants.ts`、`electron-builder.json5` 的 `publish`）
-- 改产物命名规则（`DownVid-Setup-*` 等，见下文"产物命名契约"）
-- 更换更新清单的文件名或结构（`latest.yml` / `latest-mac.yml` / `latest-linux*.yml`）
+- 更换 GitHub 仓库、组织，或改变发布渠道（`shared/app.ts` 与各流水线里的仓库坐标）
+- 改产物命名规则（`DownVid-Wails-*`，见下文「产物命名契约」）
 - 提高最低系统版本要求（如放弃 macOS 12、Windows 10 以下）
-- 移除或重命名 `localStorage['settings']` 中的字段（老用户设置会丢失）
-- 移除已发布的 IPC 通道（`electron/preload.ts` 暴露给渲染进程的接口）
+- 移除或重命名 `settings.json` 中的字段（老用户设置会丢失）
+- 移除已发布的后端绑定方法或广播事件
 
-> 注意：**删除 `localStorage['settings']` 的字段名属于 MAJOR**，因为老用户的设置会静默失效。改设置形状时应新增字段并在读取时做兼容兜底。
+> 注意：**删除 `settings.json` 的字段名属于 MAJOR**，因为老用户的设置会静默失效。
+> 改设置形状时应新增字段并在读取时做默认值兜底。
 
 ### 预发布版本
 
@@ -34,11 +34,14 @@
 ### 1. 前置检查
 
 ```bash
-# 全部必须通过，CI 也是同一套
-pnpm vue-tsc --noEmit
-cd backend && gofmt -l . && go vet ./... && go test ./...
+# 全部必须通过，release.yml 的 gate job 是同一套
+(cd app && gofmt -l . && go vet ./... && go test ./...)
+(cd backend && gofmt -l . && go vet ./... && go test ./...)
+pnpm --dir app/frontend check
+pnpm test
 pnpm deps:manifest:check      # 依赖清单是否落后上游
 pnpm lint:website             # 官网（含版本号占位）静态约束
+pnpm lint:docs && pnpm lint:workflows
 ```
 
 > **不要**为了发版去手工改 `website/index.html` 的版本号：`release.yml` 会在
@@ -46,7 +49,8 @@ pnpm lint:website             # 官网（含版本号占位）静态约束
 
 ### 2. 升版本号
 
-只改 `package.json` 的 `version`。**不要手改任何 `latest*.yml`**——它们由 CI 按最终产物重新生成，手改必然与文件不一致。
+只改 `package.json` 的 `version`。应用内更新直接读 GitHub Releases 的产物列表
+（`app/internal/update`），没有额外的清单文件需要同步。
 
 ### 3. 写 CHANGELOG
 
@@ -68,7 +72,8 @@ git push origin main --tags
 
 ### 5. 观察构建
 
-5 个架构目标并行构建，任一失败都不会发布。失败时先修复再重新打 tag（已推送的 tag 需要删除后重推）：
+三个平台（macOS 通用 / Windows x64 / Linux x64）并行构建，任一失败都不会发布。
+失败时先修复再重新打 tag（已推送的 tag 需要删除后重推）：
 
 ```bash
 git tag -d v1.3.0 && git push origin :refs/tags/v1.3.0
@@ -76,7 +81,7 @@ git tag -d v1.3.0 && git push origin :refs/tags/v1.3.0
 
 ### 6. 发布后核对
 
-- Release 页面产物齐全（5 个架构，含 `.blockmap` 与 `latest*.yml`）
+- Release 页面产物齐全（三个平台的 zip / tar.gz）
 - 下载一个安装包，确认能打开
 - 用**上一个版本**的应用检查一次「检查更新」，确认能发现新版本（这是更新链路唯一可靠的验证方式）
 
@@ -136,28 +141,37 @@ git tag -d v1.3.0 && git push origin :refs/tags/v1.3.0
 
 ## 产物命名契约
 
-以下文件名**不可更改**。旧版本的客户端会把它们硬编码在更新清单（`latest*.yml`）里，一旦改名，所有存量用户将无法自动更新，只能手动下载。
+产物名以 `DownVid-Wails-` 开头，同时被四处引用，**改一处必须改四处**：
+
+| 位置 | 用途 |
+| --- | --- |
+| `.github/workflows/release.yml` | 打包步骤（真正的名字来源） |
+| `app/internal/update/migration.go` | 自更新识别安装包形态 |
+| `website/app.js` | 官网按系统直链产物 |
+| `scripts/gen-release-notes.mjs` | Release 正文的下载徽章与对照表 |
 
 | 平台 | 产物名 |
 | --- | --- |
-| Windows 安装包 | `DownVid-Setup-<version>.exe` |
-| Windows 便携版 | `DownVid-Portable-<version>.exe` |
-| macOS | `DownVid-<arch>-Mac-<version>.<dmg\|zip>`（如 `DownVid-arm64-Mac-1.2.1.dmg`） |
-| Linux x64 | `DownVid-x86_64-Linux-<version>.AppImage` / `DownVid-amd64-Linux-<version>.deb` / `.rpm` |
-| Linux arm64 | `DownVid-arm64-Linux-<version>.AppImage` |
-| 更新清单 | `latest.yml`（Windows）、`latest-mac.yml`（macOS）、`latest-linux.yml`、`latest-linux-arm64.yml` |
+| macOS（通用） | `DownVid-Wails-mac-universal-<version>.zip` |
+| Windows x64 | `DownVid-Wails-windows-x64-<version>.zip` |
+| Linux x64 | `DownVid-Wails-linux-x64-<version>.tar.gz` |
 
-这些规则定义在 `electron-builder.json5` 的 `artifactName`。**Linux 用 `amd64`/`x86_64` 而不是 `x64`**，与 electron-builder 的 `${arch}` 取值不同，是历史约定。
+`pnpm lint:website` 会比对官网模板与 `release.yml`；`scripts/verify-release.mjs`
+会在发布后核对三个包是否都挂上了。
 
-### 便携版为什么必须单独命名
+## 应用内自更新
 
-便携版与安装包同为 `.exe`。若同名，两者会互相覆盖，且 `latest.yml` 里的 `sha512` 会与实际文件不一致，导致**所有 Windows 用户自动更新时报校验失败**。`portable.artifactName` 里的 `-Portable-` 后缀不能删。
+`app/internal/update` 直接读 GitHub Releases 的产物列表，按平台/架构选包，下载后校验
+（`sha512` 优先，GitHub 的 `digest` 兜底）再安装：
 
-## 更新清单的生成
+| 平台 | 安装方式 |
+| --- | --- |
+| macOS | zip → `ditto` 解压 → 替换 `.app` → 重开 |
+| Windows | NSIS 安装器 → 静默安装 → 重启 |
+| Linux | AppImage → 替换文件本身 → 重开 |
 
-`scripts/gen-update-manifests.mjs` 在构建完成后对**最终产物**逐个计算 `sha512` 与 `size`，覆盖式写出全部 `latest*.yml`。
-
-为什么不直接用 electron-builder 各自生成的清单：5 个架构在各自 job 中构建，每个 job 都会产出一份 `latest*.yml` 并互相覆盖，最终清单与实际上传的文件对不上。因此 `release.yml` 的做法是——各 job 只上传产物与自己的清单，最后统一由该脚本按真实文件重新生成。
+deb / rpm / tar.gz 不做自动安装（需要包管理器，静默替换会破坏系统包数据库），
+界面会退回「打开下载页」。
 
 ## 发布后可选：补充外部徽章
 
@@ -177,25 +191,12 @@ README 顶部目前有 Downloads / Release / Stars / License / Product Hunt。�
 
 | 资源类型 | 是否代表装机 | 说明 |
 | --- | --- | --- |
-| `DownVid-Setup-*` / `*Portable*` / `.dmg` / `.deb` / `.rpm` / `.tar.gz` / `AppImage` | ✅ 近似代表 | 用户主动下载安装 |
-| `*.zip` / `*-Mac-*.zip` | ⚠️ 含自动更新 | macOS 自动更新也走 zip |
-| `*.blockmap` | ❌ 只是更新差分 | **仅自动更新时下载**，是存量用户升级，不是新增 |
-| `latest*.yml` | ❌ 只是清单 | **每次检查更新都会请求**，占总量的大头 |
+| 三种产物（`.zip` / `.tar.gz`） | ✅ 近似代表 | 用户主动下载，macOS 的 zip 同时用于自动更新 |
+| GitHub API 的 release 请求 | ❌ 只是查询 | 每次检查更新都会请求，占总量的大头 |
 
-实测（2026-10 的四个版本）：清单请求 656 次、blockmap 62 次、安装包合计 489 次。
-直接相加得到"1.2K 下载"；按上表口径还原后，真实装机量级是**约 430**。
-
-区分「新增」与「升级」的干净口径：
-
-```
-真实安装 = 安装包下载
-自动更新 = blockmap 下载（即可推出"存量用户有多少在升级"）
-检查更新 = latest*.yml 请求
-```
-
-**另一个值得注意的信号**：blockmap 下载量远小于安装包下载量，说明**存量用户大多不升级**。
-发版时若希望用户真正用上新版本，不能只依赖自动更新，应在 Release 正文顶部放醒目的下载入口
-（`scripts/gen-release-notes.mjs` 已生成）。
+> 自更新走的是 GitHub API 的产物直链，**没有**额外的清单请求；
+> 因此 release 资源下载量比旧架构时代更接近真实装机量。
+> 但 macOS 的 zip 同时用于自动更新，想区分「新增」与「升级」只能结合 API 请求次数估算。
 
 ### 为什么不做客户端匿名统计
 
@@ -260,5 +261,5 @@ README 顶部目前有 Downloads / Release / Stars / License / Product Hunt。�
 ## 分支与 CI
 
 - `main` 未开启分支保护，维护者可直接推送；外部贡献建议走 PR
-- 推送 tag `v*` 触发发布；推送 `main` 或开 PR 都会触发 CI（类型检查 + Go 测试 + 打包校验 + CodeQL + 依赖审查）
+- 推送 tag `v*` 触发发布；推送 `main` 或开 PR 都会触发 CI（Go 测试 + 前端检查 + 静态校验 + 构建 + CodeQL + 依赖审查）
 - `release.yml` 的 `permissions` 只申请 `contents: write`，不要在 job 内扩大权限

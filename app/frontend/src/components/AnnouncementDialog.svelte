@@ -17,8 +17,9 @@
   import { REPO_URL } from '../lib/constants'
   import { openExternal } from '../lib/backend'
 
-  // store 里没有时（比如直接从 URL 打开对话框）退回本地，保证总有内容
-  const doc = $derived(app.announcement ?? loadLocalAnnouncement(getLocale()))
+  // 优先取远端，完全拉取失败或离线时才使用兜底
+  const isInitialLoading = $derived(app.announcementSource === 'loading' && !app.announcement)
+  const doc = $derived(app.announcement ?? (app.announcementSource === 'local' ? loadLocalAnnouncement(getLocale()) : null))
 
   function openRepo(): void {
     openExternal(REPO_URL)
@@ -36,13 +37,11 @@
     <header class="dialog-head">
       <span class="dialog-icon"><Icon name="campaign" size={21} /></span>
       <div class="dialog-heading">
-        <h2 id="announcement-title">{doc.title}</h2>
+        <h2 id="announcement-title">{doc ? doc.title : t('announcement.short')}</h2>
         <p class="num">
-          {doc.date}{#if doc.signature} · {doc.signature}{/if}
-          <!--
-            如实标出内容来源。用户看到「离线副本」时能自己判断
-            「作者可能更新了但我这边网络不通」，而不是以为作者没写新的。
-          -->
+          {#if doc}
+            {doc.date}{#if doc.signature} · {doc.signature}{/if}
+          {/if}
           {#if app.announcementSource === 'local'}
             <span class="source-badge">{t('announcement.offline')}</span>
           {:else if app.announcementSource === 'loading'}
@@ -61,18 +60,27 @@
     </header>
 
     <div class="dialog-body scroll">
-      {#each doc.blocks as block, index (index)}
-        {#if block.type === 'h2'}
-          <h3>{block.text}</h3>
-        {:else if block.type === 'li'}
-          <div class="list-item">
-            <span class="bullet"></span>
-            <span>{block.text}</span>
-          </div>
-        {:else}
-          <p>{block.text}</p>
-        {/if}
-      {/each}
+      {#if isInitialLoading}
+        <div class="skeleton-wrap">
+          <div class="skeleton-line title"></div>
+          <div class="skeleton-line"></div>
+          <div class="skeleton-line short"></div>
+          <div class="skeleton-line"></div>
+        </div>
+      {:else if doc}
+        {#each doc.blocks as block, index (index)}
+          {#if block.type === 'h2'}
+            <h3>{block.text}</h3>
+          {:else if block.type === 'li'}
+            <div class="list-item">
+              <span class="bullet"></span>
+              <span>{block.text}</span>
+            </div>
+          {:else}
+            <p>{block.text}</p>
+          {/if}
+        {/each}
+      {/if}
     </div>
 
     <footer class="dialog-foot">
@@ -195,6 +203,31 @@
     border-radius: 50%;
     background: var(--accent);
     flex: none;
+  }
+
+  .skeleton-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 8px 0;
+  }
+  .skeleton-line {
+    height: 14px;
+    border-radius: 4px;
+    background: color-mix(in oklab, var(--rule) 70%, transparent);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+  .skeleton-line.title {
+    width: 60%;
+    height: 20px;
+    margin-bottom: 8px;
+  }
+  .skeleton-line.short {
+    width: 45%;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.8; }
   }
 
   .dialog-foot {

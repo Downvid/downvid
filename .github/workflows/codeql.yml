@@ -1,6 +1,6 @@
 name: CodeQL
 
-# 静态安全扫描：渲染进程/主进程（TypeScript、Vue）与 Go 边车。
+# 静态安全扫描：TypeScript（前端契约层 / 发布脚本 / 官网）与 Go（核心 + 边车）。
 # 目的不是替代评审，而是拦住注入、路径穿越、不安全反序列化这类可模式化识别的问题
 # ——本项目会构造子进程参数并写本地文件，这两类正是重点。
 on:
@@ -58,11 +58,14 @@ jobs:
           build-mode: ${{ matrix.build-mode }}
           queries: security-and-quality
 
-      # go.mod 在 backend/ 下，用 manual 显式构建，避免 autobuild 在仓库根找不到模块
-      - name: Build Go backend
+      # 仓库存两个独立的 Go 模块（backend/ 边车、app/ 核心），
+      # 用 manual 显式构建，避免 autobuild 在仓库根找不到模块
+      - name: Build Go modules
         if: matrix.language == 'go'
-        working-directory: backend
-        run: go build ./...
+        shell: bash
+        run: |
+          (cd backend && go build ./...)
+          (cd app && go build ./...)
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4

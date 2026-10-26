@@ -1,18 +1,14 @@
 name: CI · macOS
 
-# macOS 侧的完整回归。
+# macOS 侧回归。
 #
-# macOS 有三处**只有这里能验**的东西，Linux 与 Windows 都替代不了：
-#   1. **未签名的 .app**：本项目没有付费证书，identity 为 null。用户首次启动要
-#      右键打开或去「隐私与安全性」放行；自动更新则完全绕开 Squirrel.Mac，
-#      改为自行下载 zip → 校验 sha512 → 去隔离属性 + ad-hoc 签名 → 退出后替换
-#   2. **通用二进制与架构**：产物同时出 arm64 与 x64（见 electron-builder.json5），
-#      跑在 Apple Silicon 上但用户可能是 Intel
+# macOS 有三处只有这里能验：
+#   1. **未签名的 .app**：本项目没有付费证书，用户首次启动要右键打开或去
+#      「隐私与安全性」放行
+#   2. **通用二进制**：`darwin/universal` 由 Wails 自己 lipo 合并，边车必须为
+#      arm64 与 amd64 各编一份（build.sh 负责），否则下载依赖时找不到二进制
 #   3. **quarantine 属性**：网络下载的可执行文件带 com.apple.quarantine，
 #      Apple Silicon 会直接 `killed: 9` —— 边车安装后必须 xattr -c + codesign
-#
-# 另外 runner 是 macOS 而非用户环境：登录 shell 的 PATH 差异（GUI 应用只有精简
-# PATH）在这里能真实复现，Linux/Windows runner 不行。
 
 on:
   push:
@@ -32,7 +28,7 @@ env:
 
 jobs:
   backend:
-    name: 后端 · Go 侧车（macOS）
+    name: 后端 · Go 侧车 + Go 核心（macOS）
     runs-on: macos-latest
     timeout-minutes: 25
     steps:
@@ -43,26 +39,33 @@ jobs:
           go-version: '1.25'
           cache: false
 
-      - name: gofmt（格式）
-        working-directory: backend
+      - name: gofmt（侧车 + 核心）
         shell: bash
         run: |
-          UNFORMATTED=$(gofmt -l .)
+          UNFORMATTED=$(gofmt -l backend app)
           if [ -n "$UNFORMATTED" ]; then
             echo "::error::以下文件未经过 gofmt 格式化："
             echo "$UNFORMATTED"
             exit 1
           fi
 
-      - name: go vet（静态检查）
+      - name: go vet（侧车）
         working-directory: backend
         run: go vet ./...
 
-      - name: go test（打乱顺序）
+      - name: go test（侧车）
         working-directory: backend
         run: go test -shuffle=on -count=1 ./...
 
-      # 两个架构都要能编：产物同时出 arm64 与 x64
+      - name: go vet（核心）
+        working-directory: app
+        run: go vet ./...
+
+      - name: go test（核心）
+        working-directory: app
+        run: go test -shuffle=on -count=1 ./...
+
+      # 两个架构都要能编：产物同时出 arm64 与 amd64
       - name: 交叉编译 darwin 双架构
         working-directory: backend
         shell: bash
@@ -93,12 +96,6 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: 类型检查
-        run: pnpm vue-tsc --noEmit
-
-      - name: IPC 契约校验
-        run: pnpm lint:ipc
-
       - name: 图标名校验
         run: pnpm lint:icons
 
@@ -108,73 +105,41 @@ jobs:
       - name: 文档一致性校验（AGENTS.md ↔ CLAUDE.md）
         run: pnpm lint:docs
 
-      # 来源审计：哪些代码来自上游 Videdown、占比多少，由脚本从仓库内快照现场重算。
-      # 新增了上游衍生文件却没登记 / 登记的数字已过期 → 直接红叉（见 docs/provenance/audit.md）
       - name: 代码来源审计
         run: pnpm audit:provenance
 
-      # MIT 要求「substantial portions」附带版权声明。上游代码未归零前删掉声明
-      # 会让许可证失效，而删一行 LICENSE 不会让任何测试变红——所以单独拦。
       - name: 署名合规（上游版权声明 ↔ 剩余上游代码）
         run: pnpm lint:attribution
 
-      # 架构边界：core/ 不得 import electron、前端不得直接用主进程实现等七条规则。
-      # 违反时类型检查与单测都不会红，只在容器/前端运行时静默失效（见 docs/provenance/architecture.md §3.2）
       - name: 架构边界校验
         run: pnpm lint:boundaries
 
-      # 仓库坐标散落 20+ 处，漏改任一处 = 存量用户收不到更新（唯一一类「发新版也修不好」的故障）
       - name: 仓库坐标一致性
         run: pnpm sync:repo
 
-      # 应用里的「更新日志」读的是 app/internal/changelog/ 下的**副本**
-      # （`//go:embed` 不能引用包目录之外的文件）。副本会静默过期：
-      # 改了根部 CHANGELOG 忘了同步，界面还停在旧内容，而构建与测试都不报错。
       - name: 更新日志副本一致
         run: pnpm sync:changelog
 
-      # 文档里的「当前值类」数字（词条数 / 用例数 / settings 字段 / 事件清单）与代码实测一致
-      - name: 文档数字同步
-        run: pnpm sync:doc-numbers
-
-      # Go/Node/pnpm 版本散落 20+ 处，漏改只会让 CI 静默用旧版本编译
       - name: 工具链版本一致
         run: pnpm sync:toolchain
 
-      # 词条漏英文 / 占位符对不上都不会报错，只会静默显示错文案
       - name: i18n 词条校验
-        run: pnpm lint:i18n
+        run: pnpm lint:i18n:app
 
-      # 工作流的错误本地跑什么都发现不了，只能等 CI 变红。
-      # 这条静态校验把「用了某工具但没装」变成提交前就能看到的问题。
       - name: 工作流健全性校验
         run: pnpm lint:workflows
 
-      # 镜像里的问题几乎都是不报错的那种（依赖版本漂移 / 退回 tsx / 更新检查退化），
-      # 读文件就能判定。三平台都查一遍，与其它 lint 保持一致。
-      - name: 容器镜像定义校验
-        run: pnpm lint:docker
-
-      # 新前端是**独立包**（不在根 pnpm workspace 里），要单独装依赖
-      - name: 前端依赖安装（app/frontend 是独立包，不在根 workspace）
+      # app/frontend 是**独立包**（不在根 pnpm workspace 里），要单独装依赖
+      - name: 前端依赖安装
         working-directory: app/frontend
         run: pnpm install --frozen-lockfile
 
       # wailsjs/ 是**生成**的（wails generate module），不入库。
-      # 不生成就直接 svelte-check，会报三条 "Cannot find module
-      # '../../wailsjs/go/main/App'"——那是 CI 缺步骤，不是代码错。
-      #
-      # 注意顺序：`wails generate module` 会先把 Go 包编译一遍，
-      # 而 main.go 里有 `//go:embed all:frontend/dist`——dist 不存在时
-      # 直接报 `pattern all:frontend/dist: no matching files found`。
-      # 所以**先构建前端**，再生成绑定。
+      # 顺序不能反：generate 要先编译 Go 包，而 main.go 里有
+      # `//go:embed all:frontend/dist`，dist 不存在时编译直接失败。
       - name: 安装 Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
 
-      # 先建一个空的 dist：`//go:embed all:frontend/dist` 在 dist 不存在时
-      # 会让整个 Go 包编译失败，而 `wails generate module` 必须先编译这个包。
-      # 反过来，前端构建又需要 wailsjs ——这是一个鸡生蛋问题，
-      # 只能先用占位目录把 generate 这一步解开（仓库里有 dist/.gitkeep）。
       - name: 准备 embed 目录
         run: bash app/scripts/prepare-embed-dir.sh
 
@@ -182,60 +147,20 @@ jobs:
         working-directory: app
         run: wails generate module
 
-      # 新前端（app/frontend，Svelte 5）：`tsc` **不解析 .svelte**，
-      # 于是组件与 store 的契约漂移长期无人发现——累计 48 个真错误，
-      # 其中「设置页每个按钮都失效」就是这么漏出去的。
+      # `tsc` **不解析 .svelte**，组件与 store 的契约漂移只有它能看见
       - name: 前端类型检查（svelte-check）
         working-directory: app/frontend
         run: pnpm check
 
-      # 新前端的词条表是**独立的一份**（app/frontend/src/lib/i18n.svelte.ts）。
-      # 中英不成对时只会静默显示错语言，必须静态查。
-      - name: 前端词条校验（app）
-        run: pnpm lint:i18n:app
-
-
-      - name: 纯逻辑单测（Vitest）
+      - name: 前端纯逻辑单测
+        working-directory: app/frontend
         run: pnpm test
 
-      - name: 更新流程回归
-        run: pnpm test:updater
+      - name: 根目录纯逻辑单测
+        run: pnpm test
 
-      - name: 设置迁移与向后兼容
-        run: pnpm test:settings:migration
-
-  integration:
-    name: 集成 · 下载 / 加速（macOS）
-    runs-on: macos-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-go@v7
-        with:
-          go-version: '1.25'
-          cache: false
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-
-      - uses: pnpm/action-setup@v6
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: 下载集成回归
-        run: pnpm test:download:integration
-
-      - name: 加速基准
-        run: pnpm test:acceleration
-
-      - name: 解析集成回归
-        run: pnpm test:parse:integration
-
-  # ===== macOS 专属：未签名应用的启动与更新 =====
-  packaging:
-    name: 打包 · 未签名 .app 与产物内容
+  build:
+    name: 构建 · 未签名 .app 与边车
     runs-on: macos-latest
     timeout-minutes: 40
     steps:
@@ -252,69 +177,40 @@ jobs:
 
       - uses: pnpm/action-setup@v6
 
-      - run: pnpm install --frozen-lockfile
+      - name: 安装 Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
 
-      - name: 构建前端与主进程
-        run: pnpm vite build
+      - name: 前端依赖安装
+        working-directory: app/frontend
+        run: pnpm install --frozen-lockfile
 
-      - name: 打包到目录（arm64）
-        run: pnpm exec electron-builder --mac dir --arm64 --publish never --config electron-builder.json5
+      - name: 准备 embed 目录
+        run: bash app/scripts/prepare-embed-dir.sh
 
-      # 边车、app.asar、版本号、有没有误带 yt-dlp/ffmpeg、产物里有没有源码泄漏
-      - name: 产物内容校验
-        run: pnpm test:package
+      - name: 生成 Wails 绑定
+        working-directory: app
+        run: wails generate module
 
-      # 未签名是本项目的既定事实（identity: null）。这里确认它「确实未签名」
-      # 而不是「签名坏了」——后者会让用户看到完全不同的报错。
-      - name: 确认产物未签名（identity 为 null 的预期结果）
+      - name: 构建（含依赖边车）
+        run: bash app/scripts/build.sh -platform darwin/universal
+
+      # 未签名是本项目的既定事实（没有付费证书）。这里确认两个架构都在：
+      # 少一个的话，对应芯片的用户装上去会是「已损坏」。
+      - name: 产物架构检查
         shell: bash
         run: |
-          APP=$(find release -maxdepth 3 -name 'DownVid.app' -type d | sort -V | tail -1)
+          APP=$(find app/build/bin -maxdepth 2 -name '*.app' -type d | head -1)
           if [ -z "$APP" ]; then
-            echo "::error::在 release 下找不到 DownVid.app"
-            find release -maxdepth 3 | head -20
+            echo "::error::构建产物里找不到 .app"
+            find app/build/bin -maxdepth 2 | head -20
             exit 1
           fi
           echo "检查 $APP"
-          if codesign -dv "$APP" 2>&1 | grep -q 'Authority=Developer ID'; then
-            echo "::error::产物带了 Developer ID 签名，但 electron-builder.json5 里 identity 为 null"
-            exit 1
-          fi
-          echo "  ok 未签名（与 identity: null 一致）"
-
-      # 边车必须在 macOS 上能真的执行：架构不匹配或未去隔离属性都会
-      # 让用户点「下载」后拿到一个 `killed: 9` 的文件
-      - name: 边车可执行且架构正确
-        shell: bash
-        run: |
-          # 路径形如 release/<版本>/<arch>/DownVid.app/Contents/Resources/downvid-deps，
-          # 深度 7 层，maxdepth 必须够
-          SIDECAR=$(find release -maxdepth 8 -name downvid-deps -type f | sort -V | tail -1)
-          if [ -z "$SIDECAR" ]; then
-            echo "::error::在 release 下找不到 downvid-deps 边车"
-            find release -maxdepth 3 -type d | head -20
-            exit 1
-          fi
-          echo "检查 $SIDECAR"
-          file "$SIDECAR"
-          "$SIDECAR" version
-          "$SIDECAR" detect --json --timeout 10 > /dev/null
-          echo "  ok 边车可执行"
-
-      # Info.plist 的版本号决定「应用内更新」认为自己是什么版本；
-      # 与 package.json 不一致会让用户永远收到「有新版本」的提示
-      - name: Info.plist 版本与 package.json 一致
-        shell: bash
-        run: |
-          APP=$(find release -maxdepth 3 -name 'DownVid.app' -type d | sort -V | tail -1)
-          if [ -z "$APP" ]; then
-            echo "::error::在 release 下找不到 DownVid.app"
-            exit 1
-          fi
-          PLIST_VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP/Contents/Info.plist")
-          PKG_VERSION=$(node -p "require('./package.json').version")
-          echo "Info.plist=$PLIST_VERSION package.json=$PKG_VERSION"
-          if [ "$PLIST_VERSION" != "$PKG_VERSION" ]; then
-            echo "::error::版本不一致，用户会一直看到「有新版本」"
-            exit 1
-          fi
+          lipo -archs "$APP/Contents/MacOS/"*
+          ARCHS=$(lipo -archs "$APP/Contents/MacOS/"*)
+          for want in arm64 x86_64; do
+            case "$ARCHS" in
+              *"$want"*) echo "  ok $want" ;;
+              *) echo "::error::产物缺少 $want 架构"; exit 1 ;;
+            esac
+          done

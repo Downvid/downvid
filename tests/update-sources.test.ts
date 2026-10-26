@@ -12,7 +12,6 @@ import {
   type UpdateSourceId,
 } from '../shared/update-sources'
 import { lookupLatestRelease, summarizeFailures, type FetchLike } from '../shared/update-check'
-import { assetsFor, normalizePlatform, parseManifest } from '../scripts/deps-asset.mjs'
 
 /**
  * 更新源链路与依赖资产解析。
@@ -191,73 +190,6 @@ describe('版本比较', () => {
   })
 })
 
-describe('镜像依赖资产解析', () => {
-  const source = fs.readFileSync(path.join(ROOT, 'backend/internal/manifest/assets.gen.go'), 'utf8')
-
-  it('amd64 与 arm64 都解析出三件资产', () => {
-    for (const platform of ['amd64', 'arm64']) {
-      const assets = assetsFor(source, platform)
-      expect(assets.map((a) => a.kind)).toEqual(['yt-dlp', 'ffmpeg', 'ffprobe'])
-      for (const a of assets) {
-        expect(a.sha256).toMatch(/^[0-9a-f]{64}$/)
-        expect(a.url).toMatch(/^https:\/\//)
-      }
-    }
-  })
-
-  it('容器用自包含包，而不是需要 python3 的 zipapp', () => {
-    // 桌面端首选 zipapp（启动 0.4s vs 9~10s），但**容器里必须用自包含包**：
-    // 镜像刻意不装 python3（省 27MB），zipapp 会直接 "python3: not found"。
-    // deps-asset.mjs 因此对每个平台都挑 Bundled 那份。
-    for (const platform of ['amd64', 'arm64']) {
-      const ytdlp = assetsFor(source, platform).find((a) => a.kind === 'yt-dlp')!
-      expect(ytdlp.name).toMatch(/^yt-dlp_linux/)
-      expect(ytdlp.gzip).toBe(false)
-    }
-  })
-
-  it('桌面清单同时记录 zipapp 与回退包（否则没 python3 的机器装不上）', () => {
-    // 主用 = zipapp（快），回退 = PyInstaller（一定跑得起来）
-    for (const platform of ['darwin/arm64', 'linux/x64']) {
-      const entry = new RegExp(`"${platform}": \\{[\\s\\S]*?Name: "(yt-dlp)", SHA256: "([0-9a-f]{64})",\\s*Bundled: "(yt-dlp_[a-z0-9_]+)", BundledSHA256: "([0-9a-f]{64})",\\s*ZipApp: true`, 'm')
-      expect(source).toMatch(entry)
-    }
-  })
-
-  it('校验的是 .gz 本身（与边车 fetch 行为一致）', () => {
-    const ffmpeg = assetsFor(source, 'amd64').find((a) => a.kind === 'ffmpeg')!
-    expect(ffmpeg.url.endsWith('.gz')).toBe(true)
-    expect(ffmpeg.gzip).toBe(true)
-  })
-
-  it('TARGETARCH 与清单键的映射覆盖 Docker 的两种取值', () => {
-    expect(normalizePlatform('amd64')).toBe('linux/x64')
-    expect(normalizePlatform('arm64')).toBe('linux/arm64')
-    // 直接透传 TARGETARCH 会得到 linux/amd64，在清单里查不到 → 静默少装资产
-    expect(() => normalizePlatform('unknown-arch')).toThrow()
-  })
-
-  it('清单缺字段时抛错，而不是安静地少解析出几条', () => {
-    expect(() => parseManifest('package manifest\n')).toThrow()
-  })
-})
-
-/**
- * yt-dlp 首选 **Python zipapp**（`yt-dlp`），而不是 PyInstaller 独立包。
- *
- * ## 为什么这条值得一个测试
- *
- * 实测同一台机器、同一个 bilibili 视频：
- *
- * | 形态 | `--version` | 真实解析 |
- * | --- | --- | --- |
- * | `yt-dlp_macos`（PyInstaller） | 9.5~10.5s | 11.4s |
- * | `yt-dlp`（zipapp） | 0.41s | **2.2s** |
- *
- * PyInstaller 的单文件包每次启动都要把 ~72MB 解压到临时目录，这 9 秒是纯开销。
- * 它不报错、不影响正确性，只让人觉得「这个应用很慢」—— 所以最容易在某次
- * 「换个更稳的二进制」的改动里被悄悄改回去，而没人会发现速度掉了 5 倍。
- */
 describe('yt-dlp 选型（启动速度）', () => {
   const source = fs.readFileSync(path.join(ROOT, 'backend/internal/manifest/assets.gen.go'), 'utf8')
 
@@ -276,30 +208,5 @@ describe('yt-dlp 选型（启动速度）', () => {
     const darwin = /"darwin\/arm64": \{[\s\S]*?SHA256: "([0-9a-f]{64})",[\s\S]*?BundledSHA256: "([0-9a-f]{64})"/.exec(source)
     expect(darwin).not.toBeNull()
     expect(darwin![1]).not.toBe(darwin![2])
-  })
-})
-
-describe('探测不再为版本号多付一次启动', () => {
-  it('成功解析路径上不单独跑 --version', () => {
-    // 每次 spawn yt-dlp 要 0.4s（zipapp）到 10s（独立包）。为诊断用的版本号
-    // 多跑一次，等于把解析时间翻倍 —— 只在**失败**路径才值得付。
-    const src = fs.readFileSync(path.join(ROOT, 'electron/parsers/ytdlp.ts'), 'utf8')
-    // 取到 dumpInfo 函数体（到下一个顶层函数为止）：单靠 `\n}` 会提前截断，
-    // 因为这个函数内部有缩进的块
-    const start = src.indexOf('async function dumpInfo')
-    // 截到 dumpInfo 自己的结束（下一个顶层声明之前）。注意 readYtdlpVersion
-    // 就在它下面、且**确实**会跑 --version（那是失败路径的设计），
-    // 所以要精确切到 dumpInfo 的 `}` 为止。
-    const after = src.indexOf('\n}\n', start)
-    const dumpInfo = start >= 0 && after > start ? src.slice(start, after + 3) : ''
-    // 去掉注释行再断言：注释里正是写着「为什么不再跑 --version」，
-    // 直接匹配会被自己的说明文字命中（这条检查刚写完就踩了一次）
-    const codeOnly = dumpInfo
-      .split('\n')
-      .filter((line) => !/^\s*(\/\/|\*|\/\*)/.test(line))
-      .join('\n')
-    expect(codeOnly).not.toMatch(/runYtdlp\(\['--ignore-config', '--version'\]\)/)
-    // 失败分支仍然要带版本号（Issue 里有用）
-    expect(src).toContain('readYtdlpVersion')
   })
 })

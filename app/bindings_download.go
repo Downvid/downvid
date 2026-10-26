@@ -621,9 +621,41 @@ func (a *App) emitProgress(p DownloadProgress) {
 	a.emit("download:progress", p)
 }
 
+// resolveManagedDir 返回依赖托管目录。
+// 三端统一固定在用户主目录下的 ~/.downvid/runtime/bin，防止不同系统环境数据目录差异导致下载或探测失败。
+// 若旧目录（userData/runtime/bin）存在且新位置尚无依赖，自动平滑移动至固定位置。
+func resolveManagedDir(dataDir string) string {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		home = "."
+	}
+	fixed := filepath.Join(home, ".downvid", "runtime", "bin")
+
+	if dataDir != "" {
+		oldDir := filepath.Join(dataDir, "runtime", "bin")
+		if oldDir != fixed {
+			if entries, err := os.ReadDir(oldDir); err == nil && len(entries) > 0 {
+				if _, err := os.Stat(fixed); os.IsNotExist(err) {
+					_ = os.MkdirAll(fixed, 0o755)
+					for _, entry := range entries {
+						oldPath := filepath.Join(oldDir, entry.Name())
+						newPath := filepath.Join(fixed, entry.Name())
+						_ = os.Rename(oldPath, newPath)
+					}
+				}
+			}
+		}
+	}
+	return fixed
+}
+
 // managedBinDir 是 DownVid 自己下载的依赖目录。
 func (a *App) managedBinDir() string {
-	return filepath.Join(a.dataDir, "runtime", "bin")
+	dataDir := a.dataDir
+	if dataDir == "" {
+		dataDir = resolveDataDir()
+	}
+	return resolveManagedDir(dataDir)
 }
 
 // sidecarPath 定位 Go 边车。
@@ -666,11 +698,7 @@ func (a *App) sidecarPath() string {
 	// 「探测程序缺失」。用户看到的是「依赖页怎么只剩这么一点」，
 	// 而代码里没有任何一处会报错。
 	if sidecar.Available {
-		dataDir := a.dataDir
-		if dataDir == "" {
-			dataDir = resolveDataDir()
-		}
-		dir := filepath.Join(dataDir, "runtime", "bin")
+		dir := a.managedBinDir()
 		if p, err := sidecar.Extract(dir); err == nil {
 			return p
 		} else {
@@ -1084,11 +1112,7 @@ func (a *App) depsManager() *deps.Manager {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	sc := a.sidecarPath()
-	dataDir := a.dataDir
-	if dataDir == "" {
-		dataDir = resolveDataDir()
-	}
-	managedDir := filepath.Join(dataDir, "runtime", "bin")
+	managedDir := a.managedBinDir()
 	if a.deps == nil {
 		a.deps = deps.NewManager(sc, managedDir)
 	} else if a.deps.SidecarPath() == "" && sc != "" {

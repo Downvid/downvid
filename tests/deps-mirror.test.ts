@@ -68,21 +68,12 @@ describe('镜像回退的可观察信号', () => {
     expect(download).toContain('"mirror"')
   })
 
-  it('渲染进程订阅了 mirror 事件（否则用户只看到进度条卡住）', () => {
-    const store = fs.readFileSync(path.join(ROOT, 'src/stores/deps.ts'), 'utf8')
-    expect(store).toContain("case 'mirror'")
-  })
 })
 
 describe('依赖下载必须带上下载源', () => {
-  it('渲染进程把设置里的 depMirror 传给主进程（漏了等于选择器无效）', () => {
-    const store = fs.readFileSync(path.join(ROOT, 'src/stores/deps.ts'), 'utf8')
-    expect(store).toMatch(/mirror:\s*depMirror/)
-  })
-
-  it('主进程把它变成 --mirror 参数（漏了等于主进程忽略设置）', () => {
-    const runtime = fs.readFileSync(path.join(ROOT, 'electron/utils/runtime.ts'), 'utf8')
-    expect(runtime).toContain("'--mirror'")
+  it('前端把设置里的 depMirror 传给后端（漏了等于选择器无效）', () => {
+    const store = fs.readFileSync(path.join(ROOT, 'app/frontend/src/lib/store.svelte.ts'), 'utf8')
+    expect(store).toMatch(/mirror:\s*this\.settings\.depMirror/)
   })
 
   it('Go CLI 声明了 --mirror 并透传给 fetch.Options', () => {
@@ -154,8 +145,8 @@ describe('aria2 五平台覆盖', () => {
 
   it('UI 不再出现「复制 brew 安装命令」这类平台特判', () => {
     // 五个平台都能下载后，这段逻辑是多余的；留着会让人以为 macOS 不行
-    const panel = fs.readFileSync(path.join(ROOT, 'src/components/DepPanel.vue'), 'utf8')
-    expect(panel).not.toContain('copySystemInstall')
-    expect(panel).not.toContain('SYSTEM_PACKAGE_BY_OS')
+    const dialog = fs.readFileSync(path.join(ROOT, 'app/frontend/src/components/DepsDialog.svelte'), 'utf8')
+    expect(dialog).not.toContain('copySystemInstall')
+    expect(dialog).not.toContain('SYSTEM_PACKAGE_BY_OS')
   })
 })

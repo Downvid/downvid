@@ -17,15 +17,18 @@ import (
 
 func TestClassifyAsset(t *testing.T) {
 	cases := map[string]AssetKind{
-		"DownVid-Wails-mac-universal-1.5.0.zip":  KindZip,
-		"DownVid-Wails-windows-x64-1.5.0.zip":    KindZip,
-		"DownVid-Setup-1.5.0.exe":                KindNsis,
-		"DownVid-Wails-linux-x64-1.5.0.AppImage": KindAppImage,
-		"DownVid-x86_64-Linux-1.5.0.AppImage":    KindAppImage,
+		"DownVid-Wails-mac-universal-1.5.0.zip":            KindZip,
+		"DownVid-Wails-windows-x64-1.5.0.zip":              KindZip,
+		"DownVid-Wails-windows-x64-1.6.4-installer.exe":    KindNsis,
+		"DownVid-Setup-1.5.0.exe":                          KindNsis,
+		"DownVid-Wails-linux-x64-1.5.0.AppImage":           KindAppImage,
+		"DownVid-x86_64-Linux-1.5.0.AppImage":              KindAppImage,
 		// 这些必须判为不可自动安装
-		"DownVid-amd64-Linux-1.5.0.deb":        KindUnsupported,
-		"DownVid-x86_64-Linux-1.5.0.rpm":       KindUnsupported,
-		"DownVid-Wails-linux-x64-1.5.0.tar.gz": KindUnsupported,
+		"DownVid-Wails-mac-universal-1.6.4.dmg": KindUnsupported,
+		"DownVid-Wails-linux-x64-1.6.4.deb":     KindUnsupported,
+		"DownVid-amd64-Linux-1.5.0.deb":         KindUnsupported,
+		"DownVid-x86_64-Linux-1.5.0.rpm":        KindUnsupported,
+		"DownVid-Wails-linux-x64-1.5.0.tar.gz":  KindUnsupported,
 	}
 	for name, want := range cases {
 		if got := ClassifyAsset(name); got != want {

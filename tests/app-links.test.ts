@@ -27,14 +27,14 @@ describe('官网地址', () => {
     expect(read('website/README.md')).toContain(WEBSITE_URL)
   })
 
-  it('两个 README 的导航行都指向它', () => {
-    for (const file of ['README.md', 'README.zh-CN.md']) {
+  it('各个 README 的导航行都指向它', () => {
+    for (const file of ['README.md', 'README.zh-CN.md', 'README.en.md']) {
       expect(read(file), `${file} 的导航行`).toContain(WEBSITE_URL)
     }
   })
 
   it('关于页用的是共享常量，而不是自己拼一个地址', () => {
-    const about = read('src/components/AboutView.vue')
+    const about = read('app/frontend/src/components/AboutView.svelte')
     expect(about).toContain('WEBSITE_URL')
     // 硬编码的域名不会随常量一起更新
     expect(about).not.toMatch(/https:\/\/downvid-[a-z]+\.vercel\.app/)
@@ -58,8 +58,8 @@ describe('商务合作 / 赞助邮箱', () => {
     expect(subject).toBe('[DownVid] 赞助 / Sponsor')
   })
 
-  it('两个 README 都写出了邮箱与两类入口', () => {
-    for (const file of ['README.md', 'README.zh-CN.md']) {
+  it('各个 README 都写出了邮箱与两类入口', () => {
+    for (const file of ['README.md', 'README.zh-CN.md', 'README.en.md']) {
       const text = read(file)
       expect(text, `${file} 应写明邮箱`).toContain(CONTACT_EMAIL)
       // 两类入口（赞助 / 商务）各一条主题；导航行与正文小节会各出现一次，
@@ -77,8 +77,9 @@ describe('商务合作 / 赞助邮箱', () => {
     // 断言**顺序**而不是行号或百分比：后两者都会随无关编辑漂移，
     // 而「在 FAQ / 参与贡献 / 协议之前」才是这条需求的真实含义。
     const cases: [string, string[]][] = [
-      ['README.md', ['## FAQ', '## Contributing', '## License and credits']],
+      ['README.md', ['## 常见问题', '## 参与贡献', '## 开源协议与致谢']],
       ['README.zh-CN.md', ['## 常见问题', '## 参与贡献', '## 开源协议与致谢']],
+      ['README.en.md', ['## FAQ', '## Contributing', '## License and credits']],
     ]
     for (const [file, laterSections] of cases) {
       const text = read(file)
@@ -101,7 +102,7 @@ describe('商务合作 / 赞助邮箱', () => {
   })
 
   it('关于页也提供邮箱入口，且用的是共享常量', () => {
-    const about = read('src/components/AboutView.vue')
+    const about = read('app/frontend/src/components/AboutView.svelte')
     expect(about).toContain('CONTACT_EMAIL')
     expect(about).toContain('contactMailto')
     expect(about).not.toMatch(/xynrin@(?!icloud)/)
@@ -111,16 +112,16 @@ describe('商务合作 / 赞助邮箱', () => {
     // README.zh-CN 的卖点里写着「无任何弹窗广告、无捆绑插件」。
     // 加了广告位合作入口却不作区分，读者会以为要往安装包里塞广告——
     // 那是与既有承诺直接冲突的表述，必须显式说明谈的是项目层面的展示位。
-    expect(read('README.md')).toMatch(/contains no ads|no ads and never will/i)
+    expect(read('README.md')).toMatch(/不含任何广告/)
     expect(read('README.zh-CN.md')).toMatch(/不含任何广告/)
+    expect(read('README.en.md')).toMatch(/contains no ads|no ads and never will/i)
   })
 })
 
 describe('仓库坐标', () => {
-  it('与 electron-builder 的 publish 一致（lint:ipc 也查，这里再兜一层）', () => {
-    const builder = read('electron-builder.json5')
-    expect(builder).toContain(`"owner": "${APP.owner}"`)
-    expect(builder).toContain(`"repo": "${APP.repo}"`)
+  it('拼接形式与字段形式一致（lint:sync:repo 也查，这里再兜一层）', () => {
     expect(REPO_SLUG).toBe(`${APP.owner}/${APP.repo}`)
+    expect(read('shared/app.ts')).toContain(`owner: '${APP.owner}'`)
+    expect(read('shared/app.ts')).toContain(`repo: '${APP.repo}'`)
   })
 })

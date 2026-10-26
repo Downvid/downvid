@@ -67,8 +67,10 @@ refactor(download): 拆分直链与 yt-dlp 两条路径
 1. **开 PR 前先自查**
 
    ```bash
-   pnpm vue-tsc --noEmit
-   cd backend && gofmt -l . && go vet ./... && go test ./...
+   (cd app && gofmt -l . && go vet ./... && go test ./...)
+   (cd backend && gofmt -l . && go vet ./... && go test ./...)
+   pnpm --dir app/frontend check
+   pnpm test
    pnpm deps:manifest:check
    ```
 
@@ -112,44 +114,39 @@ refactor(download): 拆分直链与 yt-dlp 两条路径
 
 **这是最容易出错的部分**：以下几个地方是手工维护的多处同步，漏改会静默失败（不报错、功能不生效）。
 
-### 新增渲染进程可调用的主进程能力
+### 新增前端可调用的后端能力
 
 三处必须同时改，否则静默失败：
 
 | # | 文件 | 改动 |
 | --- | --- | --- |
-| 1 | `electron/ipc/<domain>.ts` | `ipcMain.handle(...)`（并在 `electron/main.ts` 注册） |
-| 2 | `electron/preload.ts` | `contextBridge` 暴露入口 |
-| 3 | `src/env.d.ts` | `Window.electronAPI` 类型定义 |
+| 1 | `app/bindings_download.go` 或 `app/app.go` | 导出方法（Wails 按签名生成绑定） |
+| 2 | `app/frontend/src/lib/backend.ts` | 适配成前端要的形状（唯一调用入口） |
+| 3 | `app/frontend/src/lib/types.ts` | 与 Go 结构体的 JSON tag **逐字一致** |
 
-> `src/env.d.ts` **不能出现顶层 import/export**：那会把它从全局声明脚本变成模块，`interface Window` 随即失效。依赖类型一律用内联 `import('./types/...')` 引用。
+> 组件里**不要**直接 `import wailsjs/...`：浏览器里会抛 `Failed to resolve module`，整页白屏。
 
-### 新增广播事件（主进程 → 渲染进程）
+### 新增广播事件（Go → 前端）
 
-1. `electron/store.ts` 的 `broadcast` 或对应 IPC 模块中发送
-2. `electron/preload.ts` 暴露 `onXxx(cb)` 并返回 unsubscribe 闭包
-3. `src/env.d.ts` 补类型
+1. Go 侧 `a.emit("event", data)`（`app/app.go` 的 `emit`）
+2. `app/frontend/src/lib/backend.ts` 订阅并返回 unsubscribe 闭包
+3. 事件名与 payload 形状写进 `app/frontend/src/lib/types.ts`
 4. 订阅方必须在组件卸载时调用 unsubscribe
-
-现有事件：`deps:progress`、`download:progress`、`history:updated`、`update:status`、`menu:openSettings`、`menu:showAbout`
 
 ### 改用户设置形状
 
-设置存在 `localStorage['settings']`（**不在 Pinia 中**），直接改形状会让老用户设置静默失效：
+设置存在 `<dataDir>/settings.json`，唯一入口是 `app/internal/settings/settings.go`：
 
-1. 全局搜索 `localStorage.getItem('settings')`，逐个确认读取处有默认值兜底
-2. 新字段要能被旧数据补齐（读取时 `{ ...默认值, ...JSON.parse(saved) }`）
-3. 删除或重命名字段属于 **MAJOR** 变更（见 [发布流程](./release.md)）
-4. 同步更新 `src/components/SettingsView.vue` 与相关文档
+1. 新字段只许新增，读取时用默认值补齐
+2. 删除或重命名字段属于 **MAJOR** 变更（见 [发布流程](./release.md)）
+3. 前端映射同步更新 `app/frontend/src/lib/settings.ts` 与 `app/frontend/src/components/SettingsView.svelte`
+4. `app/frontend/scripts/check-settings-write.mjs` 会拦住绕过入口直接写设置
 
-当前字段：`downloadDir`、`filenameTemplate`、`preferredQuality`、`cookieMode`、`cookiesFile`、`proxy`、`acceleration`、`depPaths`、`autoCheckUpdate`、`autoDownloadUpdate`、`updateSource`、`depMirror`、`language`
+### 改运行依赖（yt-dlp / ffmpeg / ffprobe / aria2c）
 
-### 改运行依赖（yt-dlp / ffmpeg / ffprobe）
-
-1. 新增依赖种类 → `backend/internal/runtime`（`Kinds`、`Optional`、候选路径）与 `src/types/deps.ts`
+1. 新增依赖种类 → `backend/internal/runtime`（`Kinds`、`Optional`、候选路径）与 `shared/acceleration.ts` 的 `DEP_KINDS`
 2. 改下载源或版本 → **只改** `scripts/gen-deps-manifest.mjs` 的资产表，然后 `pnpm deps:manifest` 生成清单
-3. 若新增平台，需同时补：清单资产表、`electron-builder.json5`、`release.yml` 的构建矩阵
-4. 依赖解析失败的引导依赖 `[[deps-missing:<kind>]]` 标记，改动 `electron/utils/binary.ts` 时不要破坏该格式
+3. 若新增平台，需同时补：清单资产表、`app/scripts/build.sh` 的目标列表、`release.yml` 的构建矩阵
 
 ### 改发布产物
 
@@ -164,11 +161,11 @@ Git 集成从 `main` 直接发布，中间没有构建步骤。引用的仓库�
 
 ### 触碰更新逻辑
 
-`electron/updater.ts`、`electron/constants.ts`、`electron-builder.json5` 的 `publish`、`scripts/gen-update-manifests.mjs` 都受 CODEOWNERS 保护。改动前请确认：
+更新逻辑在 `app/internal/update`，受 CODEOWNERS 保护。改动前请确认：
 
-- 老版本客户端还能读到清单吗？
-- 校验值（`sha512`）还和实际文件一致吗？
-- macOS 自实现替换 `.app` 的逻辑是否受影响？
+- 老版本客户端还能读到 Release 产物列表吗？
+- 校验值（`sha512` / GitHub `digest`）还和实际文件一致吗？
+- macOS 替换 `.app`、Windows 静默安装、Linux 替换 AppImage 三条路径是否都还成立？
 
 ## 5.1 跨平台构建的三个坑
 
@@ -202,7 +199,7 @@ Windows runner 与 macOS/Linux 的默认环境差异很大，以下三点都已�
 
 | 改动 | 需更新的文档 |
 | --- | --- |
-| 新增/修改 IPC 接口 | `docs/architecture.html`（+ `.svg`） |
+| 新增/修改后端绑定方法或广播事件 | `docs/architecture.html` |
 | 改依赖来源或解析顺序 | `AGENTS.md`、`CLAUDE.md`、`docs/troubleshooting.md` |
 | 改构建/发布步骤 | `docs/release.md`、`docs/build-from-source.md`、`README.md` |
 | 新增设置项 | `README.md` 的常见问题、`docs/faq.md` |
@@ -227,20 +224,22 @@ Windows runner 与 macOS/Linux 的默认环境差异很大，以下三点都已�
 
 | 层次 | 手段 |
 | --- | --- |
+| Go 核心纯逻辑 | `app/internal/*/**_test.go`，`go test ./...` |
 | Go 侧车纯逻辑 | `backend/internal/*/**_test.go`，`go test ./...` |
-| 前端/主进程纯逻辑 | `tests/*.test.ts`（Vitest），`pnpm test` |
-| IPC 三处同步 | `pnpm lint:ipc` 静态校验 |
-| 官网静态约束 | `pnpm lint:website` 静态校验（引用资源、中英词条、配色） |
-| 跨模块类型一致 | `pnpm vue-tsc --noEmit` |
+| 前端纯逻辑 | `app/frontend/src/lib/*.test.ts`，`pnpm --dir app/frontend test` |
+| 契约与脚本 | `tests/*.test.ts`，`pnpm test` |
+| 架构边界 | `pnpm lint:boundaries`（internal 包之间零依赖） |
+| 官网静态约束 | `pnpm lint:website`（引用资源、中英词条、配色、产物名） |
+| 跨模块类型一致 | `pnpm --dir app/frontend check`（svelte-check） |
 | 真实行为 | 手工验证（下载、更新、依赖安装） |
 
-`pnpm test` 刻意只覆盖**纯函数**：格式选择、依赖错误识别、yt-dlp 参数组装、
-解析器共用工具。依赖 DOM 或需要真的起子进程的部分不在这一层——那类问题靠
-类型检查、契约校验与真机验证来拦。
+`pnpm test` 刻意只覆盖**纯函数**：格式去重、进度行解析、yt-dlp 参数组装、更新源降级、
+官网分发逻辑。依赖 DOM 或需要真的起子进程的部分不在这一层——那类问题靠
+svelte-check、契约校验与真机验证来拦。
 
-新增测试请照 `tests/ytdlp-args.test.ts` 的做法：**针对曾经出过问题的分支各留一个
-用例**，而不是追求覆盖率数字。写完请做一次变异验证（把被测逻辑改坏，确认用例
-会失败）——不会失败的测试等于没有测试。
+新增测试请**针对曾经出过问题的分支各留一个用例**，而不是追求覆盖率数字。
+写完请做一次变异验证（把被测逻辑改坏，确认用例会失败）——不会失败的测试等于没有测试。
+
 - UI 文案、注释、commit body **一律中文**，与现有风格一致
-- Vue 组件用 `<script setup>`
+- Svelte 组件用 `<script lang="ts">` + runes
 - 注释解释**为什么**，不复述代码在做什么

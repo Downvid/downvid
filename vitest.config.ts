@@ -1,24 +1,14 @@
 import { defineConfig } from 'vitest/config'
-import path from 'node:path'
 
 /**
- * 测试配置独立于 vite.config.ts。
+ * 根目录单测：只覆盖**跨语言的纯逻辑**（shared/ 的契约、发布与官网脚本的纯函数）。
  *
- * 后者的 electron 插件会在 buildStart 时调用 go build 编译依赖边车，
- * 跑单元测试时不需要也不应该触发它。
+ * Go 核心（app/internal/*）的单测在 `cd app && go test ./...`；
+ * Svelte 前端的单测在 `pnpm --dir app/frontend test`。
  *
- * 测试范围刻意限定在纯逻辑：
- *   渲染进程的 store / composable 纯函数、主进程的纯函数（参数组装、
- *   格式选择、版本比较）。
- * 依赖 DOM 或需要真的起子进程的部分不在这一层覆盖——那类问题更适合
- * 靠类型检查、IPC 契约校验与真机验证来拦住。
+ * 这里刻意不引入 jsdom：这些用例不碰 DOM。
  */
 export default defineConfig({
-  resolve: {
-    alias: {
-      '@': path.resolve(import.meta.dirname, 'src'),
-    },
-  },
   test: {
     environment: 'node',
     include: ['tests/**/*.test.ts'],

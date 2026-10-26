@@ -2,13 +2,10 @@
 /**
  * 文档一致性校验（AGENTS.md ↔ CLAUDE.md ↔ 代码）。
  *
- * 这个仓库最擅长做「静态校验」：IPC 三处同步、图标名、官网词条、设置入口……
- * 唯独**自己那两份最重要的文档**一直靠人肉同步，而 AGENTS.md 里白纸黑字写着
- * 「改其一时必须同步另一份」。现实是它们已经漂了：
- *
- *   - 两处还在引用早已删除的 `test.yml`（工作流已拆成 ci-linux/macos/windows）
- *   - AGENTS.md 说检测总时限 70 秒，实际是 80（Electron 侧还硬编码 --timeout 70 覆盖它）
- *   - CLAUDE.md 的 Commands 少列了四个测试脚本，AGENTS.md 一个都没列
+ * 这个仓库最擅长做「静态校验」：图标名、官网词条、设置入口、仓库坐标……
+ * 唯独**自己那两份最重要的文档**只能靠人肉同步，而 AGENTS.md 里白纸黑字写着
+ * 「改其一时必须同步另一份」。历史上它们漂过好几轮：
+ * 引用了已删除的工作流、写着已过时的超时数字、命令清单缺项。
  *
  * 这类漂移的共同点是**不报错**：文档写错不会让任何测试变红，只会在某天误导
  * 一个（人或 AI）改错地方。所以把它变成 CI 里的一次红叉。
@@ -236,24 +233,6 @@ for (const rule of numberRules) {
     if (!rule.docPattern(value).test(text)) {
       problems.push(`${doc} 未写「${rule.label} = ${value}」，或与 ${rule.source} 的常量不一致`)
     }
-  }
-}
-
-// ===== 5. Electron 侧不得自己传 --timeout（会覆盖 Go 侧的唯一来源） =====
-//
-// 只看真正的代码行：注释里出现 `--timeout` 是在解释「为什么不能传」，
-// 不该被当成违规。
-{
-  const runtimeSrc = read('electron/utils/runtime.ts')
-  const codeLines = runtimeSrc
-    .split('\n')
-    .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
-    .join('\n')
-  if (/--timeout/.test(codeLines)) {
-    problems.push(
-      'electron/utils/runtime.ts 传了 --timeout，会覆盖 rt.DetectTimeout 这个唯一来源' +
-        '（曾硬编码 70，让文档写的 80 静默失效）',
-    )
   }
 }
 

@@ -96,6 +96,7 @@ func PickInstallAsset(names []string, sha512Of map[string]string, sizeOf map[str
 
 	// 优先找「本平台 + 本架构」的精确匹配，其次 universal
 	var universal *InstallAsset
+	var winFallback *InstallAsset
 	for _, name := range names {
 		kind := ClassifyAsset(name)
 		if kind == KindUnsupported {
@@ -125,6 +126,19 @@ func PickInstallAsset(names []string, sha512Of map[string]string, sizeOf map[str
 			Kind:   kind,
 		}
 
+		// Windows 上优先选择可静默安装的 NSIS 安装器（.exe）
+		if wantPlatform == "windows" {
+			if strings.Contains(lower, wantArch) {
+				if kind == KindNsis {
+					return asset
+				}
+				if winFallback == nil {
+					winFallback = asset
+				}
+			}
+			continue
+		}
+
 		if strings.Contains(lower, "universal") {
 			if universal == nil {
 				universal = asset
@@ -134,6 +148,9 @@ func PickInstallAsset(names []string, sha512Of map[string]string, sizeOf map[str
 		if strings.Contains(lower, wantArch) {
 			return asset
 		}
+	}
+	if wantPlatform == "windows" && winFallback != nil {
+		return winFallback
 	}
 	return universal
 }

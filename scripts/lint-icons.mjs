@@ -19,7 +19,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 const ROOT = path.resolve(import.meta.dirname, '..')
-const SRC_DIR = path.join(ROOT, 'src')
+const SRC_DIR = path.join(ROOT, 'app/frontend/src')
 const NAMES_FILE = path.join(ROOT, 'scripts/data/material-symbols-names.txt')
 
 if (!fs.existsSync(NAMES_FILE)) {
@@ -30,11 +30,11 @@ if (!fs.existsSync(NAMES_FILE)) {
 
 const valid = new Set(fs.readFileSync(NAMES_FILE, 'utf8').split('\n').map(l => l.trim()).filter(Boolean))
 
-/** 递归收集 .vue 文件 */
-function vueFiles(dir) {
+/** 递归收集 .svelte 文件 */
+function svelteFiles(dir) {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
     const full = path.join(dir, entry.name)
-    return entry.isDirectory() ? vueFiles(full) : (entry.name.endsWith('.vue') ? [full] : [])
+    return entry.isDirectory() ? svelteFiles(full) : (entry.name.endsWith('.svelte') ? [full] : [])
   })
 }
 
@@ -43,12 +43,12 @@ let checked = 0
 // 统计「用了图标但无法静态判断名字」的位置，提示人工核对
 let dynamicSites = 0
 
-for (const file of vueFiles(SRC_DIR)) {
+for (const file of svelteFiles(SRC_DIR)) {
   const source = fs.readFileSync(file, 'utf8')
   const rel = path.relative(ROOT, file)
 
-  // 1) 字面量：<MaterialIcon name="xxx" /> 或 name='xxx'
-  for (const m of source.matchAll(/<MaterialIcon\b[^>]*?(?<!:)\bname=["']([^"']+)["']/g)) {
+  // 1) 字面量：<Icon name="xxx" /> 或 name='xxx'
+  for (const m of source.matchAll(/<Icon\b[^>]*?(?<!:)\bname=["']([^"']+)["']/g)) {
     checked++
     if (!valid.has(m[1])) problems.push({ rel, name: m[1], kind: '字面量' })
   }
@@ -85,7 +85,7 @@ if (problems.length) {
     console.error(`  ✗ ${p.rel}  "${p.name}"（${p.kind}）`)
   }
   console.error('\n这些名字字体会渲染成空白或图标名文字。请到 https://fonts.google.com/icons 核对，')
-  console.error('或改用内联 SVG（品牌图标应如此，见 src/components/icons/GitHubIcon.vue）。')
+  console.error('或改用内联 SVG（品牌图标应如此，见 app/frontend/src/components/GitHubIcon.svelte）。')
   process.exit(1)
 }
 

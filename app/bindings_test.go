@@ -209,6 +209,19 @@ func TestResolveDataDirMatchesElectron(t *testing.T) {
 	}
 }
 
+// 依赖托管目录必须固定在 ~/.downvid/runtime/bin，避免系统数据目录差异引发探测与下载失败。
+func TestResolveManagedDirIsFixed(t *testing.T) {
+	got := resolveManagedDir("")
+	if got == "" {
+		t.Fatal("托管目录不该为空")
+	}
+	home, _ := os.UserHomeDir()
+	want := filepath.Join(home, ".downvid", "runtime", "bin")
+	if got != want {
+		t.Fatalf("托管目录应为 %q，got %q", want, got)
+	}
+}
+
 // allowManifests 参数必须真的生效，不能「传了但被忽略」。
 //
 // 变异「BuildFormats 忽略 allowManifests（恒传 true）」在补这条之前**没被检出**——

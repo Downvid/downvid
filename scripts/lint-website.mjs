@@ -13,13 +13,13 @@
  *      的绝对地址，文件被改名/删除时线上是裂图，本地毫无提示
  *   3. 中英词条必须**双向**成对：`data-i18n` 占位 ↔ I18N.en 词条。
  *      缺英文 → 该处永远显示中文；多了没人用的词条 → 只是垃圾，一并报出来
- *   4. 配色必须与应用（src/style.css 的 @theme）一致：官网主色是手抄的，
+ *   4. 配色必须与应用（app/frontend/src/app.css 的 @theme）一致：官网主色是手抄的，
  *      改了应用主题不改官网就会出现「官网和应用不像一家人」
  *   5. 仓库坐标：raw 链接必须指向 shared/app.ts 里的 owner/repo
  *      （换仓库时官网是最后被想起来的那处）
  *   6. 页面脚本里的仓库坐标（下载按钮靠它拼 github.com / api.github.com 地址）
  *      同样必须与 shared/app.ts 一致
- *   7. 下载产物名模板必须与 electron-builder.json5 的 artifactName 对得上：
+ *   7. 下载产物名模板必须与 release.yml 的 build-wails 产物对得上：
  *      官网按名字在 Release 产物列表里挑安装包，改了产物名而没改官网不会报错，
  *      只会「所有平台都挑不到」然后静默退回 Releases 页面
  *   8. shields.io 徽章（下载量 / 星标）里的仓库坐标同样必须与 shared/app.ts 一致：
@@ -188,7 +188,7 @@ for (const url of badgeUrls) {
 if (badgeUrls.length) notes.push('shields.io 徽章 ' + badgeUrls.length + ' 个，仓库坐标与 shared/app.ts 一致')
 
 // ===== 5. 配色与应用主题一致 =====
-// 官网把 src/style.css 的 @theme 手抄成 --primary 等变量，抄错不会报错，只会"不像同一个产品"
+// 配色取自应用（app/frontend/src/app.css 的 @theme），抄错不会报错，只会"不像同一个产品"
 const THEME_PAIRS = [
   ['--primary', '--color-primary'],
   ['--primary-dim', '--color-primary-dim'],
@@ -214,7 +214,7 @@ const THEME_PAIRS = [
   ['--error', '--color-error'],
   ['--outline', '--color-outline'],
 ]
-const styleCss = fs.readFileSync(path.join(ROOT, 'src/style.css'), 'utf8')
+const styleCss = fs.readFileSync(path.join(ROOT, 'app/frontend/src/app.css'), 'utf8')
 const siteRoot = css.match(/:root\s*\{(.*?)\}/s)?.[1] ?? ''
 for (const [siteVar, appVar] of THEME_PAIRS) {
   const siteValue = siteRoot.match(new RegExp(`${siteVar}\\s*:\\s*([^;]+);`))?.[1]?.trim().toLowerCase()
@@ -224,7 +224,7 @@ for (const [siteVar, appVar] of THEME_PAIRS) {
     continue
   }
   if (!appValue) {
-    problems.push(`src/style.css 的 @theme 缺少 ${appVar}（官网在引用它）`)
+    problems.push(`app/frontend/src/app.css 的 @theme 缺少 ${appVar}（官网在引用它）`)
     continue
   }
   if (siteValue !== appValue) {
@@ -248,77 +248,31 @@ if (!pageRepo) {
   notes.push('下载按钮的仓库坐标 ' + owner + '/' + repo + ' 与 shared/app.ts 一致')
 }
 
-// ===== 7. 下载产物名与 electron-builder 的 artifactName 对得上 =====
+// ===== 7. 下载产物名与 release.yml 的 build-wails 产物对得上 =====
 //
-// 官网按名字在 Release 产物列表里挑安装包（如 DownVid-arm64-Mac-{version}.dmg）。
-// 改了 electron-builder.json5 的 artifactName 却没改这里，官网不会报错——
+// 官网按名字在 Release 产物列表里挑安装包（如 DownVid-Wails-mac-universal-{version}.zip）。
+// 改了发布流程的产物名却没改这里，官网不会报错——
 // 只是所有平台都挑不到产物，然后静默退回 Releases 页面。
-const builderConfig = fs.readFileSync(path.join(ROOT, 'electron-builder.json5'), 'utf8')
-const productName = builderConfig.match(/"productName"\s*:\s*"([^"]+)"/)?.[1]
-const artifactNames = [...builderConfig.matchAll(/"artifactName"\s*:\s*"([^"]+)"/g)].map((m) => m[1])
-const pageTemplates = [...new Set([...js.matchAll(/'([^']*DownVid[^']*\{version\}[^']*)'/g)].map((m) => m[1]))]
-if (!productName || artifactNames.length === 0) {
-  problems.push('未能从 electron-builder.json5 解析出 productName / artifactName')
+const releaseYml = fs.readFileSync(path.join(ROOT, '.github/workflows/release.yml'), 'utf8')
+const wailsJob = releaseYml.slice(releaseYml.indexOf('build-wails:'))
+// 产物名形如 DownVid-Wails-${{ matrix.suffix }}-${{ needs.version.outputs.version }}.zip
+const suffixes = [...wailsJob.matchAll(/suffix:\s*([a-z0-9-]+)/g)].map((m) => m[1])
+const pageTemplates = [...new Set([...js.matchAll(/'([^']*DownVid-Wails[^']*\{version\}[^']*)'/g)].map((m) => m[1]))]
+if (suffixes.length === 0) {
+  problems.push('未能从 release.yml 的 build-wails 解析出产物后缀（矩阵结构改了？）')
 } else if (pageTemplates.length === 0) {
-  problems.push('index.html 里找不到形如 DownVid-xxx-{version}.yyy 的产物名模板（下载区结构改了？）')
+  problems.push('app.js 里找不到形如 DownVid-Wails-xxx-{version}.yyy 的产物名模板（下载区结构改了？）')
 } else {
-  // arch 占位符的取值随 target 变化：AppImage / rpm 用 x86_64、deb 用 amd64、tar.gz 用 x64
-  const ARCH = '(?:x64|x86_64|amd64|arm64|armv7l|armhf|ia32)'
-  const matchers = artifactNames.map((name) => {
-    // 先把占位符换成不含正则元字符的记号，再转义字面部分（反了会把字符类也转义掉）
-    const pattern = name
-      .replace(/\$\{productName\}/g, productName)
-      .replace(/\$\{arch\}/g, '@@ARCH@@')
-      .replace(/\$\{version\}/g, '@@VERSION@@')
-      .replace(/\$\{ext\}/g, '@@EXT@@')
-      .replace(/[.*+?^$(){}|[\]\\]/g, '\\$&')
-      .split('@@ARCH@@').join(ARCH)
-      .split('@@VERSION@@').join('[0-9]+(?:\\.[0-9]+)*')
-      .split('@@EXT@@').join('[A-Za-z0-9.]+')
-    return new RegExp('^' + pattern + '$')
-  })
-  // 新架构（Wails）的产物名**不来自 electron-builder**，而是 release.yml
-  // 的 build-wails job（ditto / Compress-Archive / tar 拼出来的）。
-  // 两类模板要分开校验，否则 Wails 产物会被拿去和 artifactName 比，
-  // 永远匹配不上 —— 而它本来就不该匹配。
-  const WAILS_PREFIX = 'DownVid-Wails-'
-  const wailsTemplates = pageTemplates.filter((t) => t.startsWith(WAILS_PREFIX))
-  const electronTemplates = pageTemplates.filter((t) => !t.startsWith(WAILS_PREFIX))
-
-  for (const template of electronTemplates) {
+  for (const template of pageTemplates) {
     const sample = template.split('{version}').join('1.2.3')
-    if (!matchers.some((re) => re.test(sample))) {
+    if (!suffixes.some((suffix) => sample.includes(`DownVid-Wails-${suffix}-`))) {
       problems.push(
         '官网的产物名模板 ' + template +
-          ' 与 electron-builder.json5 的 artifactName 对不上（改名后官网会静默挑不到产物）',
+          ' 与 release.yml 的 build-wails 产物名对不上（改名后官网会静默挑不到产物）',
       )
     }
   }
-  notes.push(
-    '下载产物名模板 ' + electronTemplates.length + ' 条与 electron-builder.json5 一致',
-  )
-
-  // Wails 产物名对照 release.yml 的 build-wails job。
-  //
-  // 写错同样不会报错，只是官网那个「预览版」入口永远不出现 ——
-  // 用户不知道有新版可用，而我们这边没有任何信号。
-  if (wailsTemplates.length > 0) {
-    const releaseYml = fs.readFileSync(path.join(ROOT, '.github/workflows/release.yml'), 'utf8')
-    const wailsJob = releaseYml.slice(releaseYml.indexOf('build-wails:'))
-    // release.yml 里的产物名形如 DownVid-Wails-${{ matrix.suffix }}-${{ needs.version.outputs.version }}.zip
-    const suffixes = [...wailsJob.matchAll(/suffix:\s*([a-z0-9-]+)/g)].map((m) => m[1])
-    for (const template of wailsTemplates) {
-      const sample = template.split('{version}').join('1.2.3')
-      const matched = suffixes.some((suffix) => sample.includes(`DownVid-Wails-${suffix}-`))
-      if (!matched) {
-        problems.push(
-          '官网的新架构产物模板 ' + template +
-            ' 与 release.yml 的 build-wails 产物名对不上（预览版入口会永远不出现）',
-        )
-      }
-    }
-    notes.push('新架构产物名模板 ' + wailsTemplates.length + ' 条与 release.yml 一致')
-  }
+  notes.push('下载产物名模板 ' + pageTemplates.length + ' 条与 release.yml 一致')
 }
 
 // ===== 7b. 平台图标 =====

@@ -1,9 +1,12 @@
+# Vercel 只发布 website/（vercel.json 的 outputDirectory）；其余目录不上传。
+app/
 backend/
-electron/
-src/
+shared/
 tests/
+scripts/
 docs/
-dist/
-dist-electron/
+announcements/
+packaging/
+.github/
 .git/
 node_modules/

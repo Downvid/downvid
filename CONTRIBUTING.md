@@ -44,10 +44,11 @@ pnpm build:linux
 ### 代码检查
 
 ```bash
-pnpm vue-tsc --noEmit              # 前端类型检查
-pnpm test                          # 纯逻辑单测（Vitest）
-pnpm lint:ipc                      # IPC 契约校验（三处同步）
-cd backend && go vet ./... && go test ./...   # Go 侧车
+pnpm --dir app/frontend check      # 前端类型检查（svelte-check）
+pnpm test                          # 根目录纯逻辑单测（Vitest）
+(cd app && go vet ./... && go test ./...)         # Go 核心
+(cd backend && go vet ./... && go test ./...)     # Go 侧车
+pnpm lint:boundaries               # 架构边界（internal 包之间零依赖）
 pnpm deps:manifest:check           # 依赖清单是否与上游一致
 ```
 
@@ -96,11 +97,11 @@ feat(parser): 支持抖音 Cookie 自动从浏览器读取
 
 fix(updater): 修复 macOS ARM64 架构下更新包路径错误
 
-refactor: 模块化拆分 electron/main.ts
+refactor(download): 拆分直链与 yt-dlp 两条路径
 
 docs: 更新 README 安装说明
 
-chore: 升级 electron 到 30.0.1
+chore(deps): 升级 yt-dlp 清单到 2026.10.21
 ```
 
 ## 分支管理

@@ -22,7 +22,7 @@ import { execFileSync } from 'node:child_process'
  */
 
 const ROOT = path.resolve(import.meta.dirname, '..')
-const ABOUT = fs.readFileSync(path.join(ROOT, 'src/components/AboutView.vue'), 'utf8')
+const ABOUT = fs.readFileSync(path.join(ROOT, 'app/frontend/src/components/AboutView.svelte'), 'utf8')
 const CHANGELOG = fs.readFileSync(path.join(ROOT, 'CHANGELOG.md'), 'utf8')
 
 /**
@@ -82,7 +82,7 @@ function gitAuthors(): string {
 
 /** 从 AboutView 的 CONTRIBUTORS 里取出 login 列表（顺序即展示顺序） */
 function logins(): string[] {
-  const block = /const CONTRIBUTORS = \[([\s\S]*?)\n\]/.exec(ABOUT)?.[1] ?? ''
+  const block = /const CONTRIBUTORS = \[([\s\S]*?)\n  \]/.exec(ABOUT)?.[1] ?? ''
   return [...block.matchAll(/login:\s*'([^']+)'/g)].map((m) => m[1])
 }
 
@@ -93,14 +93,10 @@ describe('关于页贡献者名单', () => {
     expect(list).toEqual(EXPECTED_LOGINS)
   })
 
-  it('每一条都有 GitHub 主页链接，且与 login 对得上', () => {
-    // 链接写错时头像仍能加载（avatar 是按 login 拼出来的），点进去却是别人的主页
-    const block = /const CONTRIBUTORS = \[([\s\S]*?)\n\]/.exec(ABOUT)?.[1] ?? ''
-    const pairs = [...block.matchAll(/login:\s*'([^']+)',\s*url:\s*'([^']+)'/g)].map((m) => [m[1], m[2]] as const)
-    expect(pairs.length).toBe(list.length)
-    for (const [login, url] of pairs) {
-      expect(url, `${login} 的主页链接`).toBe(`https://github.com/${login}`)
-    }
+  it('主页链接按 login 拼出来，不另写一份地址', () => {
+    // 逐人写死地址时，复制粘贴漏改会让点进去的是别人的主页（头像照常能加载，看不出来）
+    expect(ABOUT).toContain("openExternal('https://github.com/' + person.login)")
+    expect(ABOUT).not.toMatch(/https:\/\/github\.com\/[A-Za-z0-9_-]+['"]/)
   })
 
   it('每个 login 都在仓库历史里留下过署名（没有凭空加人）', () => {

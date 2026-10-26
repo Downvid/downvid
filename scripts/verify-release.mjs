@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * 发布完整性校验：确认某个版本**真的发布出去了**、且自动更新能拿到它。
+ * 发布完整性校验：确认某个版本**真的发布出去了**。
  *
  * ## 为什么需要这个脚本
  *
@@ -9,7 +9,7 @@
  * 于是：
  *
  *   - GitHub Release 里**没有 v1.3.5**
- *   - 自动更新通道（`/releases/latest`）仍然指向 v1.3.4
+ *   - 应用内的更新检查（走 `/releases/latest`）仍然指向 v1.3.4
  *   - **所有 v1.3.4 用户永远收不到 v1.3.5 的修复**，而版本号已经前进到 1.3.6
  *
  * 这类失败**没有任何提示**：tag 在、CHANGELOG 在、`package.json` 也在，
@@ -18,8 +18,10 @@
  * ## 校验内容
  *
  *   1. 存在 tag 对应的 Release，且**不是 draft / prerelease**
- *   2. 该 Release 带着全部平台的更新清单（`latest*.yml`）
- *   3. 每个清单里的产物名与校验值齐全（自动更新据此校验下载）
+ *   2. 该 Release 带着三个平台的安装包（macOS 通用 / Windows x64 / Linux x64）
+ *
+ * 应用内的自更新直接读 GitHub Releases 的产物列表（`app/internal/update`），
+ * 所以「产物齐不齐」就是「自动更新能不能用」。
  *
  * ## 用法
  *
@@ -35,11 +37,11 @@ import path from 'node:path'
 
 const ROOT = path.resolve(import.meta.dirname, '..')
 
-/** 各平台必须存在的更新清单——缺一个，对应平台的用户就收不到更新 */
-const REQUIRED_MANIFESTS = [
-  ['latest.yml', 'Windows'],
-  ['latest-mac.yml', 'macOS'],
-  ['latest-linux.yml', 'Linux x64'],
+/** 各平台必须存在的安装包——缺一个，对应平台的用户就升级不了 */
+const REQUIRED_ASSETS = [
+  [/^DownVid-Wails-mac-universal-\d[\w.]*\.zip$/, 'macOS 通用包'],
+  [/^DownVid-Wails-windows-x64-\d[\w.]*\.zip$/, 'Windows x64 包'],
+  [/^DownVid-Wails-linux-x64-\d[\w.]*\.tar\.gz$/, 'Linux x64 包'],
 ]
 
 function readArg(name) {
@@ -82,7 +84,7 @@ try {
 if (!release) {
   const msg =
     `发布不完整：tag ${tag} 存在，但**没有对应的 GitHub Release**。\n` +
-    `  · 自动更新通道（/releases/latest）仍然指向上一个已发布版本\n` +
+    `  · 应用内更新通道（/releases/latest）仍然指向上一个已发布版本\n` +
     `  · 该版本的所有用户修复都到不了用户手里\n` +
     `  · 常见原因：Build & Release 运行被取消或失败（检查 Actions 页面）\n` +
     `  · 修复：重新运行 release.yml（Actions → Build & Release → Run workflow），版本号填 ${tag.replace(/^v/, '')}`
@@ -103,37 +105,11 @@ if (release.prerelease) {
   console.log(`提示：${tag} 标记为 prerelease —— 稳定用户的自动更新不会拿到它（这是预期行为）`)
 }
 
-// ===== 2 & 3. 更新清单与产物 =====
+// ===== 2. 三个平台的安装包 =====
 const assetNames = (release.assets || []).map((a) => a.name)
-for (const [manifest, platform] of REQUIRED_MANIFESTS) {
-  if (!assetNames.includes(manifest)) {
-    problems.push(`缺少 ${platform} 的更新清单 ${manifest}（该平台用户收不到更新）`)
-  }
-}
-
-// 至少要有真实的安装产物，否则清单指向空
-const hasArtifacts = assetNames.some((n) => /\.(dmg|zip|exe|AppImage|deb|rpm|tar\.gz)$/.test(n))
-if (!hasArtifacts) problems.push('该 Release 没有任何安装产物')
-
-// ===== Wails 版（新架构）的产物 =====
-//
-// 与 Electron 版**并行发布**，用独立命名 `DownVid-Wails-*`。
-// 这一节只做**提示级**校验（缺了不判红）：Wails 版目前是预览产物，
-// 某个平台的构建失败不该让整个发布失败——那会把 Electron 版的修复
-// 也一起堵住，而后者才是存量 9600+ 用户的更新通道。
-const wailsAssets = assetNames.filter((n) => n.startsWith('DownVid-Wails-'))
-const EXPECTED_WAILS = [
-  ['mac-universal', 'macOS'],
-  ['windows-x64', 'Windows'],
-  ['linux-x64', 'Linux'],
-]
-if (wailsAssets.length === 0) {
-  console.log('提示：本次没有 Wails 版产物（新架构预览可单独构建）')
-} else {
-  for (const [suffix, platform] of EXPECTED_WAILS) {
-    if (!wailsAssets.some((n) => n.includes(suffix))) {
-      console.log(`提示：Wails 版缺少 ${platform} 产物（${suffix}）`)
-    }
+for (const [re, label] of REQUIRED_ASSETS) {
+  if (!assetNames.some((n) => re.test(n))) {
+    problems.push(`缺少 ${label}（该平台的用户升级不了）`)
   }
 }
 
@@ -147,5 +123,5 @@ if (problems.length) {
 console.log(
   // GitHub API 返回的是 snake_case（published_at），这里两个都兜一下
   `发布校验通过：${tag} 已发布（${(release.published_at || release.publishedAt || release.created_at || '').slice(0, 10) || '时间未知'}），` +
-    `${assetNames.length} 个产物（其中 Wails 版 ${wailsAssets.length} 个），更新清单齐全。`,
+    `${assetNames.length} 个产物，三个平台齐全。`,
 )

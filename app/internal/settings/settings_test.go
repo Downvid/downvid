@@ -18,7 +18,7 @@ import (
 func TestDefaultsMatchTS(t *testing.T) {
 	d := Defaults()
 
-	// 这 13 个值都是从 src/stores/settings.ts 的 DEFAULT_SETTINGS 抄的。
+	// 这 13 个值与前端 app/frontend/src/lib/settings.ts 的 DEFAULT_SETTINGS 逐字一致。
 	// 任何一项不一致，新用户的初始体验就与旧版不同。
 	cases := map[string]struct{ got, want any }{
 		"downloadDir":        {d.DownloadDir, ""},

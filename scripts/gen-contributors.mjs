@@ -5,7 +5,7 @@
  * ## 为什么需要脚本
  *
  * 名单在仓库里有 **3 份副本**，全靠人肉同步：
- *   1. `src/components/AboutView.vue` 的 `CONTRIBUTORS`（界面展示）
+ *   1. `app/frontend/src/components/AboutView.svelte` 的 `CONTRIBUTORS`（界面展示）
  *   2. `tests/about-contributors.test.ts` 的 `EXPECTED_LOGINS`（快照）
  *   3. `tests/about-contributors.test.ts` 的 `HUMAN_IDENTITY_TOKENS`（署名 token 表）
  *
@@ -40,7 +40,7 @@ const ROOT = path.resolve(import.meta.dirname, '..')
 const WRITE = process.argv.includes('--write')
 const INCLUDE_BOTS = process.argv.includes('--include-bots')
 
-const ABOUT = path.join(ROOT, 'src/components/AboutView.vue')
+const ABOUT = path.join(ROOT, 'app/frontend/src/components/AboutView.svelte')
 const TEST = path.join(ROOT, 'tests/about-contributors.test.ts')
 
 /**
@@ -113,7 +113,7 @@ function loginFromEmail(email) {
 
 function readExistingLogins() {
   const src = fs.readFileSync(ABOUT, 'utf8')
-  const block = /const CONTRIBUTORS = \[([\s\S]*?)\n\]/.exec(src)?.[1] ?? ''
+  const block = /const CONTRIBUTORS = \[([\s\S]*?)\n  \]/.exec(src)?.[1] ?? ''
   return [...block.matchAll(/login:\s*'([^']+)'/g)].map((m) => m[1])
 }
 
@@ -211,16 +211,16 @@ if (!WRITE) {
 
 // 1) AboutView.vue：只加缺的人，保留现有顺序与 role
 let about = fs.readFileSync(ABOUT, 'utf8')
-const insertAt = /const CONTRIBUTORS = \[([\s\S]*?)\n\]/.exec(about)
+const insertAt = /const CONTRIBUTORS = \[([\s\S]*?)\n  \]/.exec(about)
 if (!insertAt) {
-  console.error('AboutView.vue 里找不到 CONTRIBUTORS 数组 —— 结构变了？')
+  console.error('AboutView.svelte 里找不到 CONTRIBUTORS 数组 —— 结构变了？')
   process.exit(1)
 }
 const newLines = added
-  .map((login) => `  { login: '${login}', url: 'https://github.com/${login}', role: 'CONTRIBUTOR' },`)
+  .map((login) => `    { login: '${login}', role: 'CONTRIBUTOR' },`)
   .join('\n')
 about = about.replace(
-  /(const CONTRIBUTORS = \[[\s\S]*?)(\n\])/,
+  /(const CONTRIBUTORS = \[[\s\S]*?)(\n  \])/,
   `$1\n${newLines}$2`,
 )
 fs.writeFileSync(ABOUT, about)

@@ -7,8 +7,8 @@ import { describe, expect, it } from 'vitest'
  *
  * 官网是无构建的多文件静态站，脚本在 app.js。这里把标注为「>>> 纯逻辑」的那一段
  * （不碰 DOM）从脚本里抽出来单独执行，用**真实的** Release 产物列表做输入，断言
- * 「哪个系统该拿哪个包」。选错了用户会下到装不上的包（Intel 版装到 Apple 芯片、
- * Linux 版装到 Windows），而线上没有任何报错——只能靠这一层拦住。
+ * 「哪个系统该拿哪个包」。选错了用户会下到装不上的包（Windows 的 zip 给 macOS），
+ * 而线上没有任何报错——只能靠这一层拦住。
  */
 const SCRIPT = readFileSync(path.resolve(import.meta.dirname, '../website/app.js'), 'utf8')
 
@@ -23,7 +23,7 @@ type Group = { os: string; items: { asset: Asset; variant: Variant }[] }
 
 const api = new Function(
   BLOCK +
-    '\nreturn { detectOS, archOf, archFromClientHints, templateToRegex, normalizeRelease, selectDownload, selectWailsPreview, listDownloads, formatSize, buildFallbackRelease, ARTIFACTS, WAILS_ARTIFACTS, PLATFORMS, REPO }',
+    '\nreturn { detectOS, archOf, archFromClientHints, templateToRegex, normalizeRelease, selectDownload, listDownloads, formatSize, buildFallbackRelease, ARTIFACTS, PLATFORMS, REPO }',
 )() as {
   detectOS: (nav: Record<string, unknown>) => string
   archOf: (nav: Record<string, unknown>, os: string) => string
@@ -31,52 +31,43 @@ const api = new Function(
   templateToRegex: (template: string) => RegExp
   normalizeRelease: (json: unknown) => Release | null
   selectDownload: (release: Release | null, os: string | null, arch: string) => Picked
-  selectWailsPreview: (release: Release | null, os: string) => Asset | null
   listDownloads: (release: Release | null, preferredOS?: string | null) => Group[]
   formatSize: (bytes: number) => string
   buildFallbackRelease: (versionTag: string) => Release
   ARTIFACTS: Record<string, Variant[]>
-  WAILS_ARTIFACTS: Record<string, string>
   PLATFORMS: { os: string; key: string }[]
   REPO: { owner: string; repo: string }
 }
 
 /**
- * 真实产物列表（v1.3.4，取自 GitHub Releases API）。
- * 刻意保留 .blockmap / .zip / .tar.gz / latest*.yml 这些**干扰项**：
- * 模板少一个 $ 锚点就会挑中升级包或校验文件。
+ * 真实产物列表（v1.6.0 的 Wails 产物形态）。
+ * 刻意保留 `latest*.yml`、旧的 Electron 产物名这些**干扰项**：
+ * 模板少一个 `$` 锚点就会挑中旧包或更新清单。
  */
 const ASSET_NAMES: [string, number][] = [
-  ['DownVid-amd64-Linux-1.3.4.deb', 105020908],
-  ['DownVid-arm64-Linux-1.3.4.AppImage', 132238535],
-  ['DownVid-arm64-Linux-1.3.4.tar.gz', 125596357],
-  ['DownVid-arm64-Mac-1.3.4.dmg', 134242182],
-  ['DownVid-arm64-Mac-1.3.4.dmg.blockmap', 141459],
-  ['DownVid-arm64-Mac-1.3.4.zip', 133928592],
-  ['DownVid-arm64-Mac-1.3.4.zip.blockmap', 141981],
-  ['DownVid-Portable-1.3.4.exe', 116623908],
-  ['DownVid-Setup-1.3.4.exe', 116966487],
-  ['DownVid-Setup-1.3.4.exe.blockmap', 121881],
-  ['DownVid-x64-Linux-1.3.4.tar.gz', 125016469],
-  ['DownVid-x64-Mac-1.3.4.dmg', 138353132],
-  ['DownVid-x64-Mac-1.3.4.dmg.blockmap', 145833],
-  ['DownVid-x64-Mac-1.3.4.zip', 138099742],
-  ['DownVid-x64-Mac-1.3.4.zip.blockmap', 145824],
-  ['DownVid-x86_64-Linux-1.3.4.AppImage', 131352891],
-  ['DownVid-x86_64-Linux-1.3.4.rpm', 94105057],
-  ['latest-linux-arm64.yml', 365],
+  ['DownVid-Wails-linux-x64-1.6.0.deb', 19_200_000],
+  ['DownVid-Wails-linux-x64-1.6.0.tar.gz', 18_400_000],
+  ['DownVid-Wails-mac-arm64-1.6.0.zip', 21_300_000],
+  ['DownVid-Wails-mac-universal-1.6.0.dmg', 43_100_000],
+  ['DownVid-Wails-mac-universal-1.6.0.zip', 42_600_000],
+  ['DownVid-Wails-mac-x64-1.6.0.zip', 21_500_000],
+  ['DownVid-Wails-windows-x64-1.6.0-installer.exe', 24_500_000],
+  ['DownVid-Wails-windows-x64-1.6.0.zip', 19_100_000],
+  // 干扰项：旧架构产物与更新清单，都不该被挑中
+  ['DownVid-Setup-1.6.0.exe', 116_966_487],
+  ['DownVid-arm64-Mac-1.6.0.dmg', 134_242_182],
   ['latest-linux.yml', 687],
   ['latest-mac.yml', 821],
   ['latest.yml', 343],
 ]
 
 const RAW_RELEASE = {
-  tag_name: 'v1.3.4',
+  tag_name: 'v1.6.0',
   assets: ASSET_NAMES.map(([name, size]) => ({
     name,
     size,
     browser_download_url:
-      'https://github.com/Downvid/downvid/releases/download/v1.3.4/' + encodeURIComponent(name),
+      'https://github.com/Downvid/downvid/releases/download/v1.6.0/' + encodeURIComponent(name),
   })),
 }
 
@@ -116,7 +107,7 @@ describe('detectOS', () => {
     expect(api.detectOS(LINUX_CHROME)).toBe('linux')
   })
 
-  it('Android 归到 other —— UA 里也带 Linux，不能顺手给个 Linux 版', () => {
+  it('Android 归到 other —— UA 里也带 Linux，不能顺手给个 Linux 包', () => {
     expect(
       api.detectOS({
         userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Mobile Safari/537.36',
@@ -130,7 +121,7 @@ describe('detectOS', () => {
     expect(api.detectOS({ userAgent: MAC_SAFARI.userAgent, platform: 'MacIntel', maxTouchPoints: 5 })).toBe('other')
   })
 
-  it('ChromeOS 归到 other（装不了 Linux 版）', () => {
+  it('ChromeOS 归到 other（装不了 Linux 包）', () => {
     expect(
       api.detectOS({
         userAgent: 'Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
@@ -142,7 +133,7 @@ describe('detectOS', () => {
 })
 
 describe('archOf', () => {
-  it('macOS 拿不到架构时默认 Apple 芯片（Intel 版会列在「其他格式」里）', () => {
+  it('macOS 拿不到架构时默认 Apple 芯片', () => {
     expect(api.archOf(MAC_SAFARI, 'macos')).toBe('arm64')
   })
 
@@ -179,26 +170,35 @@ describe('archFromClientHints', () => {
 
 describe('templateToRegex', () => {
   it('按版本号匹配真实产物名', () => {
-    expect(api.templateToRegex('DownVid-Setup-{version}.exe').test('DownVid-Setup-1.3.4.exe')).toBe(true)
-    expect(api.templateToRegex('DownVid-x86_64-Linux-{version}.AppImage').test('DownVid-x86_64-Linux-1.3.4.AppImage')).toBe(true)
+    expect(
+      api.templateToRegex('DownVid-Wails-windows-x64-{version}.zip').test('DownVid-Wails-windows-x64-1.6.0.zip'),
+    ).toBe(true)
+    expect(
+      api.templateToRegex('DownVid-Wails-linux-x64-{version}.tar.gz').test('DownVid-Wails-linux-x64-1.6.0.tar.gz'),
+    ).toBe(true)
   })
 
-  it('不吃 .blockmap 这类附产物（少一个 $ 锚点就会挑错）', () => {
-    expect(api.templateToRegex('DownVid-Setup-{version}.exe').test('DownVid-Setup-1.3.4.exe.blockmap')).toBe(false)
+  it('不吃附产物 / 更新清单（少一个 $ 锚点就会挑错）', () => {
+    expect(api.templateToRegex('DownVid-Wails-windows-x64-{version}.zip').test('latest.yml')).toBe(false)
+    expect(
+      api.templateToRegex('DownVid-Wails-windows-x64-{version}.zip').test('DownVid-Wails-windows-x64-1.6.0.zip.blockmap'),
+    ).toBe(false)
   })
 
-  it('不跨名字匹配（安装版模板不能命中便携版）', () => {
-    expect(api.templateToRegex('DownVid-Setup-{version}.exe').test('DownVid-Portable-1.3.4.exe')).toBe(false)
+  it('不跨平台匹配（Windows 模板不能命中 macOS 包）', () => {
+    expect(
+      api.templateToRegex('DownVid-Wails-windows-x64-{version}.zip').test('DownVid-Wails-mac-x64-1.6.0.zip'),
+    ).toBe(false)
   })
 })
 
 describe('normalizeRelease', () => {
   it('保留产物名、直链与体积', () => {
-    expect(RELEASE.tag).toBe('v1.3.4')
+    expect(RELEASE.tag).toBe('v1.6.0')
     expect(RELEASE.assets).toHaveLength(ASSET_NAMES.length)
-    const setup = RELEASE.assets.find((a) => a.name === 'DownVid-Setup-1.3.4.exe')
-    expect(setup?.size).toBe(116966487)
-    expect(setup?.url).toContain('/releases/download/v1.3.4/DownVid-Setup-1.3.4.exe')
+    const win = RELEASE.assets.find((a) => a.name === 'DownVid-Wails-windows-x64-1.6.0.zip')
+    expect(win?.size).toBe(19_100_000)
+    expect(win?.url).toContain('/releases/download/v1.6.0/DownVid-Wails-windows-x64-1.6.0.zip')
   })
 
   it('缺少 assets / tag 时返回 null（调用方退回 Releases 页面）', () => {
@@ -218,46 +218,27 @@ describe('normalizeRelease', () => {
 })
 
 describe('selectDownload', () => {
-  it('Windows 给安装版，便携版作为备选', () => {
+  it('Windows 给 windows-x64 的安装器（不是旧架构的 .exe、不是 macOS 包）', () => {
     const picked = api.selectDownload(RELEASE, 'windows', 'x64')
-    expect(primaryName(picked)).toBe('DownVid-Setup-1.3.4.exe')
-    expect(otherNames(picked)).toEqual(['DownVid-Portable-1.3.4.exe'])
+    expect(primaryName(picked)).toBe('DownVid-Wails-windows-x64-1.6.0-installer.exe')
+    expect(otherNames(picked)).toContain('DownVid-Wails-windows-x64-1.6.0.zip')
   })
 
-  it('Apple 芯片 Mac 给 arm64 的 dmg（不是 Intel 版）', () => {
-    const picked = api.selectDownload(RELEASE, 'macos', 'arm64')
-    expect(primaryName(picked)).toBe('DownVid-arm64-Mac-1.3.4.dmg')
-    expect(otherNames(picked)).toContain('DownVid-x64-Mac-1.3.4.dmg')
+  it('macOS 两种芯片都给 universal dmg 安装器', () => {
+    expect(primaryName(api.selectDownload(RELEASE, 'macos', 'arm64'))).toBe('DownVid-Wails-mac-universal-1.6.0.dmg')
+    expect(primaryName(api.selectDownload(RELEASE, 'macos', 'x64'))).toBe('DownVid-Wails-mac-universal-1.6.0.dmg')
+    expect(otherNames(api.selectDownload(RELEASE, 'macos', 'arm64'))).toContain('DownVid-Wails-mac-universal-1.6.0.zip')
   })
 
-  it('Intel Mac 给 x64 的 dmg', () => {
-    expect(primaryName(api.selectDownload(RELEASE, 'macos', 'x64'))).toBe('DownVid-x64-Mac-1.3.4.dmg')
-  })
-
-  it('macOS 架构未知时退回 Apple 芯片版，Intel 版仍列在备选里', () => {
-    const picked = api.selectDownload(RELEASE, 'macos', '')
-    expect(primaryName(picked)).toBe('DownVid-arm64-Mac-1.3.4.dmg')
-    expect(otherNames(picked)).toContain('DownVid-x64-Mac-1.3.4.dmg')
-  })
-
-  it('Linux x64 给 x86_64 的 AppImage（不是 arm64、不是 deb）', () => {
-    const picked = api.selectDownload(RELEASE, 'linux', 'x64')
-    expect(primaryName(picked)).toBe('DownVid-x86_64-Linux-1.3.4.AppImage')
-    expect(otherNames(picked)).toEqual([
-      'DownVid-arm64-Linux-1.3.4.AppImage',
-      'DownVid-amd64-Linux-1.3.4.deb',
-      'DownVid-x86_64-Linux-1.3.4.rpm',
-    ])
-  })
-
-  it('Linux arm64 给 arm64 的 AppImage', () => {
-    expect(primaryName(api.selectDownload(RELEASE, 'linux', 'arm64'))).toBe('DownVid-arm64-Linux-1.3.4.AppImage')
+  it('Linux 给 deb 安装包', () => {
+    expect(primaryName(api.selectDownload(RELEASE, 'linux', 'x64'))).toBe('DownVid-Wails-linux-x64-1.6.0.deb')
+    expect(otherNames(api.selectDownload(RELEASE, 'linux', 'x64'))).toContain('DownVid-Wails-linux-x64-1.6.0.tar.gz')
   })
 
   it('产物缺失时返回 null，交给调用方退回 Releases 页面（不留死链）', () => {
-    const onlyZip = { tag: 'v1.3.4', assets: RELEASE.assets.filter((a) => a.name.endsWith('.zip')) }
-    expect(primaryName(api.selectDownload(onlyZip, 'macos', 'arm64'))).toBeNull()
-    expect(otherNames(api.selectDownload(onlyZip, 'macos', 'arm64'))).toEqual([])
+    const noLinux = { tag: 'v1.6.0', assets: RELEASE.assets.filter((a) => !a.name.includes('linux')) }
+    expect(primaryName(api.selectDownload(noLinux, 'linux', 'x64'))).toBeNull()
+    expect(otherNames(api.selectDownload(noLinux, 'linux', 'x64'))).toEqual([])
   })
 
   it('没拿到 Release、或系统未识别（其他平台 / 手机）时不选任何东西', () => {
@@ -283,10 +264,8 @@ describe('listDownloads（展开菜单里的全量列表）', () => {
     const groups = api.listDownloads(RELEASE, 'linux')
     expect(groups.map((g) => g.os)).toEqual(['linux', 'windows', 'macos'])
     expect(groups[0].items.map((i) => i.asset.name)).toEqual([
-      'DownVid-x86_64-Linux-1.3.4.AppImage',
-      'DownVid-arm64-Linux-1.3.4.AppImage',
-      'DownVid-amd64-Linux-1.3.4.deb',
-      'DownVid-x86_64-Linux-1.3.4.rpm',
+      'DownVid-Wails-linux-x64-1.6.0.deb',
+      'DownVid-Wails-linux-x64-1.6.0.tar.gz',
     ])
   })
 
@@ -300,7 +279,7 @@ describe('listDownloads（展开菜单里的全量列表）', () => {
   })
 
   it('某个平台产物缺失时整组不出现（而不是留一个空组）', () => {
-    const noMac = { tag: 'v1.3.4', assets: RELEASE.assets.filter((a) => a.name.indexOf('Mac') < 0) }
+    const noMac = { tag: 'v1.6.0', assets: RELEASE.assets.filter((a) => !a.name.includes('mac')) }
     expect(api.listDownloads(noMac, 'macos').map((g) => g.os)).toEqual(['windows', 'linux'])
   })
 
@@ -311,9 +290,9 @@ describe('listDownloads（展开菜单里的全量列表）', () => {
 })
 
 describe('formatSize', () => {
-  it('换算成 MB（界面上的「约 125 MB」）', () => {
-    expect(api.formatSize(131352891)).toBe('125 MB')
-    expect(api.formatSize(116966487)).toBe('112 MB')
+  it('换算成 MB（界面上的「约 19 MB」）', () => {
+    expect(api.formatSize(19_100_000)).toBe('18 MB')
+    expect(api.formatSize(116_966_487)).toBe('112 MB')
   })
 
   it('拿不到体积时返回空串，提示里就不显示体积', () => {
@@ -329,34 +308,19 @@ describe('页面与仓库坐标', () => {
 })
 
 describe('buildFallbackRelease（离线/网络受阻兜底）', () => {
-  it('为各平台构造全部必需的产物与直链', () => {
+  it('为各平台构造产物与直链', () => {
     const fallback = api.buildFallbackRelease('v1.6.0')
     expect(fallback.tag).toBe('v1.6.0')
-    expect(fallback.assets.length).toBeGreaterThanOrEqual(11) // 8 electron + 3 wails
+    expect(fallback.assets).toHaveLength(6)
 
-    // Windows
-    const win = api.selectDownload(fallback, 'windows', 'x64')
-    expect(win.primary?.asset.name).toBe('DownVid-Setup-1.6.0.exe')
-    expect(win.primary?.asset.url).toContain('/download/v1.6.0/DownVid-Setup-1.6.0.exe')
-
-    // macOS arm64
-    const macArm = api.selectDownload(fallback, 'macos', 'arm64')
-    expect(macArm.primary?.asset.name).toBe('DownVid-arm64-Mac-1.6.0.dmg')
-
-    // macOS x64
-    const macIntel = api.selectDownload(fallback, 'macos', 'x64')
-    expect(macIntel.primary?.asset.name).toBe('DownVid-x64-Mac-1.6.0.dmg')
-
-    // Linux
+    expect(api.selectDownload(fallback, 'windows', 'x64').primary?.asset.name).toBe(
+      'DownVid-Wails-windows-x64-1.6.0-installer.exe',
+    )
+    expect(api.selectDownload(fallback, 'macos', 'arm64').primary?.asset.name).toBe(
+      'DownVid-Wails-mac-universal-1.6.0.dmg',
+    )
     const linux = api.selectDownload(fallback, 'linux', 'x64')
-    expect(linux.primary?.asset.name).toBe('DownVid-x86_64-Linux-1.6.0.AppImage')
-
-    // Wails preview packages
-    const wailsWin = api.selectWailsPreview(fallback, 'windows')
-    expect(wailsWin?.name).toBe('DownVid-Wails-windows-x64-1.6.0.zip')
-    const wailsMac = api.selectWailsPreview(fallback, 'macos')
-    expect(wailsMac?.name).toBe('DownVid-Wails-mac-universal-1.6.0.zip')
-    const wailsLinux = api.selectWailsPreview(fallback, 'linux')
-    expect(wailsLinux?.name).toBe('DownVid-Wails-linux-x64-1.6.0.tar.gz')
+    expect(linux.primary?.asset.name).toBe('DownVid-Wails-linux-x64-1.6.0.deb')
+    expect(linux.primary?.asset.url).toContain('/download/v1.6.0/DownVid-Wails-linux-x64-1.6.0.deb')
   })
 })

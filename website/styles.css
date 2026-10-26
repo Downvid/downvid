@@ -97,14 +97,7 @@ header.is-stuck::before{opacity:1}
 .dl-caret:hover{background:rgba(255,255,255,.16)}
 .dl-caret svg{width:18px;height:18px}
 .dl-note{margin:16px 0 0;min-height:22px;font-size:13.5px;color:var(--on-surface-variant)}
-/* 新架构预览入口：次级、不抢主按钮的注意力 */
-.dl-preview{margin:10px 0 0;font-size:12.5px;line-height:1.7;color:var(--on-surface-variant)}
-.dl-preview[hidden]{display:none}
-.dl-preview a{display:inline-flex;align-items:center;gap:6px;color:var(--primary);text-decoration:none;font-weight:600}
-.dl-preview a:hover{text-decoration:underline;text-underline-offset:2px}
-.dl-preview-badge{padding:1px 7px;border-radius:999px;font-size:10px;font-weight:600;letter-spacing:.04em;line-height:1.6;background:color-mix(in oklab,var(--primary) 14%,transparent);color:var(--primary)}
-.dl-preview-note{display:block;margin-top:2px;opacity:.85}
-.hero-badges{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:8px;margin-top:18px}
+
 .hero-badges img{height:20px;width:auto}
 
 /* 平台与格式菜单 */

@@ -226,42 +226,104 @@ jobs:
       # 用户看到的是「依赖页只剩一条」——这个故障真实发生过。
       - name: Build (Wails)
         working-directory: app
-        run: bash scripts/build.sh -platform ${{ matrix.platform }} -skipbindings
+        shell: bash
+        run: |
+          if [ "${{ matrix.os }}" = "windows-latest" ]; then
+            bash scripts/build.sh -platform ${{ matrix.platform }} -skipbindings -nsis
+          else
+            bash scripts/build.sh -platform ${{ matrix.platform }} -skipbindings
+          fi
         env:
           VERSION: ${{ needs.version.outputs.version }}
 
       - name: Package macOS
         if: matrix.os == 'macos-latest'
         run: |
+          v="${{ needs.version.outputs.version }}"
           cd app/build/bin
-          # universal 产出的名字是 downvid.app；压成 zip 保留可执行权限
+          # 1. 压成 zip（保留可执行权限，作为自更新与便携包）
           ditto -c -k --sequesterRsrc --keepParent downvid.app \
-            "../../../DownVid-Wails-${{ matrix.suffix }}-${{ needs.version.outputs.version }}.zip"
-          ls -la ../../../DownVid-Wails-*.zip
+            "../../../DownVid-Wails-${{ matrix.suffix }}-${v}.zip"
+          # 2. 制作 DMG 安装器（带 Applications 快捷方式）
+          DMG_TMP="$(mktemp -d)"
+          cp -R downvid.app "$DMG_TMP/"
+          ln -s /Applications "$DMG_TMP/Applications"
+          hdiutil create -volname "DownVid" -srcfolder "$DMG_TMP" -ov -format UDZO \
+            "../../../DownVid-Wails-${{ matrix.suffix }}-${v}.dmg"
+          rm -rf "$DMG_TMP"
+          ls -la ../../../DownVid-Wails-*
 
       - name: Package Windows
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
           $v = "${{ needs.version.outputs.version }}"
+          # 1. 便携绿色版 zip
           Compress-Archive -Path app/build/bin/downvid.exe `
             -DestinationPath "DownVid-Wails-windows-x64-$v.zip"
-          Get-Item DownVid-Wails-*.zip | Format-List Name, Length
+          # 2. 拷贝 NSIS 安装器
+          $installer = Get-ChildItem -Path app/build/bin -Filter "*installer.exe" | Select-Object -First 1
+          if ($installer) {
+            Copy-Item $installer.FullName -Destination "DownVid-Wails-windows-x64-$v-installer.exe"
+          }
+          Get-Item DownVid-Wails-* | Format-List Name, Length
 
       - name: Package Linux
         if: matrix.os == 'ubuntu-22.04'
         run: |
+          v="${{ needs.version.outputs.version }}"
           cd app/build/bin
-          tar -czf "../../../DownVid-Wails-${{ matrix.suffix }}-${{ needs.version.outputs.version }}.tar.gz" downvid
-          ls -la ../../../DownVid-Wails-*.tar.gz
+          # 1. 便携 tar.gz
+          tar -czf "../../../DownVid-Wails-${{ matrix.suffix }}-${v}.tar.gz" downvid
+          
+          # 2. 制作 DEB 安装包
+          cd ../../..
+          DEB_DIR="deb-pkg/downvid_${v}_amd64"
+          mkdir -p "$DEB_DIR/usr/bin"
+          mkdir -p "$DEB_DIR/usr/share/applications"
+          mkdir -p "$DEB_DIR/usr/share/icons/hicolor/512x512/apps"
+          mkdir -p "$DEB_DIR/DEBIAN"
+          
+          cp app/build/bin/downvid "$DEB_DIR/usr/bin/downvid"
+          chmod 755 "$DEB_DIR/usr/bin/downvid"
+          cp app/build/appicon.png "$DEB_DIR/usr/share/icons/hicolor/512x512/apps/downvid.png"
+          
+          cat << 'EOF' > "$DEB_DIR/usr/share/applications/downvid.desktop"
+[Desktop Entry]
+Name=DownVid
+Comment=Desktop Video Downloader
+Exec=/usr/bin/downvid
+Icon=downvid
+Terminal=false
+Type=Application
+Categories=AudioVideo;Network;Utility;
+EOF
+          chmod 644 "$DEB_DIR/usr/share/applications/downvid.desktop"
+
+          cat << EOF > "$DEB_DIR/DEBIAN/control"
+Package: downvid
+Version: ${v}
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: DownVid <xynrin@icloud.com>
+Description: DownVid open-source desktop video downloader.
+EOF
+          chmod 644 "$DEB_DIR/DEBIAN/control"
+
+          dpkg-deb --build "$DEB_DIR" "DownVid-Wails-${{ matrix.suffix }}-${v}.deb"
+          rm -rf deb-pkg
+          ls -la DownVid-Wails-*
 
       - uses: actions/upload-artifact@v7
         with:
           name: wails-${{ matrix.suffix }}
-          # macOS / Windows 出 zip，Linux 出 tar.gz（保留可执行位）
           path: |
             DownVid-Wails-*.zip
             DownVid-Wails-*.tar.gz
+            DownVid-Wails-*.dmg
+            DownVid-Wails-*.exe
+            DownVid-Wails-*.deb
           retention-days: 7
           if-no-files-found: error
 
@@ -314,6 +376,9 @@ jobs:
           files: |
             artifacts/DownVid-Wails-*.zip
             artifacts/DownVid-Wails-*.tar.gz
+            artifacts/DownVid-Wails-*.dmg
+            artifacts/DownVid-Wails-*.exe
+            artifacts/DownVid-Wails-*.deb
 
       # 发布**完成后**回头核对一次：Release 真的存在、且三个平台的包都齐。
       # 为什么需要这一步：实测 `v1.3.5` 的 tag 推上去了、CHANGELOG 也写了，

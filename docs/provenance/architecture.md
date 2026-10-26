@@ -1,5 +1,9 @@
 # DownVid 目标架构（历史方案）
 
+> **历史文档**：本文是重构期间的目标架构 / 迁移方案，已执行完毕。
+> `electron/`、`src/`、`docker/` 均已删除，当前代码边界以 [AGENTS.md](../../AGENTS.md) 与
+> `pnpm lint:boundaries` 为准；文中提到的目录与文件仅作为历史记录保留。
+
 > ## ⚠️ 本文描述的 `core/` 方案已被 Wails 方案取代（2026-10）
 >
 > 这份文档是 issue #74「阶段二」的产物，当时的目标是「纯 Node 的 core +

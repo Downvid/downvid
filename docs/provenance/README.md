@@ -15,11 +15,11 @@
 ## 快速结论
 
 - DownVid 从 `cshuangyy/videdown@0c620c1`（2026-08-22）分叉，分叉点是 `1d7b041`。
-- 上游 **2707** 条有效源码行中 **1241** 行（**45.8%**）仍逐字保留；但 `backend/`、`docker/`、
-  `scripts/`、`tests/`、`website/` 全部是分叉后新增，**没有任何上游成分**。
-- 真正的分界在**层次**而非目录：界面外壳与上游高度同源，依赖边车 / 下载调度 / 更新 / 容器化基本自研。
-- 最需要动手的不是「删上游代码」，而是**边界**：容器端直接 import 12 个 `electron/*` 模块靠 shim 撑着，
-  且桌面 IPC 与容器 RPC 之间没有任何静态校验。
+- 上游 **2707** 条有效源码行中 **142** 行（**5.2%**）仍逐字保留，全部落在界面外壳与主题样式里；
+  `app/internal/`、`backend/`、`scripts/`、`tests/`、`website/` 没有任何上游成分。
+- 重构（Go 核心 + Wails + Svelte）已落地，旧 `electron/`、`src/`、`docker/` 已整体移除。
+- `architecture.md` 与 `migration-plan.md` 是**历史方案**，当前边界以 [AGENTS.md](../../AGENTS.md)
+  与 `pnpm lint:boundaries` 为准。
 
 ## 怎么复核本文档里的数字
 
@@ -36,7 +36,6 @@ node scripts/audit-provenance.mjs --write               # 重算并写入登记�
 
 - [项目结构](../project-structure.md) — 目录树与每个目录的职责
 - [开发者指南](../development.md) — 代码导读、一次下载的生命周期、调试手段
-- [服务端模式（设计）](../server-mode.md) — Docker / WebUI 的设计与风险边界
 - [仓库规范](../standards.md) — 分支、提交、评审约定
 - [发布流程](../release.md) — 版本语义与产物命名契约
 - [AGENTS.md](../../AGENTS.md) — 改动落点清单（改任何东西之前先读）

@@ -62,30 +62,22 @@ const CURRENT = `${owner}/${repo}`
 const TARGETS = [
   // --- 运行时真正决定更新源的三处 ---
   { file: 'shared/app.ts', kind: 'source', note: '唯一来源' },
-  { file: 'electron-builder.json5', kind: 'publish', required: true, note: '打包时烧进 app-update.yml' },
   { file: 'package.json', kind: 'json', required: false, note: 'repository 字段（若存在）' },
 
   // --- 构建与发布流水线 ---
   // release.yml 用 GITHUB_TOKEN 自动推断仓库，**不写坐标才是对的**（写死反而会在改名后失配）
   { file: '.github/workflows/release.yml', kind: 'text', required: false, note: '用 GITHUB_TOKEN 自动推断，通常不需写坐标' },
-  { file: '.github/workflows/docker.yml', kind: 'text', required: false, note: 'GHCR 镜像坐标' },
   { file: '.github/workflows/release-audit.yml', kind: 'text', required: false },
   { file: '.github/workflows/codeql.yml', kind: 'text', required: false },
 
   // --- 生成脚本里的硬编码（应改用 shared/app.ts 派生）---
   { file: 'scripts/gen-release-notes.mjs', kind: 'text', required: true },
-  { file: 'scripts/gen-update-manifests.mjs', kind: 'text', required: false },
   { file: 'scripts/gen-deps-manifest.mjs', kind: 'text', required: false },
   { file: 'scripts/verify-release.mjs', kind: 'text', required: false },
 
   // --- 用户可见的入口 ---
   { file: 'website/index.html', kind: 'text', required: true, note: '官网 HTML 里的仓库资源地址' },
   { file: 'website/app.js', kind: 'text', required: true, note: '官网下载按钮拼 API 地址' },
-  // 两份 compose **都要**：根目录那份是用户实际 `docker compose up` 用的入口，
-  // docker/ 那份是内部构建用。实测迁移时只列了后者，结果根目录的
-  // `ghcr.io/<owner>/downvid` 被漏掉——用户会 pull 到旧镜像，表现为「升级了还是旧版」。
-  { file: 'docker-compose.yml', kind: 'text', required: false, note: '根目录 compose（用户实际入口）' },
-  { file: 'docker/docker-compose.yml', kind: 'text', required: false, note: '默认镜像坐标' },
 
   // --- 测试里的快照（改了会红，必须同步）---
   { file: 'tests/about-contributors.test.ts', kind: 'text', required: false },
@@ -100,7 +92,6 @@ const TARGETS = [
   { file: 'docs/installation.md', kind: 'text', required: false, docs: true },
   { file: 'docs/troubleshooting.md', kind: 'text', required: false, docs: true },
   { file: 'docs/faq.md', kind: 'text', required: false, docs: true },
-  { file: 'docs/docker.md', kind: 'text', required: false, docs: true },
 ]
 
 const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -109,11 +100,10 @@ const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
  * 找到「构成仓库坐标」的全部位置。
  *
  * 有**两种写法**，必须都认：
- *   a) 拼接形式：`yxxbc/downvid`、`https://github.com/yxxbc/downvid`、`ghcr.io/yxxbc/downvid`
- *   b) 分开字段：`owner: 'yxxbc', repo: 'downvid'`（`shared/app.ts` 与
- *      `electron-builder.json5` 的 publish 段都是这种）
+ *   a) 拼接形式：`yxxbc/downvid`、`https://github.com/yxxbc/downvid`
+ *   b) 分开字段：`owner: 'yxxbc', repo: 'downvid'`（`shared/app.ts` 是这种）
  *
- * 只认 (a) 会漏掉最关键的两处——而那两处正是决定自动更新源的。
+ * 只认 (a) 会漏掉决定更新源的那一处。
  */
 function findOccurrences(text, [o, r]) {
   const hits = []
@@ -152,21 +142,12 @@ if (CHECK) {
     if (t.required && hits.length === 0) {
       problems.push(`${t.file}：应当引用仓库坐标 ${CURRENT}，但没有找到${t.note ? `（${t.note}）` : ''}`)
     }
-    if (t.kind === 'publish') {
-      // electron-builder 的 publish 必须与 shared/app.ts 完全一致，否则存量用户更新断裂
-      const pubOwner = /publish[\s\S]{0,200}?owner:\s*'([^']+)'/.exec(text)?.[1]
-        ?? /publish[\s\S]{0,200}?"owner":\s*"([^"]+)"/.exec(text)?.[1]
-      const pubRepo = /publish[\s\S]{0,200}?repo:\s*'([^']+)'/.exec(text)?.[1]
-        ?? /publish[\s\S]{0,200}?"repo":\s*"([^"]+)"/.exec(text)?.[1]
-      if (pubOwner && pubOwner !== owner) problems.push(`electron-builder.json5 的 publish.owner=${pubOwner}，与 shared/app.ts 的 ${owner} 不一致`)
-      if (pubRepo && pubRepo !== repo) problems.push(`electron-builder.json5 的 publish.repo=${pubRepo}，与 shared/app.ts 的 ${repo} 不一致`)
-    }
     // 字段形式的自检：`owner:` / `repo:` 的值必须与 shared/app.ts 一致。
     //
     // 这一条防的是迁移脚本自己的 bug：往返迁移时曾把 `repo:` 也替换成 owner
-    // （因为按「值」而不是「字段名」判断），于是 publish.repo 变成 `Downvid`，
-    // 打包烧进 app-update.yml 的坐标就是错的 —— 用户更新检查 404，且没有任何报错。
-    if (t.kind === 'publish' || t.file === 'shared/app.ts') {
+    // （因为按「值」而不是「字段名」判断），于是更新源的坐标变成 `Downvid/Downvid`，
+    // 用户检查更新 404，且没有任何报错。
+    if (t.file === 'shared/app.ts') {
       const fieldOwner = /\b"?(owner)"?\s*[:=]\s*['"]([^'"]+)['"]/.exec(text)?.[2]
       const fieldRepo = /\b"?(repo)"?\s*[:=]\s*['"]([^'"]+)['"]/.exec(text)?.[2]
       if (fieldOwner && fieldOwner !== owner) {
@@ -223,8 +204,8 @@ for (const t of TARGETS) {
   // 这里踩过一个坑：早先按「值」判断（值等于旧 owner 就换成新 owner），
   // 于是在 owner 与 repo 同名时（往返迁移会出现 `Downvid/Downvid`）两个字段
   // 都被换成 owner，`shared/app.ts` 的 `repo:` 变成 `Downvid` 而不是 `downvid`。
-  // 结果：publish.repo 与实际仓库名不符——打包时烧进 app-update.yml 的坐标是错的，
-  // 用户更新检查 404。**按字段名判断**才是唯一可靠的依据。
+  // 结果：更新源的坐标变成 `Downvid/Downvid`，用户检查更新 404。
+  // **按字段名判断**才是唯一可靠的依据。
   let next = text.replace(new RegExp(`${esc(owner)}/${esc(repo)}`, 'gi'), `${newOwner}/${newRepo}`)
   next = next.replace(
     new RegExp(`(\\b"?(owner|repo)"?\\s*[:=]\\s*['"])(${esc(owner)}|${esc(repo)})(['"])`, 'gi'),

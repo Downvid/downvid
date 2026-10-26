@@ -206,18 +206,16 @@ pnpm build          # 重新构建（会一并编译 Go 依赖边车，需要 Go
    ```
 
 **Windows：**
-1. 打开"设置" → "应用" → "已安装的应用"
-2. 找到 DownVid → 点击"卸载"
-3. 删除用户数据（可选）：
+1. 删除解压出来的 DownVid 目录（绿色版不写注册表）
+2. 删除用户数据（可选）：
    ```
    删除 C:\Users\用户名\AppData\Roaming\DownVid
-   删除 C:\Users\用户名\AppData\Local\DownVid
    ```
 
-**Linux AppImage：**
+**Linux：**
 ```bash
-# 删除 AppImage 文件
-rm DownVid-*.AppImage
+# 删除便携包解压出来的文件
+rm downvid
 
 # 删除桌面入口（如果创建了）
 rm ~/.local/share/applications/downvid.desktop
@@ -232,23 +230,22 @@ rm -rf ~/.config/DownVid
 
 ### DownVid 用了什么技术栈？
 
-- **Electron** — 跨平台桌面应用框架
-- **Vue 3** — 前端框架（使用 `<script setup>` 语法）
+- **Wails v2** — 桌面外壳：调用系统原生 Webview，单文件产物
+- **Go** — 核心（16 个零耦合 internal 包）与依赖边车
+- **Svelte 5** — 前端框架（Runes 响应式）
 - **TypeScript** — 类型安全的 JavaScript
-- **Tailwind CSS** — 原子化 CSS 框架
-- **Pinia** — Vue 状态管理
-- **Vite** — 构建与打包
-- **Go** — 依赖边车（探测并复用系统已安装的 yt-dlp / ffmpeg）
+- **Tailwind CSS v4** — CSS-first 的原子化样式
+- **Vite** — 前端构建
 - **yt-dlp** — 视频下载引擎（运行时解析，不随安装包分发）
 - **FFmpeg** — 音视频合并与转码（运行时解析，不随安装包分发）
-- **electron-builder** — 应用打包
-- **Vitest** — 纯逻辑单元测试
+- **Vitest** — 前端纯逻辑单元测试
 
 ---
 
-### 为什么用 Electron 而不是 Tauri？
+### 为什么是 Go + Wails，而不是 Electron？
 
-Electron 生态更成熟，yt-dlp 和 FFmpeg 的集成更简单。对于需要调用外部命令行工具的应用，Electron 的 Node.js 子进程 API 更方便。
+体积与启动速度：旧版 Electron 安装包 100 MB 量级、冷启动数秒；单文件产物约 18 MB，
+用系统 Webview，启动几乎即时。核心逻辑用 Go 写也避免了把 Node 运行时一起打包。
 
 ---
 
@@ -266,10 +263,13 @@ pnpm 更快、更节省磁盘空间，且 workspace 功能更强大。本项目�
 
 ### 项目有测试吗？
 
-目前没有自动化测试套件。验证方式：
-1. `pnpm vue-tsc --noEmit` — TypeScript 类型检查
-2. `pnpm build` — 完整构建
-3. 手动测试各功能
+有，分三层：
+
+1. `(cd app && go test ./...)` — Go 核心（参数组装、进度解析、格式去重、历史、自更新）
+2. `(cd backend && go test ./...)` — 依赖边车（候选路径、镜像链、校验安装）
+3. `pnpm test` / `pnpm --dir app/frontend test` — 前端与脚本的纯逻辑单测
+
+另有 `pnpm test:e2e:real` 用真实的 yt-dlp / ffmpeg 跑一次完整链路。
 
 ---
 
