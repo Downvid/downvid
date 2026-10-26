@@ -82,6 +82,15 @@ func newHTTPClient(proxyStr string, timeout time.Duration) *http.Client {
 	}
 }
 
+// errDouyinDeadLink 表示短链已经打不开：抖音把失效的分享链接 302 到站点首页，
+// 重定向结果里**不带任何视频 ID**。
+//
+// 打成 not-found 而不是让它继续落到 yt-dlp：yt-dlp 收到的是跳转后的
+// `https://www.douyin.com/`，只会回一句 `Unsupported URL`，界面于是显示
+// 「暂不支持该网站或链接类型」——链接失效被说成「不支持该网站」，用户会一直重试。
+var errDouyinDeadLink = errors.New(
+	"[[parse-error:not-found]]抖音短链已失效或视频不存在（平台把该链接重定向到了站点首页），请从 App 重新复制分享链接")
+
 // ParseDouyinAPI 用直接 HTTP API 快速解析抖音视频（耗时约 200ms）。
 func ParseDouyinAPI(rawURL string, cookiesFile string, proxyStr string) (*VideoInfo, error) {
 	client := newHTTPClient(proxyStr, 15*time.Second)
@@ -120,7 +129,7 @@ func ParseDouyinAPI(rawURL string, cookiesFile string, proxyStr string) (*VideoI
 	}
 
 	if videoID == "" {
-		return nil, errors.New("无法从 URL 提取抖音视频 ID")
+		return nil, errDouyinDeadLink
 	}
 
 	apiURL := fmt.Sprintf("https://www.douyin.com/aweme/v1/web/aweme/detail/?aweme_id=%s&aid=6383&channel=channel_pc_web&detail_list=1", videoID)

@@ -185,10 +185,17 @@ func (p *Parser) Parse(opts ParseOptions) (*VideoInfo, error) {
 
 	// 优先尝试平台专属高速 API（抖音 / 快手），~200ms 直出直链
 	if IsDouyin(opts.URL) {
-		if info, err := ParseDouyinAPI(opts.URL, opts.CookiesFile, opts.Proxy); err == nil && info != nil {
+		info, err := ParseDouyinAPI(opts.URL, opts.CookiesFile, opts.Proxy)
+		if err == nil && info != nil {
 			p.toCache(key, info)
 			return info, nil
 		}
+		// 短链本身已经失效（跳转后拿不到视频 ID）：再交给 yt-dlp 只会得到
+		// 一句 `Unsupported URL`，把「链接过期」误报成「不支持该网站」。
+		if errors.Is(err, errDouyinDeadLink) {
+			return nil, err
+		}
+
 	}
 	if IsKuaishou(opts.URL) {
 		if info, err := ParseKuaishouAPI(opts.URL, opts.Proxy); err == nil && info != nil {

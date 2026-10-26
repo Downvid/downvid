@@ -1,6 +1,7 @@
 package parse
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -77,5 +78,20 @@ func TestIsKuaishou(t *testing.T) {
 		if got := IsKuaishou(c.url); got != c.want {
 			t.Errorf("IsKuaishou(%q) = %v, want %v", c.url, got, c.want)
 		}
+	}
+}
+
+// 失效短链必须报「视频不存在」而不是「暂不支持该网站」。
+//
+// 变异点：抖音把失效分享链接 302 到站点首页，重定向结果里没有视频 ID。
+// 早先这里返回一条普通 error，被上层**吞掉**后继续交给 yt-dlp，而 yt-dlp
+// 收到的是跳转后的首页地址，只回 `Unsupported URL` —— 用户看到「暂不支持
+// 该网站或链接类型」，于是一直重试一个永远不会好的链接。
+func TestDouyinDeadShortLinkClassified(t *testing.T) {
+	if got := ClassifyParseError(errDouyinDeadLink.Error()); got != KindNotFound {
+		t.Errorf("失效短链应归类为 %s，got %s", KindNotFound, got)
+	}
+	if !strings.Contains(errDouyinDeadLink.Error(), "短链已失效") {
+		t.Error("错误文案应说清「短链失效」，而不是笼统的「无法解析」")
 	}
 }
