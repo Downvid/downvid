@@ -6,32 +6,7 @@
 
   type FilterId = 'all' | 'done' | 'missing'
 
-  /**
-   * 危险操作一律两段式：第一下只亮出「确认」，第二下才真的动手。
-   *
-   * 两段确认还必须**会自动收回**：亮着不放的红色确认按钮，下一次误点就直接
-   * 生效了，等于回到一段确认。
-   */
-  let confirmingClear = $state(false)
-  let deletingId = $state('')
-  let confirmTimer: ReturnType<typeof setTimeout> | undefined
 
-  const CONFIRM_TTL = 6000
-
-  function armConfirm(arm: () => void): void {
-    clearTimeout(confirmTimer)
-    arm()
-    confirmTimer = setTimeout(() => {
-      confirmingClear = false
-      deletingId = ''
-    }, CONFIRM_TTL)
-  }
-
-  function disarmConfirm(): void {
-    clearTimeout(confirmTimer)
-    confirmingClear = false
-    deletingId = ''
-  }
 
   const filters = $derived([
     { id: 'all', label: t('history.filterAll'), icon: 'history' },
@@ -47,21 +22,24 @@
 
   function pickFilter(id: FilterId): void {
     app.historyFilter = id
-    disarmConfirm()
   }
 
   function confirmClear(): void {
-    app.clearHistory()
-    disarmConfirm()
+    app.askConfirm({
+      title: t('history.clearTitle'),
+      message: t('history.clearMessage'),
+      confirmLabel: t('history.clear'),
+      action: () => app.clearHistory(),
+    })
   }
 
   function requestDelete(id: string): void {
-    if (deletingId === id) {
-      app.removeHistory(id)
-      disarmConfirm()
-      return
-    }
-    armConfirm(() => (deletingId = id))
+    app.askConfirm({
+      title: t('history.deleteTitle'),
+      message: t('history.deleteMessage'),
+      confirmLabel: t('history.delete'),
+      action: () => app.removeHistory(id),
+    })
   }
 </script>
 
@@ -88,29 +66,15 @@
       </div>
 
       <div class="clear-group">
-        {#if confirmingClear}
-          <button type="button" class="btn btn-sm btn-danger" onclick={confirmClear}>
-            <Icon name="delete_sweep" size={15} />
-            <span>{t('history.confirmClear')}</span>
-          </button>
-          <button
-            type="button"
-            class="btn btn-quiet btn-sm"
-            onclick={disarmConfirm}
-          >
-            {t('history.cancelClear')}
-          </button>
-        {:else}
-          <button
-            type="button"
-            class="btn btn-ghost btn-sm"
-            disabled={app.history.length === 0}
-            onclick={() => armConfirm(() => (confirmingClear = true))}
-          >
-            <Icon name="delete_sweep" size={15} />
-            <span>{t('history.clear')}</span>
-          </button>
-        {/if}
+        <button
+          type="button"
+          class="btn btn-ghost btn-sm"
+          disabled={app.history.length === 0}
+          onclick={confirmClear}
+        >
+          <Icon name="delete_sweep" size={15} />
+          <span>{t('history.clear')}</span>
+        </button>
       </div>
     </div>
   </header>
@@ -206,27 +170,15 @@
                   >
                     <Icon name="replay" size={17} />
                   </button>
-                  {#if deletingId === item.id}
-                    <button
-                      type="button"
-                      class="btn btn-sm btn-danger act-confirm"
-                      title={t('history.confirmDelete')}
-                      onclick={() => requestDelete(item.id)}
-                    >
-                      <Icon name="delete_forever" size={15} />
-                      <span>{t('history.confirmDelete')}</span>
-                    </button>
-                  {:else}
-                    <button
-                      type="button"
-                      class="icon-btn act act-delete"
-                      title={t('history.delete')}
-                      aria-label={t('history.delete')}
-                      onclick={() => requestDelete(item.id)}
-                    >
-                      <Icon name="delete" size={17} />
-                    </button>
-                  {/if}
+                  <button
+                    type="button"
+                    class="icon-btn act act-delete"
+                    title={t('history.delete')}
+                    aria-label={t('history.delete')}
+                    onclick={() => requestDelete(item.id)}
+                  >
+                    <Icon name="delete" size={17} />
+                  </button>
                 </div>
               </li>
             {/each}
@@ -302,15 +254,6 @@
     display: flex;
     align-items: center;
     gap: 4px;
-  }
-  .btn-danger {
-    background: color-mix(in oklab, var(--danger) 8%, var(--paper-raised));
-    border-color: color-mix(in oklab, var(--danger) 40%, transparent);
-    color: var(--danger);
-  }
-  .btn-danger:hover:not(:disabled) {
-    background: color-mix(in oklab, var(--danger) 14%, var(--paper-raised));
-    border-color: color-mix(in oklab, var(--danger) 62%, transparent);
   }
 
   /* ---------- 筛选 ---------- */
@@ -480,8 +423,7 @@
       transform var(--dur-base) var(--ease-out);
   }
   .row:hover .row-actions,
-  .row:focus-within .row-actions,
-  .row:has(.act-confirm) .row-actions {
+  .row:focus-within .row-actions {
     opacity: 1;
     transform: none;
   }
@@ -493,24 +435,6 @@
     color: var(--danger);
     background: color-mix(in oklab, var(--danger) 9%, transparent);
   }
-  /* 确认态在行内常显（不靠 hover），否则鼠标一移开就点不到 */
-  .row-actions .act-confirm {
-    white-space: nowrap;
-    height: 26px;
-    padding: 0 9px;
-    /* 二次确认态用实心红：空心红在 hover 高亮里几乎看不出来 */
-    background: var(--danger);
-    border-color: var(--danger);
-    color: #fff;
-    animation: confirm-in 140ms var(--ease-out);
-  }
-  @keyframes confirm-in {
-    from {
-      opacity: 0;
-      transform: scale(0.96);
-    }
-  }
-
   /* ---------- 空态 ---------- */
   .empty {
     display: flex;

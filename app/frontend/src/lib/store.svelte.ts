@@ -870,6 +870,25 @@ class AppStore {
   }
 
   /** 暂停（终止整棵进程树，后端等待落盘后才返回） */
+  /**
+   * 危险操作的确认弹窗状态。
+   *
+   * 为什么不再用「按钮变红再点一次」：那套在行内太容易被误触（第一次点的就是
+   * 删除按钮），而且确认态还挂在列表里，鼠标移开就消失。改成弹窗后，
+   * 取消 / 点背景 / 按 Esc 都能退出。
+   */
+  confirm: { title: string; message: string; confirmLabel: string; action: () => void } | null = $state(null)
+
+  askConfirm(opts: { title: string; message: string; confirmLabel: string; action: () => void }): void {
+    this.confirm = opts
+    this.dialog = 'confirm'
+  }
+
+  closeConfirm(): void {
+    this.confirm = null
+    if (this.dialog === 'confirm') this.dialog = 'none'
+  }
+
   async togglePause(id: string): Promise<void> {
     const task = this.tasks.find((x) => x.id === id)
     if (!task) return

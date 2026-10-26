@@ -11,6 +11,7 @@
   import UpdateDialog from './components/UpdateDialog.svelte'
   import DepsDialog from './components/DepsDialog.svelte'
   import AnnouncementDialog from './components/AnnouncementDialog.svelte'
+  import ConfirmDialog from './components/ConfirmDialog.svelte'
   import { app } from './lib/store.svelte'
 
   onMount(() => {
@@ -105,6 +106,8 @@
   <UpdateDialog />
 {:else if app.dialog === 'deps'}
   <DepsDialog />
+{:else if app.dialog === 'confirm'}
+  <ConfirmDialog />
 {:else if app.dialog === 'announcement'}
   <AnnouncementDialog />
 {/if}

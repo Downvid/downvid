@@ -80,4 +80,4 @@ export type TaskStatus = 'queued' | 'downloading' | 'merging' | 'paused' | 'comp
 export type Tab = 'download' | 'history' | 'settings' | 'about'
 
 /** 应用内弹窗 */
-export type Dialog = 'none' | 'update' | 'deps' | 'announcement'
+export type Dialog = 'none' | 'update' | 'deps' | 'announcement' | 'confirm'
