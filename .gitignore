@@ -23,8 +23,8 @@ dist-web
 *.local
 
 # Editor directories and files
-.vscode/*
-!.vscode/extensions.json
+# 编辑器配置一律不入库（含 .vscode/extensions.json：推荐插件列表因人而异）
+.vscode/
 .idea
 .DS_Store
 *.suo
