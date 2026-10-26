@@ -713,6 +713,9 @@ class AppStore {
     // 这条规则被 7 条用例钉住（见 lib/snapshot.test.ts）。
     const snap = snapshotForRun(task, null)
     if (!snap) return
+    // YouTube 上 yt-dlp 要重新提取一次（网页 + player API + nsig），实测 15~25 秒，
+    // 这段时间既没有进度事件也没有任何文字——用户看到的就是「点了下载没反应」。
+    this.patchTask(task.id, { statusMessage: t('queue.preparing') })
     const res = await startDownload({
       taskId: task.id,
       url: task.url,
@@ -736,7 +739,11 @@ class AppStore {
     })
 
     if (!res.ok) {
-      this.patchTask(task.id, { status: 'error', error: res.message || t('error.downloadFailed') })
+      this.patchTask(task.id, {
+        status: 'error',
+        statusMessage: undefined,
+        error: res.message || t('error.downloadFailed'),
+      })
       // 缺依赖时弹「一键下载」——这是用户能自己解决的事
       if (res.missingKind) {
         this.dialog = 'deps'
@@ -746,7 +753,7 @@ class AppStore {
       return
     }
 
-    this.patchTask(task.id, { status: 'downloading', startedAt: Date.now() })
+    this.patchTask(task.id, { status: 'downloading', startedAt: Date.now(), statusMessage: undefined })
     this.ensureTicker()
   }
 

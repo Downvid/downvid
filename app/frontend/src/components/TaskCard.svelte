@@ -52,6 +52,8 @@
         <span class="task-stat-text num">
           {#if task.status === 'paused'}
             {t('queue.paused')}
+          {:else if task.status === 'queued'}
+            {task.statusMessage || t('queue.queued')}
           {:else if task.status === 'merging'}
             <span class="merging-text pulse-soft">{t('queue.merging')}</span>
           {:else}
