@@ -105,7 +105,7 @@ jobs:
 
       - name: 关闭并说明原因
         if: steps.triage.outputs.close == 'true'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           TRIAGE_COMMENT: ${{ steps.triage.outputs.comment }}
           TRIAGE_REASON: ${{ steps.triage.outputs.reason }}
