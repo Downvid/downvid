@@ -473,8 +473,12 @@ func (a *App) StartDownload(opts DownloadRequest) StartDownloadResult {
 		var failedBrowsers []string
 
 		// 有解析缓存就用它跳过二次提取；失败（缓存过期/字段缺失）再退回正常提取。
+		//
+		// 但**只认一小时内**的缓存：info JSON 里的直链地址（googlevideo）几小时就
+		// 过期，拿过期的缓存起步，yt-dlp 第一次注定失败、再回落完整提取——断点续传
+		// 反而要等两遍。旧缓存直接跳过，一次正常提取更快。
 		useInfo := ""
-		if opts.InfoJSON != "" && fileExists(opts.InfoJSON) {
+		if opts.InfoJSON != "" && fileExists(opts.InfoJSON) && cacheFileFresh(opts.InfoJSON, infoJSONMaxAge) {
 			useInfo = opts.InfoJSON
 		}
 
@@ -1564,4 +1568,19 @@ func (a *App) FetchImage(url string, referer string) string {
 		return ""
 	}
 	return data
+}
+
+// infoJSONMaxAge 是「解析缓存还能直接用来起下载」的时限。
+//
+// 依据是平台直链的有效期：YouTube 的 googlevideo 地址约 6 小时，抖音/快手更短。
+// 取一小时是保守值——比它更旧的缓存，与其赌一把不如直接重新提取。
+const infoJSONMaxAge = time.Hour
+
+// cacheFileFresh 判断缓存文件是否还在可用时限内。
+func cacheFileFresh(path string, maxAge time.Duration) bool {
+	st, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return time.Since(st.ModTime()) <= maxAge
 }

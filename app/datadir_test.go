@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 // 迁移用例都靠改 HOME 把 ~ 指到临时目录：resolveHistoryPath / downvidHome
@@ -172,5 +173,36 @@ func TestEffectiveVersionMatchesDisplayedVersion(t *testing.T) {
 	version = "9.9.9" // 正式构建注入的版本优先
 	if got := effectiveVersion(); got != "9.9.9" {
 		t.Errorf("注入的版本应优先，got %q", got)
+	}
+}
+
+// 断点续传/再次下载时，只有「足够新」的解析缓存才允许用来起下载。
+//
+// 变异点：info JSON 里的直链几小时就过期。拿过期缓存起步，yt-dlp 第一次注定
+// 失败、再回落完整提取——用户等两遍，感觉「续传启动特别慢」。
+func TestCacheFileFresh(t *testing.T) {
+	dir := t.TempDir()
+	fresh := filepath.Join(dir, "fresh.json")
+	if err := os.WriteFile(fresh, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if !cacheFileFresh(fresh, time.Hour) {
+		t.Error("刚写出的缓存应算新鲜")
+	}
+
+	old := filepath.Join(dir, "old.json")
+	if err := os.WriteFile(old, []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	past := time.Now().Add(-3 * time.Hour)
+	if err := os.Chtimes(old, past, past); err != nil {
+		t.Fatal(err)
+	}
+	if cacheFileFresh(old, time.Hour) {
+		t.Error("3 小时前的缓存不该再被采用")
+	}
+
+	if cacheFileFresh(filepath.Join(dir, "nope.json"), time.Hour) {
+		t.Error("不存在的缓存应判为不可用")
 	}
 }
