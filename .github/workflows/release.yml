@@ -228,6 +228,16 @@ jobs:
       # 必须用 build.sh：它先把依赖边车编译好再带 `-tags withsidecar` 构建。
       # 直接 `wails build` 出来的应用**没有依赖探测能力**（边车不在包里），
       # 用户看到的是「依赖页只剩一条」——这个故障真实发生过。
+      # `wails build -nsis` 依赖 makensis。windows-latest 默认没装，之前
+      # 这个 flag 一直被静默忽略：Release 里只有 zip，没有 -installer.exe。
+      - name: 安装 NSIS（仅 Windows）
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          choco install nsis -y --no-progress
+          "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          & "C:\Program Files (x86)\NSIS\makensis.exe" /VERSION
+
       - name: Build (Wails)
         working-directory: app
         shell: bash
@@ -245,16 +255,86 @@ jobs:
         run: |
           v="${{ needs.version.outputs.version }}"
           cd app/build/bin
+          # 0. 先验签名：ad-hoc 签名一旦在打包环节被破坏，用户看到的是
+          #    「已损坏或不完整」，而我们自己从没验过
+          codesign --verify --deep --strict --verbose=2 downvid.app
           # 1. 压成 zip（保留可执行权限，作为自更新与便携包）
           ditto -c -k --sequesterRsrc --keepParent downvid.app \
             "../../../DownVid-Wails-${{ matrix.suffix }}-${v}.zip"
-          # 2. 制作 DMG 安装器（带 Applications 快捷方式）
-          DMG_TMP="$(mktemp -d)"
+
+          # 2. 制作 DMG：先在可写镜像里布置 Finder 窗口（背景图 + 图标位置），
+          #    再压成只读 UDZO。
+          #
+          # 所有文本文件都用 printf 写：heredoc 的正文不能缩进，一旦顶格写进
+          # YAML 块标量，整个工作流会被判为非法文件（曾经真实发生过）。
+          ROOT="$(mktemp -d)"
+          DMG_TMP="$ROOT/stage"
+          mkdir -p "$DMG_TMP"
           cp -R downvid.app "$DMG_TMP/"
           ln -s /Applications "$DMG_TMP/Applications"
-          hdiutil create -volname "DownVid" -srcfolder "$DMG_TMP" -ov -format UDZO \
-            "../../../DownVid-Wails-${{ matrix.suffix }}-${v}.dmg"
-          rm -rf "$DMG_TMP"
+          mkdir -p "$DMG_TMP/.background"
+          node "$GITHUB_WORKSPACE/scripts/gen-dmg-background.mjs" "$DMG_TMP/.background/background.png"
+
+          printf '%s\n' \
+            'DownVid 未购买 Apple 开发者签名，第一次打开会被 macOS 拦下。' \
+            '' \
+            '如果提示「无法打开，因为它可能已损坏或不完整」：' \
+            '  1. 先把 downvid.app 拖进「应用程序」文件夹' \
+            '  2. 打开「终端」，执行：' \
+            '       xattr -dr com.apple.quarantine /Applications/downvid.app' \
+            '  3. 再双击打开（也可以右键 → 打开 → 仍要打开）' \
+            '' \
+            '这不是安装包损坏：应用本体带 ad-hoc 签名，校验是通的。' \
+            > "$DMG_TMP/首次打开（遇到已损坏时看这个）.txt"
+
+          printf '%s\n' \
+            '#!/bin/bash' \
+            '# 去掉 DownVid 的 quarantine 属性后重新打开' \
+            'target="/Applications/downvid.app"' \
+            '[ -d "$target" ] || target="$(cd "$(dirname "$0")" && pwd)/downvid.app"' \
+            'xattr -dr com.apple.quarantine "$target" 2>/dev/null' \
+            'open "$target"' \
+            > "$DMG_TMP/修复隔离属性.command"
+          chmod +x "$DMG_TMP/修复隔离属性.command"
+
+          RW="$ROOT/DownVid.rw.dmg"
+          hdiutil create -volname "DownVid" -srcfolder "$DMG_TMP" -ov -format UDRW "$RW" >/dev/null
+          MOUNT="$ROOT/mnt"
+          mkdir -p "$MOUNT"
+          hdiutil attach "$RW" -mountpoint "$MOUNT" -nobrowse -quiet
+
+          # Finder 布局：背景图 + 左右两个图标位。CI 上 Finder 偶尔不可用，
+          # 失败不让整条流水线红——DMG 依然可用，只是没有背景。
+          #
+          # AppleScript 先写进文件再执行：heredoc 的结束符必须顶格，而我们整段
+          # 在 YAML 块标量里是缩进的，结束符永远匹配不上（会吞掉后面所有脚本）。
+          printf '%s\n' \
+            'tell application "Finder"' \
+            '  tell disk "DownVid"' \
+            '    open' \
+            '    set opts to icon view options of container window' \
+            '    set background picture of opts to file ".background:background.png"' \
+            '    set arrangement of opts to not arranged' \
+            '    set icon size of opts to 120' \
+            '    set text size of opts to 12' \
+            '    set bounds of container window to {200, 160, 860, 640}' \
+            '    set position of item "downvid.app" to {165, 240}' \
+            '    set position of item "Applications" to {495, 240}' \
+            '    close' \
+            '    open' \
+            '    update without registering applications' \
+            '    delay 2' \
+            '    close' \
+            '  end tell' \
+            'end tell' \
+            > "$ROOT/layout.applescript"
+          osascript "$ROOT/layout.applescript" || echo "::warning::Finder 布局失败，DMG 将没有背景图"
+
+          sync
+          hdiutil detach "$MOUNT" -quiet || hdiutil detach "$MOUNT" -force -quiet
+          hdiutil convert "$RW" -format UDZO -imagekey zlib-level=9 \
+            -o "../../../DownVid-Wails-${{ matrix.suffix }}-${v}.dmg" >/dev/null
+          rm -rf "$ROOT"
           ls -la ../../../DownVid-Wails-*
 
       - name: Package Windows

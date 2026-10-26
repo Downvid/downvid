@@ -2,6 +2,17 @@
 
 本文件记录 DownVid 的所有版本更新。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [1.7.1] - 2026-10-26
+
+### 修复
+
+- **macOS 首次打开报「已损坏或不完整」**：这是 Gatekeeper 对 ad-hoc 签名应用的拦截（`spctl` 判定 rejected），不是安装包损坏。DMG 里现在附带「首次打开」说明与一键修复脚本（`xattr -dr com.apple.quarantine`），发布前也会先跑一次 `codesign --verify --deep --strict`，签名真坏时才允许发版。
+- **Windows 一直没有安装器**：`release.yml` 一直传 `-nsis`，但 runner 上没装 NSIS，`wails build` 静默跳过，于是 Release 里只有 `.zip`。现在构建前先 `choco install nsis` 并把 `makensis` 加进 PATH。
+
+### 变更
+
+- **DMG 有了背景与图标布局**：深色渐变 + 指向「应用程序」的箭头，窗口与图标位置固定；背景图由 `scripts/gen-dmg-background.mjs` 生成（纯 Node 标准库，无二进制入库）。
+
 ## [1.7.0] - 2026-10-26
 
 ### 变更
