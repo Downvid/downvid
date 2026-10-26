@@ -73,7 +73,7 @@ const (
 
 // Options 探测输入
 type Options struct {
-	ManagedDir  string          // 托管目录，例如 <userData>/runtime/bin
+	ManagedDir  string          // 托管目录，例如 ~/.downvid/runtime/bin
 	ManualPaths map[Kind]string // 用户手动指定的绝对路径
 }
 

@@ -623,28 +623,11 @@ func (a *App) emitProgress(p DownloadProgress) {
 
 // resolveManagedDir 返回依赖托管目录。
 // 三端统一固定在用户主目录下的 ~/.downvid/runtime/bin，防止不同系统环境数据目录差异导致下载或探测失败。
-// 若旧目录（userData/runtime/bin）存在且新位置尚无依赖，自动平滑移动至固定位置。
+// 旧目录（userData/runtime/bin）里的依赖会被**逐项**搬过来（见 migrateTree）。
 func resolveManagedDir(dataDir string) string {
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		home = "."
-	}
-	fixed := filepath.Join(home, ".downvid", "runtime", "bin")
-
+	fixed := filepath.Join(downvidHome(), "runtime", "bin")
 	if dataDir != "" {
-		oldDir := filepath.Join(dataDir, "runtime", "bin")
-		if oldDir != fixed {
-			if entries, err := os.ReadDir(oldDir); err == nil && len(entries) > 0 {
-				if _, err := os.Stat(fixed); os.IsNotExist(err) {
-					_ = os.MkdirAll(fixed, 0o755)
-					for _, entry := range entries {
-						oldPath := filepath.Join(oldDir, entry.Name())
-						newPath := filepath.Join(fixed, entry.Name())
-						_ = os.Rename(oldPath, newPath)
-					}
-				}
-			}
-		}
+		migrateTree(filepath.Join(dataDir, "runtime", "bin"), fixed)
 	}
 	return fixed
 }

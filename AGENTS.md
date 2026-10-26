@@ -236,7 +236,7 @@ bash app/scripts/build.sh            # 单文件产物
 **安装包不携带这些二进制**。启动后由 Go 边车按「系统优先，缺失才下载」的顺序解析：
 
 1. 设置里手动指定的路径（**只对探测生效**）
-2. `<userData>/runtime/bin/`（DownVid 下载的，可覆盖更新）
+2. `~/.downvid/runtime/bin/`（DownVid 下载的，可覆盖更新；旧版 `userData/runtime/bin` 会自动搬过来）
 3. 登录 shell 的 PATH（GUI 应用只有精简 PATH，这一步是关键）＋ 各平台常见安装目录
 4. 裸命令名交给 PATH 兜底
 
@@ -280,7 +280,7 @@ PyInstaller 启动器，孙进程仍持有 stdout 管道，`cmd.Run()` 会一直
 
 - 边车由 `app/scripts/build.sh` 编译到 `app/internal/sidecar/bin/<goos>-<goarch>/`，
   再带 `-tags withsidecar` 用 `//go:embed` 嵌进主二进制；运行时落到
-  `<userData>/runtime/bin/downvid-deps`。
+  `~/.downvid/runtime/bin/downvid-deps`。
 - 不带 `-tags withsidecar` 的构建（`go test`、普通 `go build`、直接 `wails build`）
   会走 stub：编译能过，但依赖页只剩「探测程序缺失」。这是刻意设计。
 - 探测结果里 `Source`（system / managed / manual / scanned）与 `Form`（zipapp / native）
@@ -381,7 +381,7 @@ m3u8 仅在该清晰度无直链时保留、都没有分辨率时提供 `bv*+ba/
 |------|------|
 | 应用状态（解析结果 / 任务队列 / 弹窗） | `app/frontend/src/lib/store.svelte.ts`（Svelte 5 runes 单例） |
 | 用户设置 | `userData/settings.json`，入口 `app/internal/settings/settings.go`；前端映射在 `app/frontend/src/lib/settings.ts` |
-| 下载历史 | `app/internal/history` → `userData/download-history.json`（原子写） |
+| 下载历史 | `app/internal/history` → `~/.downvid/download-history.json`（原子写） |
 | 运行依赖 | `app/internal/deps`（探测结果缓存 60 秒） |
 | 更新 | `app/internal/update`（检查 / 自更新 / 产物识别） |
 

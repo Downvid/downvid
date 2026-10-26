@@ -21,7 +21,7 @@
 // 边车要能被独立执行（它自己会 spawn yt-dlp/ffmpeg 并读它们的输出）。
 // 从内存里跑一个 ELF/Mach-O 需要 memfd 或临时文件，跨平台差异大；
 // 落盘到数据目录最简单，且**与 Electron 版的位置一致**
-// （`<userData>/runtime/bin/downvid-deps`），升级不会留下两份。
+// （`~/.downvid/runtime/bin/downvid-deps`），升级不会留下两份。
 package sidecar
 
 import (

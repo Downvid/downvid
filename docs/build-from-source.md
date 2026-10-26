@@ -61,7 +61,7 @@ pnpm --dir app/frontend install   # app/frontend 是独立包，不在根 worksp
 **安装包不携带这些工具**，构建前无需下载任何二进制。运行时由 Go 边车按「系统优先」查找：
 
 1. 设置里手动指定的路径（只对探测生效）
-2. `<userData>/runtime/bin/`（由界面上的下载按钮安装）
+2. `~/.downvid/runtime/bin/`（由界面上的下载按钮安装；历史文件 `download-history.json` 也在这个目录下）
 3. 登录 shell 的 `PATH` 与各平台常见安装目录
 4. 裸命令名交给 `PATH` 兜底
 

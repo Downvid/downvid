@@ -2,6 +2,16 @@
 
 本文件记录 DownVid 的所有版本更新。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased]
+
+### 变更
+
+- **下载历史与运行依赖统一到 `~/.downvid`**：下载历史从系统数据目录（macOS `~/Library/Application Support/downvid/`、Windows `%APPDATA%\downvid\`、Linux `~/.config/downvid/`）迁到 `~/.downvid/download-history.json`，与 yt-dlp / ffmpeg / 边车本体放在一起，三端路径一致。升级时自动搬迁，新位置已有文件则不覆盖。
+
+### 修复
+
+- **旧版本托管依赖「搬一半」后静默丢失**：依赖目录的迁移原先只在目标目录不存在时才执行，用户手动建过空目录或上次迁移失败时，旧 `userData/runtime/bin` 里的 yt-dlp / ffmpeg 会一直留在原地，探测只认新目录 → 依赖像是消失了、白重下 80MB。现在按项逐个搬迁，目标已有同名文件时以目标为准；跨挂载点 `rename` 失败时退回复制，失败原因落日志而不是静默跳过。
+
 ## [1.6.4] - 2026-10-26
 
 ### 修复

@@ -15,7 +15,7 @@
 单文件产物约 18 MB，其中不含运行依赖。启动后由 Go 边车按「系统优先，缺失才下载」的顺序解析：
 
 1. 设置里手动指定的路径（**只对探测生效**）
-2. `<userData>/runtime/bin/`（DownVid 下载的）
+2. `~/.downvid/runtime/bin/`（DownVid 下载的）
 3. 登录 shell 的 PATH + 各平台常见安装目录
 4. 裸命令名交给 PATH 兜底
 

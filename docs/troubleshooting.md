@@ -304,10 +304,12 @@ ffmpeg 只在合并音视频与音频转码时需要，因此**字幕下载不�
 1. 从未成功下载过视频
 2. 历史记录文件被删除
 
-**说明：** 下载历史保存在用户数据目录中：
-- macOS: `~/Library/Application Support/DownVid/download-history.json`
-- Windows: `%APPDATA%\DownVid\download-history.json`
-- Linux: `~/.config/DownVid/download-history.json`
+**说明：** 下载历史固定保存在用户主目录下的 `.downvid` 里（三端一致）：
+- `~/.downvid/download-history.json`
+
+旧版本把它放在系统数据目录（macOS `~/Library/Application Support/downvid/`、
+Windows `%APPDATA%\downvid\`、Linux `~/.config/downvid/`）；首次启动新版本时会自动
+搬到新位置，只有旧文件还在时才会搬，不会覆盖新位置已有的历史。
 
 ---
 

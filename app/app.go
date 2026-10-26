@@ -134,7 +134,7 @@ func (a *App) startup(ctx context.Context) {
 
 	a.dataDir = resolveDataDir()
 	a.downloadsDir = resolveDownloadsDir()
-	a.historyPath = filepath.Join(a.dataDir, "download-history.json")
+	a.historyPath = resolveHistoryPath(a.dataDir)
 
 	if err := os.MkdirAll(a.downloadsDir, 0o755); err != nil {
 		log.Printf("[downvid] 无法创建下载目录 %s：%v", a.downloadsDir, err)

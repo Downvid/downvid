@@ -118,8 +118,9 @@ DownVid **不需要**任何特殊权限：
 | 内容 | 路径 |
 |------|------|
 | 用户数据 | `C:\Users\用户名\AppData\Roaming\DownVid\` |
-| 下载历史 | 同上目录下的 `download-history.json` |
-| 设置 | 同上目录下的 `settings.json` |
+| 下载历史 | `C:\Users\用户名\.downvid\download-history.json` |
+| 运行依赖 | `C:\Users\用户名\.downvid\runtime\bin\` |
+| 设置 | 同上「用户数据」目录下的 `settings.json` |
 
 ---
 

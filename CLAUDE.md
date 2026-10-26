@@ -262,7 +262,8 @@ Things that fail silently, all covered by `pnpm lint:website`:
 **The installer ships without these binaries.** At startup the Go sidecar resolves them in this order:
 
 1. Manual paths from settings (**detection only**)
-2. `<userData>/runtime/bin/` (downloaded by DownVid, overwritable)
+2. `~/.downvid/runtime/bin/` (downloaded by DownVid, overwritable; the legacy
+   `userData/runtime/bin` is migrated automatically)
 3. The login shell's PATH (GUI apps get a minimal PATH, this step is essential) plus common install
    directories per platform
 4. Bare command names resolved through PATH
@@ -310,7 +311,7 @@ as-is.
 ### Packaging on the Wails side
 
 - `app/scripts/build.sh` compiles the sidecar into `app/internal/sidecar/bin/<goos>-<goarch>/` and
-  embeds it with `-tags withsidecar`; at runtime it is written to `<userData>/runtime/bin/downvid-deps`.
+  embeds it with `-tags withsidecar`; at runtime it is written to `~/.downvid/runtime/bin/downvid-deps`.
 - Builds without `-tags withsidecar` (`go test`, plain `go build`, plain `wails build`) use a stub:
   they compile, but the dependency page only reports "detection helper missing". This is deliberate.
 - The UI must show `Source` (system / managed / manual / scanned) and `Form` (zipapp / native) honestly:
@@ -420,7 +421,7 @@ showed **two 1080p entries**. `normalizeFps()` now snaps to common tiers, the ke
 |------|----------|
 | App state (parse result / task queue / dialogs) | `app/frontend/src/lib/store.svelte.ts` (Svelte 5 runes singleton) |
 | User settings | `userData/settings.json`, entry point `app/internal/settings/settings.go`; frontend mapping in `app/frontend/src/lib/settings.ts` |
-| Download history | `app/internal/history` -> `userData/download-history.json` (atomic write) |
+| Download history | `app/internal/history` -> `~/.downvid/download-history.json` (atomic write) |
 | Runtime dependencies | `app/internal/deps` (60 s detection cache) |
 | Updates | `app/internal/update` (check / self-update / artifact recognition) |
 
