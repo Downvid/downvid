@@ -20,6 +20,8 @@
 
 ### 修复
 
+- **暂停按钮点了没反应**：`PauseDownload` 是同步绑定，内部要 SIGTERM → 等 3 秒宽限期 → SIGKILL，这段时间整个界面卡住；界面的状态还要等这次调用返回才更新。现在后端立刻应答（`MarkPaused` 后把终止放进 goroutine），前端先本地切到「已暂停」，失败再回滚。
+- **解析完过一会儿点下载，要等好几秒才动**：路径解析缓存只有 60 秒，过期后会重新探测一遍（4 个二进制各跑一次 `--version`，yt-dlp 首次最慢 12 秒）。放宽到 10 分钟——「重新检测」仍是实时探测，不受影响。
 - **「自动读取 Cookie 失败」看不出原因**：浏览器探测原先只看「装没装」，于是 Chrome 装了但 profile 是空目录 / 被 macOS TCC 挡住时，候选里照样有 chrome，yt-dlp 只会回 `could not find chrome cookies database`。现在探测要求**存在可读的 Cookie 数据库**才列出该浏览器；macOS 上的失败提示会直接指向「完全磁盘访问权限」。
 - **手动指定的 cookies.txt 是浏览器扩展导出的 JSON 时完全不生效**：yt-dlp 的 `--cookies` 只认 Netscape 文本，喂它 JSON **不报错也不带任何 cookie**；直连解析器按制表符切分，同样一条都读不出来。现在两种格式都认：手动路径的 JSON 会先转成 Netscape 临时文件再交给 yt-dlp，平台直连解析也能直接读 JSON。
 - **抖音/快手「需要新鲜 Cookie」被报成「无法解析该链接」**：yt-dlp 对无 cookie 的抖音请求只回 `Fresh cookies (not necessarily logged in) are needed`，既不含 "Sign in" 也不含 "登录"，早先落到 unknown。现在归类为需要登录态，界面会指向「设置 → Cookie」。

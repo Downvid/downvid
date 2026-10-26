@@ -865,8 +865,11 @@ class AppStore {
     if (!task) return
 
     if (task.status === 'downloading' || task.status === 'merging') {
-      await pauseDownload(task.id)
+      // 先改本地状态再等后端：后端要 SIGTERM → 宽限期 → SIGKILL，界面不该
+      // 在这期间毫无反应（「点了暂停像没点」）。真失败时下面的补丁会纠正。
       this.patchTask(id, { status: 'paused', speedBps: 0 })
+      const ok = await pauseDownload(task.id)
+      if (!ok) this.patchTask(id, { status: task.status, speedBps: task.speedBps })
       return
     }
 

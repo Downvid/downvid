@@ -212,6 +212,21 @@ func (r *Runner) Run(taskID string, opts RunOptions) (RunResult, error) {
 //
 // 等进程真的退出后才返回：调用方（界面）必须等 aria2c 把控制文件写完，
 // 否则恢复时会读到半截文件，前功尽弃。
+// MarkPaused 只把任务标记为「用户要暂停」，供 Pause 的后台终止使用。
+//
+// 单独拆出来是为了让绑定层能**立刻**应答界面（见 App.PauseDownload）：
+// 真正的终止要走 SIGTERM → 等宽限期 → SIGKILL，那 3 秒不能卡在 RPC 里。
+func (r *Runner) MarkPaused(taskID string) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	task, ok := r.running[taskID]
+	if !ok {
+		return false
+	}
+	task.paused = true
+	return true
+}
+
 func (r *Runner) Pause(taskID string) bool {
 	r.mu.Lock()
 	task, ok := r.running[taskID]

@@ -186,7 +186,16 @@ var (
 	depsCacheMu  sync.Mutex
 )
 
-const depsCacheTTL = 60 * time.Second
+// depsCacheTTL 是「解析依赖路径」这份缓存的有效期。
+//
+// 只有**下载发起前的路径解析**（ResolveYtdlp / resolveAria2 / ffmpegLocation）
+// 用它；界面上的「重新检测」走实时探测，不受影响。
+//
+// 原先 60 秒太短：一次完整探测要跑 4 个二进制的 `--version`（yt-dlp 首次
+// 执行最慢 12 秒），于是「解析完等一会儿再点下载」会重新探测一遍，用户感觉
+// 点了下载却半天没动静。依赖不会在一分钟内换位置，10 分钟足够，用户手动
+// 下载/更新依赖时两侧都会显式 Invalidate。
+const depsCacheTTL = 10 * time.Minute
 
 // detectCached 取最近一次探测结果，超过 TTL 才重新探测。
 func (a *App) detectCached() []Dependency {
@@ -524,8 +533,13 @@ func (a *App) StartDownload(opts DownloadRequest) StartDownloadResult {
 }
 
 // PauseDownload 暂停（终止整棵进程树）。
+//
+// **不能在绑定调用里同步等待**：KillProcessTree 要先 SIGTERM 再等宽限期
+// （3 秒）才 SIGKILL，而 Wails 的绑定调用是同步的——界面在这段时间里点什么都
+// 没反应，用户看到的是「暂停按钮点了没用」。所以这里只做「标记 + 起后台终止」，
+// 状态通过 download:progress 事件回到界面。
 func (a *App) PauseDownload(taskID string) bool {
-	// 先试直链：那条路径没有子进程，靠取消 ctx 停下
+	// 直链：没有子进程，取消 ctx 即刻生效
 	a.mu.Lock()
 	cancel, isDirect := a.directCancels[taskID]
 	a.mu.Unlock()
@@ -533,7 +547,14 @@ func (a *App) PauseDownload(taskID string) bool {
 		cancel()
 		return true
 	}
-	return a.runner.Pause(taskID)
+
+	accepted := a.runner.MarkPaused(taskID)
+	go func() {
+		if !a.runner.Pause(taskID) {
+			log.Printf("[downvid] 暂停 %s 失败：任务不在运行中", taskID)
+		}
+	}()
+	return accepted
 }
 
 // toDownloadAudioTrack 把请求里的音轨转成 download 包的结构。
