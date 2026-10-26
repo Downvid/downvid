@@ -57,22 +57,22 @@
     "lint:website:preview": "node scripts/check-website-preview.mjs"
   },
   "dependencies": {
-    "@material-symbols/font-400": "^0.48.0",
+    "@material-symbols/font-400": "^0.48.1",
     "bufferutil": "^4.1.0",
     "marked": "^18.1.1",
     "pinia": "^4.1.0",
-    "puppeteer-core": "^25.14.0",
+    "puppeteer-core": "^25.16.0",
     "utf-8-validate": "^6.0.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^26.6.5",
     "@types/ws": "^8.18.2",
-    "postcss": "^8.5.30",
+    "postcss": "^8.5.31",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",
-    "vite": "^8.3.4",
+    "vite": "^8.3.5",
     "vite-plugin-electron": "^1.1.2",
     "vite-plugin-electron-renderer": "^1.0.0",
     "vitest": "^5.0.5",
