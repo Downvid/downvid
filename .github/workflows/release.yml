@@ -288,27 +288,29 @@ jobs:
           chmod 755 "$DEB_DIR/usr/bin/downvid"
           cp app/build/appicon.png "$DEB_DIR/usr/share/icons/hicolor/512x512/apps/downvid.png"
           
-          cat << 'EOF' > "$DEB_DIR/usr/share/applications/downvid.desktop"
-[Desktop Entry]
-Name=DownVid
-Comment=Desktop Video Downloader
-Exec=/usr/bin/downvid
-Icon=downvid
-Terminal=false
-Type=Application
-Categories=AudioVideo;Network;Utility;
-EOF
+          # 用 printf 而不是 heredoc：heredoc 正文不能缩进，一旦顶格写进 YAML
+          # 块标量就提前结束，整个工作流会被 GitHub 判为非法文件（每次 push 0 秒失败）
+          printf '%s\n' \
+            '[Desktop Entry]' \
+            'Name=DownVid' \
+            'Comment=Desktop Video Downloader' \
+            'Exec=/usr/bin/downvid' \
+            'Icon=downvid' \
+            'Terminal=false' \
+            'Type=Application' \
+            'Categories=AudioVideo;Network;Utility;' \
+            > "$DEB_DIR/usr/share/applications/downvid.desktop"
           chmod 644 "$DEB_DIR/usr/share/applications/downvid.desktop"
 
-          cat << EOF > "$DEB_DIR/DEBIAN/control"
-Package: downvid
-Version: ${v}
-Section: utils
-Priority: optional
-Architecture: amd64
-Maintainer: DownVid <xynrin@icloud.com>
-Description: DownVid open-source desktop video downloader.
-EOF
+          printf '%s\n' \
+            'Package: downvid' \
+            "Version: ${v}" \
+            'Section: utils' \
+            'Priority: optional' \
+            'Architecture: amd64' \
+            'Maintainer: DownVid <xynrin@icloud.com>' \
+            'Description: DownVid open-source desktop video downloader.' \
+            > "$DEB_DIR/DEBIAN/control"
           chmod 644 "$DEB_DIR/DEBIAN/control"
 
           dpkg-deb --build "$DEB_DIR" "DownVid-Wails-${{ matrix.suffix }}-${v}.deb"
