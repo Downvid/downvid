@@ -324,3 +324,14 @@ func TestFormatBytes(t *testing.T) {
 		}
 	}
 }
+
+func TestManagerSidecarPath(t *testing.T) {
+	m := NewManager("", "/tmp/bin")
+	if m.SidecarPath() != "" {
+		t.Errorf("初始 sidecarPath 应为空，got %q", m.SidecarPath())
+	}
+	m.SetSidecarPath("/new/path")
+	if m.SidecarPath() != "/new/path" {
+		t.Errorf("更新后 sidecarPath 应为 /new/path，got %q", m.SidecarPath())
+	}
+}

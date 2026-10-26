@@ -60,8 +60,10 @@ func Extract(dir string) (string, error) {
 		name += ".exe"
 	}
 	// 内嵌目录按**目标平台**分（构建时只放一个平台的产物）
+	// 必须用 embeddedPath（正斜杠分隔），不能用 filepath.Join，否则 Windows 上无法匹配 embed.FS。
 	key := runtime.GOOS + "-" + runtime.GOARCH
-	data, err := embedded.ReadFile(filepath.Join("bin", key, name))
+	embedRel := embeddedPath(runtime.GOOS, runtime.GOARCH)
+	data, err := embedded.ReadFile(embedRel)
 	if err != nil {
 		return "", fmt.Errorf("这个构建没有带上 %s 的依赖边车：%w", key, err)
 	}

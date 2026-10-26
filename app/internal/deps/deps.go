@@ -138,6 +138,20 @@ func NewManager(sidecarPath, managedDir string) *Manager {
 	return &Manager{sidecarPath: sidecarPath, managedDir: managedDir}
 }
 
+// SidecarPath 返回当前边车路径。
+func (m *Manager) SidecarPath() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.sidecarPath
+}
+
+// SetSidecarPath 更新边车路径。
+func (m *Manager) SetSidecarPath(p string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.sidecarPath = p
+}
+
 // ErrNoSidecar 表示边车不存在。
 var ErrNoSidecar = errors.New("依赖探测程序缺失（downvid-deps 未打包），无法检测或下载依赖")
 

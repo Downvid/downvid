@@ -1,8 +1,10 @@
 package sidecar
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -57,6 +59,37 @@ func TestExtractLeavesNoPartialFile(t *testing.T) {
 	for _, e := range entries {
 		if filepath.Ext(e.Name()) == ".tmp" {
 			t.Errorf("留下了临时文件：%s", e.Name())
+		}
+	}
+}
+
+// 验证 embed 路径在所有平台（尤其 Windows）都严格使用正斜杠且合乎 io/fs 规范。
+//
+// 事故复现：Windows 上若使用 filepath.Join 会生成反斜杠 `bin\windows-amd64\downvid-deps.exe`，
+// 在 embed.FS 中无法被匹配（报错 open ... file does not exist），导致依赖探测程序丢失。
+func TestEmbeddedPathSlashSeparated(t *testing.T) {
+	platforms := []struct {
+		goos   string
+		goarch string
+		want   string
+	}{
+		{"windows", "amd64", "bin/windows-amd64/downvid-deps.exe"},
+		{"windows", "arm64", "bin/windows-arm64/downvid-deps.exe"},
+		{"darwin", "arm64", "bin/darwin-arm64/downvid-deps"},
+		{"darwin", "amd64", "bin/darwin-amd64/downvid-deps"},
+		{"linux", "amd64", "bin/linux-amd64/downvid-deps"},
+	}
+
+	for _, tc := range platforms {
+		got := embeddedPath(tc.goos, tc.goarch)
+		if got != tc.want {
+			t.Errorf("embeddedPath(%q, %q) = %q, want %q", tc.goos, tc.goarch, got, tc.want)
+		}
+		if strings.Contains(got, `\`) {
+			t.Errorf("embed 路径不能包含反斜杠：got %q", got)
+		}
+		if !fs.ValidPath(got) {
+			t.Errorf("embed 路径必须是合法的 fs.ValidPath：got %q", got)
 		}
 	}
 }

@@ -666,7 +666,11 @@ func (a *App) sidecarPath() string {
 	// 「探测程序缺失」。用户看到的是「依赖页怎么只剩这么一点」，
 	// 而代码里没有任何一处会报错。
 	if sidecar.Available {
-		dir := filepath.Join(a.dataDir, "runtime", "bin")
+		dataDir := a.dataDir
+		if dataDir == "" {
+			dataDir = resolveDataDir()
+		}
+		dir := filepath.Join(dataDir, "runtime", "bin")
 		if p, err := sidecar.Extract(dir); err == nil {
 			return p
 		} else {
@@ -846,6 +850,7 @@ func runSidecar(sidecar string, args ...string) (string, error) {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, sidecar, args...)
+	hideWindow(cmd)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
@@ -1078,8 +1083,16 @@ type DepsInstallRequest struct {
 func (a *App) depsManager() *deps.Manager {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	sc := a.sidecarPath()
+	dataDir := a.dataDir
+	if dataDir == "" {
+		dataDir = resolveDataDir()
+	}
+	managedDir := filepath.Join(dataDir, "runtime", "bin")
 	if a.deps == nil {
-		a.deps = deps.NewManager(a.sidecarPath(), filepath.Join(a.dataDir, "runtime", "bin"))
+		a.deps = deps.NewManager(sc, managedDir)
+	} else if a.deps.SidecarPath() == "" && sc != "" {
+		a.deps.SetSidecarPath(sc)
 	}
 	return a.deps
 }

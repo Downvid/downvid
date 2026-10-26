@@ -2,6 +2,14 @@
 
 本文件记录 DownVid 的所有版本更新。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [1.6.4] - 2026-10-26
+
+### 修复
+
+- **Windows 架构依赖探测程序缺失**：修复 Wails 架构在 Windows 运行时由于 `embed.FS` 读取反斜杠路径失败，导致无法解出内嵌边车并报错「依赖探测程序缺失（downvid-deps 未打包）」的缺陷。现规范为跨平台统一的正斜杠 `io/fs` 路径规范。
+- **Windows 依赖探测黑框闪烁**：为 Windows 下执行的 `downvid-deps` 探测进程补充 `HideWindow: true` 属性，彻底消除每次后台检测时闪烁的控制台黑框。
+- **边车动态注册与数据目录回落**：增强 `deps.Manager` 边车路径的动态更新能力，并在初始化阶段提供严格的 `resolveDataDir()` 兜底。
+
 ## [1.6.3] - 2026-10-25
 
 ### 修复

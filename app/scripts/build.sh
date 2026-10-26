@@ -73,7 +73,7 @@ build_sidecar() {
       go build -trimpath -ldflags "-s -w" \
       -o "${dir}/${SIDECAR_NAME}" ./cmd/downvid-deps
   )
-  if [[ ! -x "${dir}/${SIDECAR_NAME}" ]]; then
+  if [[ ! -f "${dir}/${SIDECAR_NAME}" ]]; then
     echo "✗ 边车编译失败：${dir}/${SIDECAR_NAME} 不存在" >&2
     return 1
   fi
