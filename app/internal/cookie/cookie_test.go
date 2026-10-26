@@ -3,6 +3,7 @@ package cookie
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -180,5 +181,43 @@ func TestNormalizeCookieFileLeavesNetscapeAlone(t *testing.T) {
 	out, converted, err := NormalizeCookieFile(src, dir)
 	if err != nil || converted || out != src {
 		t.Fatalf("Netscape 输入应原样返回，got %q converted=%v err=%v", out, converted, err)
+	}
+}
+
+// 浏览器探测必须看「有没有可读的 Cookie 数据库」，不能只看装没装。
+//
+// 变异点：本机 Chrome 装了、进程也在跑，但 profile 目录是空的，于是
+// `--cookies-from-browser chrome` 报 could not find chrome cookies database，
+// 用户看到的是「自动读取 Cookie 失败」，却看不出是浏览器根本没登录过。
+func TestGetInstalledBrowsersRequiresCookieDB(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("该断言只针对 macOS 的 profile 路径")
+	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	// 只建「浏览器已安装」的外壳，不放 Cookies 数据库
+	profile := filepath.Join(home, "Library", "Application Support", "Google", "Chrome", "Default")
+	if err := os.MkdirAll(profile, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, b := range GetInstalledBrowsers() {
+		if b == "chrome" {
+			t.Fatal("没有 Cookies 数据库时不该把 chrome 列为可用")
+		}
+	}
+
+	// 放一份非空 Cookies 后才应出现
+	if err := os.WriteFile(filepath.Join(profile, "Cookies"), []byte("SQLite format 3\x00"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, b := range GetInstalledBrowsers() {
+		if b == "chrome" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("有 Cookies 数据库时应把 chrome 列为可用")
 	}
 }

@@ -395,6 +395,12 @@ func CookieFailureHint(failedBrowsers []string) string {
 	}
 
 	hint := fmt.Sprintf("%s未能读取 %s 的 Cookie，本次未携带登录信息。", CookieHintMarker, strings.Join(names, "、"))
+	// macOS 把 Chrome / Safari 的 profile 与 Cookie 容器放在 TCC 保护下：没有
+	// 「完全磁盘访问权限」的应用连目录都列不出来，yt-dlp 只会说
+	// "could not find chrome cookies database"，看起来像浏览器没登录。
+	if runtime.GOOS == "darwin" {
+		hint += "macOS 需要在「系统设置 → 隐私与安全性 → 完全磁盘访问权限」里允许本应用，否则读不到浏览器的 Cookie 数据库。"
+	}
 	if hasChromiumOnWindows {
 		hint += "Windows 上 Chrome/Edge 运行时 Cookie 数据库被锁定且加密，无法读取。"
 	}
@@ -428,29 +434,52 @@ func GetInstalledBrowsers() []string {
 			}
 		}
 	}
+	// addWithCookies 额外要求「真的有一份可读的 Cookie 数据库」。
+	//
+	// 只看浏览器装没装会骗人：本机实测 Chrome 装了、进程也在跑，
+	// 但 `~/Library/Application Support/Google/Chrome` 是个空目录（profile 在别处
+	// 或从未登录），于是 yt-dlp 拿到 `--cookies-from-browser chrome` 后报
+	// 「could not find chrome cookies database」，用户看到的是「自动读取 Cookie 失败」。
+	addWithCookies := func(name string, cookiesPaths []string) {
+		for _, f := range found {
+			if f == name {
+				return
+			}
+		}
+		for _, p := range cookiesPaths {
+			if st, err := os.Stat(p); err == nil && st.Mode().IsRegular() && st.Size() > 0 {
+				found = append(found, name)
+				return
+			}
+		}
+	}
 
 	home, _ := os.UserHomeDir()
 
 	switch runtime.GOOS {
 	case "darwin":
-		add("chrome", []string{
-			"/Applications/Google Chrome.app",
-			filepath.Join(home, "Applications", "Google Chrome.app"),
+		support := filepath.Join(home, "Library", "Application Support")
+		// Chromium 系：profile 目录下必须真有 Cookies 文件
+		addWithCookies("chrome", []string{
+			filepath.Join(support, "Google", "Chrome", "Default", "Cookies"),
+			filepath.Join(support, "Google", "Chrome", "Profile 1", "Cookies"),
 		})
-		add("edge", []string{
-			"/Applications/Microsoft Edge.app",
-			filepath.Join(home, "Applications", "Microsoft Edge.app"),
+		addWithCookies("edge", []string{
+			filepath.Join(support, "Microsoft Edge", "Default", "Cookies"),
 		})
-		add("safari", []string{
-			"/Applications/Safari.app",
+		addWithCookies("brave", []string{
+			filepath.Join(support, "BraveSoftware", "Brave-Browser", "Default", "Cookies"),
 		})
+		// Safari：Cookie 在沙盒容器里，没有「完全磁盘访问权限」时读不到
+		safariCookies := filepath.Join(home, "Library", "Containers", "com.apple.Safari",
+			"Data", "Library", "Cookies", "Cookies.binarycookies")
+		if f, err := os.Open(safariCookies); err == nil {
+			f.Close()
+			add("safari", []string{safariCookies})
+		}
 		add("firefox", []string{
 			"/Applications/Firefox.app",
 			filepath.Join(home, "Applications", "Firefox.app"),
-		})
-		add("brave", []string{
-			"/Applications/Brave Browser.app",
-			filepath.Join(home, "Applications", "Brave Browser.app"),
 		})
 
 	case "windows":
