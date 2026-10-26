@@ -63,6 +63,12 @@ type Settings struct {
 	DepMirror          string            `json:"depMirror"`
 	UpdateSource       string            `json:"updateSource"`
 	Language           string            `json:"language"` // auto / zh-CN / en-US
+	// BypassProxy 让**解析与下载**不走上面那个代理。
+	//
+	// 为什么要它：开着 TUN/透明代理的机器上，再给 yt-dlp 传 `--proxy`
+	// 等于双重代理——实测同一条 YouTube 视频，有代理时解析多花 1.6 秒、
+	// 速度波动到 0.7 MB/s，而不传反而稳定在 6.8 MB/s。
+	BypassProxy bool `json:"bypassProxy,omitempty"`
 }
 
 // boolPtr 取 *bool。

@@ -498,6 +498,10 @@
     white-space: nowrap;
     height: 26px;
     padding: 0 9px;
+    /* 二次确认态用实心红：空心红在 hover 高亮里几乎看不出来 */
+    background: var(--danger);
+    border-color: var(--danger);
+    color: #fff;
     animation: confirm-in 140ms var(--ease-out);
   }
   @keyframes confirm-in {

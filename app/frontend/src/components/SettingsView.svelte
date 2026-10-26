@@ -86,6 +86,10 @@
     app.updateSetting('accelEnabled', !app.settings.accelEnabled)
   }
 
+  function toggleBypassProxy(): void {
+    app.updateSetting('bypassProxy', !app.settings.bypassProxy)
+  }
+
   function toggleAutoCheck(): void {
     app.updateSetting('autoCheckUpdate', !app.settings.autoCheckUpdate)
   }
@@ -280,6 +284,23 @@
                 <span>{t('settings.proxyOk')}</span>
               </span>
             {/if}
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="row-label">
+            <span class="row-title">{t('settings.bypassProxy')}</span>
+            <span class="row-hint">{t('settings.bypassProxyHint')}</span>
+          </div>
+          <div class="row-control">
+            <button
+              type="button"
+              role="switch"
+              class="switch"
+              aria-checked={app.settings.bypassProxy}
+              aria-label={t('settings.bypassProxy')}
+              onclick={toggleBypassProxy}
+            ></button>
           </div>
         </div>
       {:else if app.settingsSection === 'acceleration'}
@@ -507,23 +528,6 @@
           刻意做成「告知 + 手动下载」而不是自动迁移：迁移是单向门 ——
           装上新架构后没有 electron-updater 可用，回不到 Electron 版。
         -->
-        {#if app.updateInfo.architecture === 'electron' && app.updateInfo.migration?.available}
-          <div class="row row--migration">
-            <div class="row-label">
-              <span class="row-title">{t('settings.migrationTitle')}</span>
-              <span class="row-hint">
-                {t('settings.migrationHint', { version: app.updateInfo.migration.version ?? '' })}
-              </span>
-              <span class="migration-asset num">{app.updateInfo.migration.assetName}</span>
-            </div>
-            <div class="row-control">
-              <button type="button" class="btn btn-ghost btn-sm" onclick={() => app.openMigrationDownload()}>
-                <Icon name="download" size={14} />
-                <span>{t('settings.migrationDownload')}</span>
-              </button>
-            </div>
-          </div>
-        {/if}
 
         <div class="action-bar">
           <button
@@ -685,11 +689,17 @@
     align-items: start;
   }
 
+  /* 侧边栏做成一块独立的浅色面板：原先它和正文同底色，
+     一屏看下去分不清「导航」和「内容」的边界。 */
   .settings-nav {
     display: flex;
     flex-direction: column;
     gap: 2px;
     min-width: 0;
+    padding: 8px;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-card);
+    background: color-mix(in oklab, var(--paper-sunk) 78%, var(--paper-raised));
   }
   .settings-tab {
     position: relative;
@@ -712,10 +722,12 @@
   }
   .settings-tab:hover {
     color: var(--ink);
-    background: color-mix(in oklab, var(--ink) 4%, transparent);
+    background: color-mix(in oklab, var(--ink) 7%, transparent);
   }
   .settings-tab.is-active {
     color: var(--ink-strong);
+    background: var(--paper-raised);
+    box-shadow: 0 1px 2px color-mix(in oklab, var(--ink) 8%, transparent);
   }
   /* 左侧 2px 琥珀条是选中态唯一的强信号 */
   .settings-tab.is-active::before {
@@ -836,21 +848,6 @@
 
   /* 新架构迁移提示：用强调色描边，但不用主色填充——
      它是一个「可选建议」，不该抢走「检查更新」主按钮的注意力 */
-  .row--migration {
-    border: 1px solid color-mix(in oklab, var(--accent) 35%, var(--rule));
-    border-radius: var(--radius-control);
-    background: color-mix(in oklab, var(--accent) 6%, transparent);
-    padding: 12px 14px;
-    margin: 12px 0;
-  }
-  .migration-asset {
-    display: block;
-    margin-top: 4px;
-    font-size: 9.5px;
-    color: var(--color-on-surface-variant);
-    word-break: break-all;
-  }
-
   .action-bar {
     display: flex;
     align-items: center;
@@ -1096,21 +1093,6 @@
     }
     /* 新架构迁移提示：用强调色描边，但不用主色填充——
      它是一个「可选建议」，不该抢走「检查更新」主按钮的注意力 */
-  .row--migration {
-    border: 1px solid color-mix(in oklab, var(--accent) 35%, var(--rule));
-    border-radius: var(--radius-control);
-    background: color-mix(in oklab, var(--accent) 6%, transparent);
-    padding: 12px 14px;
-    margin: 12px 0;
-  }
-  .migration-asset {
-    display: block;
-    margin-top: 4px;
-    font-size: 9.5px;
-    color: var(--color-on-surface-variant);
-    word-break: break-all;
-  }
-
   .action-bar {
       justify-content: stretch;
     }

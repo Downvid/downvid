@@ -1436,6 +1436,7 @@ func applySettingsPatch(st *settings.Settings, patch map[string]any) {
 	str("language", &st.Language)
 	boolean("autoCheckUpdate", &st.AutoCheckUpdate)
 	boolean("autoDownloadUpdate", &st.AutoDownloadUpdate)
+	boolean("bypassProxy", &st.BypassProxy)
 
 	if v, ok := patch["acceleration"].(map[string]any); ok {
 		if enabled, ok := v["enabled"].(bool); ok {
@@ -1463,8 +1464,14 @@ func applySettingsPatch(st *settings.Settings, patch map[string]any) {
 // currentProxy 返回当前生效的代理（线程安全）。
 func (a *App) currentProxy() string {
 	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.proxy
+	p := a.proxy
+	a.mu.Unlock()
+	// 「解析与下载不走代理」：TUN 机器上再传 --proxy 属于双重代理，实测更慢。
+	// 放在这里统一处理，Parse / StartDownload / InstallDeps 都走同一份判断。
+	if st, err := a.settingsStore().Load(); err == nil && st.BypassProxy {
+		return ""
+	}
+	return p
 }
 
 // syncRuntimeSettings 把设置里「运行时要用到的字段」同步进内存。

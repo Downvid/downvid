@@ -50,6 +50,8 @@ export interface AppSettings {
   proxy: string
   accelEnabled: boolean
   maxConnections: number
+  /** 解析与下载不走代理（TUN / 透明代理的机器用） */
+  bypassProxy: boolean
   updateSource: UpdateSourceId
   depMirror: DepMirrorId
   autoCheckUpdate: boolean
@@ -72,6 +74,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   proxy: '',
   accelEnabled: true,
   maxConnections: 8,
+  bypassProxy: false,
   updateSource: 'auto',
   depMirror: 'auto',
   autoCheckUpdate: true,
@@ -135,6 +138,7 @@ export function toBackendPatch(s: Partial<AppSettings>): Record<string, unknown>
   // cookieFile ↔ cookiesFile（单复数）
   if (s.cookieFile !== undefined) patch.cookiesFile = s.cookieFile
   if (s.proxy !== undefined) patch.proxy = s.proxy
+  if (s.bypassProxy !== undefined) patch.bypassProxy = s.bypassProxy
   if (s.updateSource !== undefined) patch.updateSource = s.updateSource
   if (s.depMirror !== undefined) patch.depMirror = s.depMirror
   if (s.autoCheckUpdate !== undefined) patch.autoCheckUpdate = s.autoCheckUpdate
@@ -186,6 +190,7 @@ export function fromBackend(
     accelEnabled: bool(acceleration.enabled, base.accelEnabled),
     // 连接数归到最近的档位：后端的合法范围是 1..16，而滑块只有四档，
     // 直接透传一个 7 会让滑块找不到对应位置
+    bypassProxy: bool(raw.bypassProxy, base.bypassProxy),
     maxConnections: nearestConnectionStop(
       typeof acceleration.maxConnections === 'number'
         ? acceleration.maxConnections
