@@ -14,7 +14,7 @@
 <meta property="og:image" content="https://raw.githubusercontent.com/Downvid/downvid/main/.github/assets/social-preview.png">
 <meta name="twitter:card" content="summary_large_image">
 
-<link rel="icon" href="https://raw.githubusercontent.com/Downvid/downvid/main/src/assets/logo.png">
+<link rel="icon" href="https://raw.githubusercontent.com/Downvid/downvid/main/app/frontend/src/assets/logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Inter:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
@@ -27,7 +27,7 @@
 <header>
   <div class="nav">
     <a class="brand" href="#top">
-      <img src="https://raw.githubusercontent.com/Downvid/downvid/main/src/assets/logo.png" alt="DownVid" width="28" height="28">
+      <img src="https://raw.githubusercontent.com/Downvid/downvid/main/app/frontend/src/assets/logo.png" alt="DownVid" width="28" height="28">
       DownVid
       <span class="brand-tag" data-i18n="brand.tag">开源</span>
     </a>
@@ -75,22 +75,6 @@
         </a>
       </div>
       <p class="dl-note" id="dlNote"></p>
-      <!--
-        新架构（Wails）预览版入口。
-        
-        刻意做成**次级文字链接**而不是第二个主按钮：
-        新架构版目前没有自更新，误当主推会让新用户每版都要手动回来下载。
-        没有该平台的产物时整块隐藏（脚本里控制），不留死链。
-      -->
-      <p class="dl-preview" id="dlPreview" hidden>
-        <a id="dlPreviewLink" href="https://github.com/Downvid/downvid/releases">
-          <span data-i18n="dl.preview.link">试用新架构预览版</span>
-          <span class="dl-preview-badge" data-i18n="dl.preview.badge">预览</span>
-        </a>
-        <span class="dl-preview-note" data-i18n="dl.preview.note">
-          体积约为原来的 1/7，启动更快；暂不支持自动更新与抖音/快手
-        </span>
-      </p>
       <!-- 下载量 / 星标用 README 同款 shields.io 徽章：数字实时，不再维护静态值 -->
       <div class="hero-badges">
         <a href="https://github.com/Downvid/downvid/releases" rel="noopener"><img src="https://img.shields.io/github/downloads/Downvid/downvid/total?style=flat&amp;label=Downloads&amp;logo=github&amp;logoColor=white&amp;color=2563eb" alt="Downloads" height="20"></a>
@@ -103,7 +87,7 @@
     <div class="dv-stage">
       <div class="dv-bar">
         <span class="dv-lights" aria-hidden="true"><i></i><i></i><i></i></span>
-        <span class="dv-brand"><img src="https://raw.githubusercontent.com/Downvid/downvid/main/src/assets/logo.png" alt="" width="26" height="26"><b>DownVid</b></span>
+        <span class="dv-brand"><img src="https://raw.githubusercontent.com/Downvid/downvid/main/app/frontend/src/assets/logo.png" alt="" width="26" height="26"><b>DownVid</b></span>
         <div class="dv-nav" role="tablist">
           <button class="dv-tab is-on" type="button" role="tab" aria-selected="true" data-dv-tab="download">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20h14v-2H5v2zM19 9h-4V3H9v6H5l7 7 7-7z"/></svg>
@@ -202,7 +186,7 @@
               </div>
               <div class="dv-recent-grid">
                 <button class="dv-feature" type="button" data-recent>
-                  <span class="dv-feature-img" style="background-image:url(https://raw.githubusercontent.com/Downvid/downvid/main/src/assets/demo-thumb.jpg)"></span>
+                  <span class="dv-feature-img" style="background-image:url(https://raw.githubusercontent.com/Downvid/downvid/main/app/frontend/src/assets/demo-thumb.jpg)"></span>
                   <span class="dv-feature-shade"></span>
                   <span class="dv-feature-index dv-mono">01</span>
                   <span class="dv-feature-quality dv-mono">4K</span>
@@ -240,7 +224,7 @@
                   <svg viewBox="0 0 160 96" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
                     <rect width="160" height="96" fill="#a9d3ee"/><rect y="54" width="160" height="42" fill="#dfc9b0"/><circle cx="120" cy="24" r="9" fill="#ffe0ae"/><path d="M0 96 L36 52 L58 74 L78 40 L104 80 L124 62 L160 96 Z" fill="#7d6553"/><path d="M50 66 L78 26 L106 66 Z" fill="#5c4a3d"/><path d="M68 41 L78 26 L88 41 L82 45 L78 40 L74 45 Z" fill="#fff8f4"/>
                   </svg>
-                  <img class="dv-thumb" src="https://raw.githubusercontent.com/Downvid/downvid/main/src/assets/demo-thumb.jpg" alt="" loading="eager">
+                  <img class="dv-thumb" src="https://raw.githubusercontent.com/Downvid/downvid/main/app/frontend/src/assets/demo-thumb.jpg" alt="" loading="eager">
                 </div>
                 <div class="dv-video-meta">
                   <p class="dv-video-title">Day Trip to Mt. Fuji Area from Tokyo | Winter Train Trip | JAPAN TRAVEL VLOG</p>
@@ -285,7 +269,7 @@
           </div>
           <div class="dv-alt-panel dv-about" id="dvAltAbout" hidden>
             <div class="dv-about-header">
-              <img class="dv-about-logo" src="https://raw.githubusercontent.com/Downvid/downvid/main/src/assets/logo.png" alt="" width="52" height="52">
+              <img class="dv-about-logo" src="https://raw.githubusercontent.com/Downvid/downvid/main/app/frontend/src/assets/logo.png" alt="" width="52" height="52">
               <div class="dv-about-title-block">
                 <p class="dv-about-name">DownVid</p>
                 <p class="dv-about-version" id="dvAboutVersion" data-version>v1.6.4</p>
@@ -638,7 +622,7 @@
     <div class="foot-divider"></div>
     <div class="foot">
       <div class="foot-brand">
-        <img src="https://raw.githubusercontent.com/Downvid/downvid/main/src/assets/logo.png" alt="" width="22" height="22">
+        <img src="https://raw.githubusercontent.com/Downvid/downvid/main/app/frontend/src/assets/logo.png" alt="" width="22" height="22">
         <span>DownVid</span>
       </div>
       <p data-i18n="foot.license">MIT 协议开源</p>

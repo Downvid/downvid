@@ -28,7 +28,8 @@ describe('官网地址', () => {
   })
 
   it('各个 README 的导航行都指向它', () => {
-    for (const file of ['README.md', 'README.zh-CN.md', 'README.en.md']) {
+    // README.zh-CN.md 已删除（内容与 README.md 重复），只剩中英两份
+    for (const file of ['README.md', 'README.en.md']) {
       expect(read(file), `${file} 的导航行`).toContain(WEBSITE_URL)
     }
   })
@@ -59,7 +60,7 @@ describe('商务合作 / 赞助邮箱', () => {
   })
 
   it('各个 README 都写出了邮箱与两类入口', () => {
-    for (const file of ['README.md', 'README.zh-CN.md', 'README.en.md']) {
+    for (const file of ['README.md', 'README.en.md']) {
       const text = read(file)
       expect(text, `${file} 应写明邮箱`).toContain(CONTACT_EMAIL)
       // 两类入口（赞助 / 商务）各一条主题；导航行与正文小节会各出现一次，
@@ -78,8 +79,8 @@ describe('商务合作 / 赞助邮箱', () => {
     // 而「在 FAQ / 参与贡献 / 协议之前」才是这条需求的真实含义。
     const cases: [string, string[]][] = [
       ['README.md', ['## 常见问题', '## 参与贡献', '## 开源协议与致谢']],
-      ['README.zh-CN.md', ['## 常见问题', '## 参与贡献', '## 开源协议与致谢']],
-      ['README.en.md', ['## FAQ', '## Contributing', '## License and credits']],
+      // EN 版没有独立的 FAQ / Contributing 章节，取实际存在的后置章节
+      ['README.en.md', ['## About', '## License']],
     ]
     for (const [file, laterSections] of cases) {
       const text = read(file)
@@ -109,11 +110,11 @@ describe('商务合作 / 赞助邮箱', () => {
   })
 
   it('README 里区分了「软件内无广告」与项目层面的合作', () => {
-    // README.zh-CN 的卖点里写着「无任何弹窗广告、无捆绑插件」。
+    // README.md 的卖点里写着「无任何弹窗广告、无捆绑插件」。
     // 加了广告位合作入口却不作区分，读者会以为要往安装包里塞广告——
     // 那是与既有承诺直接冲突的表述，必须显式说明谈的是项目层面的展示位。
-    expect(read('README.md')).toMatch(/不含任何广告/)
-    expect(read('README.zh-CN.md')).toMatch(/不含任何广告/)
+    // 措辞可能带修饰语（「不含任何商业广告」），只钉「不含…广告」这个承诺
+    expect(read('README.md')).toMatch(/不含任何.{0,4}广告/)
     expect(read('README.en.md')).toMatch(/contains no ads|no ads and never will/i)
   })
 })

@@ -58,6 +58,12 @@ jobs:
           build-mode: ${{ matrix.build-mode }}
           queries: security-and-quality
 
+      # main.go 里有 `//go:embed all:frontend/dist`：目录不存在时 Go 直接编译失败
+      # （pattern all:frontend/dist: no matching files found）。
+      - name: 准备 embed 目录
+        if: matrix.language == 'go'
+        run: bash app/scripts/prepare-embed-dir.sh
+
       # 仓库存两个独立的 Go 模块（backend/ 边车、app/ 核心），
       # 用 manual 显式构建，避免 autobuild 在仓库根找不到模块
       - name: Build Go modules

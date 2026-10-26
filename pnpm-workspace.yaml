@@ -1,8 +1,11 @@
 packages:
   - '.'
+# pnpm 11 要求对每个带 install 脚本的依赖显式表态（未表态直接 exit 1，
+# 报 ERR_PNPM_IGNORED_BUILDS）。这里只为实际需要的开脚本：
+# esbuild 需要下载/链接平台二进制，其余是 Electron 时代遗留依赖，不再使用。
 allowBuilds:
-  bufferutil: set this to true or false
-  electron: set this to true or false
-  electron-winstaller: set this to true or false
+  bufferutil: false
+  electron: false
+  electron-winstaller: false
   esbuild: true
-  utf-8-validate: set this to true or false
+  utf-8-validate: false
