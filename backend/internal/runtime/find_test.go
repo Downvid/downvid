@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/yxxbc/downvid/backend/internal/probe"
 )
 
 // 写一个可执行的假二进制，输出指定的版本号
@@ -175,14 +173,6 @@ func TestFfprobeIsOptional(t *testing.T) {
 	}
 }
 
-func TestSystemDirsExcludesAsar(t *testing.T) {
-	for _, dir := range systemDirs() {
-		if filepath.Base(dir) == "app.asar" || len(dir) > 0 && filepath.Base(filepath.Dir(dir)) == "app.asar" {
-			t.Errorf("常见目录不应包含 app.asar：%q", dir)
-		}
-	}
-}
-
 // TestSlowManagedBinaryIsStillAdopted 回归 issue：下载完成后仍显示「下载」。
 //
 // 用户点「下载」→ 进度跑完 → 界面**还是显示「下载」**，反复点无效。
@@ -218,66 +208,6 @@ func TestSlowManagedBinaryIsStillAdopted(t *testing.T) {
 	if res.Version != "2026.10.10.233141" {
 		t.Errorf("版本 = %q，期望 2026.10.10.233141", res.Version)
 	}
-}
-
-// TestScanTimeLimitOutlastsOneCandidate 扫描时限必须容得下一个慢候选。
-//
-// 否则保底扫描会在命中第一个文件（可能正是刚下载好的托管副本）时被时限掐断，
-// 「明明装了却说找不到」的旧问题会换个地方复现。
-func TestScanTimeLimitOutlastsOneCandidate(t *testing.T) {
-	if scanTimeLimit <= probe.CandidateTimeout {
-		t.Fatalf("scanTimeLimit = %s 必须 > probe.CandidateTimeout = %s，"+
-			"否则扫描连一个慢候选都跑不完", scanTimeLimit, probe.CandidateTimeout)
-	}
-}
-
-// TestHangingSystemCandidatesDoNotStarveGoodCopy 回归 Windows 回归用例暴露的设计缺陷。
-//
-// 曾用「超时后重试一次」对付慢启动，结果每个**卡死**的候选要 30 秒
-// （15 秒 × 2），两个卡死候选就把一个依赖的预算吃光，排在后面的正常副本
-// 永远轮不到 —— CI 的 windows job 正是这样失败的（两个卡死候选之后才轮到
-// 正常副本）。正确解法是**按来源给不同预算**：托管副本给足，系统副本
-// 用短预算，卡死的尽早放弃。
-func TestHangingSystemCandidatesDoNotStarveGoodCopy(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Windows 上无法用 shell 脚本模拟慢启动")
-	}
-	if testing.Short() {
-		t.Skip("需要真实等待，short 模式跳过")
-	}
-	// 构造：托管目录为空 → 两个卡死在 PATH 里的候选 → 第三个正常
-	managed := t.TempDir()
-	dirs := []string{t.TempDir(), t.TempDir(), t.TempDir()}
-	for _, dir := range dirs[:2] {
-		hang := filepath.Join(dir, BinaryName(KindYtDlp))
-		if err := os.WriteFile(hang, []byte("#!/bin/sh\nsleep 300\n"), 0o755); err != nil {
-			t.Fatal(err)
-		}
-	}
-	_ = fakeBinary(t, dirs[2], BinaryName(KindYtDlp), "2026.10.10.233141")
-
-	// **必须保留原有的 PATH**：把 PATH 整体替换成临时目录后，假二进制里的
-	// `sleep` 就找不到了，脚本会立刻报「command not found」并退出——
-	// 于是这个用例变成空转（实测总耗时 0.67s，根本没等到超时），
-	// 而它要验证的正是「卡死候选会被短预算放弃」。
-	t.Setenv("PATH", strings.Join(append(dirs, os.Getenv("PATH")), string(os.PathListSeparator)))
-
-	start := time.Now()
-	res := FindOne(KindYtDlp, Options{ManagedDir: managed})
-	elapsed := time.Since(start)
-
-	if !res.Found {
-		t.Fatalf("卡死候选之后的正常副本应被采用，实际：%s", res.Reason)
-	}
-	if res.Version != "2026.10.10.233141" {
-		t.Errorf("版本 = %q，期望 2026.10.10.233141", res.Version)
-	}
-	// 两个卡死候选各 5 秒预算 + 各自 2 秒 WaitDelay + 正常副本，
-	// 上限按 20 秒断言；若系统候选误用 15 秒预算，这里会变成 30 秒以上。
-	if elapsed > 20*time.Second {
-		t.Errorf("探测耗时 %s，系统候选的短预算没有生效", elapsed)
-	}
-	t.Logf("两个卡死候选 + 正常副本耗时 %s", elapsed)
 }
 
 // TestProbeBudgetResets 候选执行预算必须是每次探测私有的新对象。

@@ -1,10 +1,12 @@
 // Package runtime 负责在机器上查找 yt-dlp / ffmpeg / ffprobe。
 //
-// 查找顺序（系统优先，缺失才由 DownVid 下载）：
+// 查找顺序（只认托管目录，三端一致）：
 //  1. 显式指定的路径（设置里手动选择）
-//  2. userData 托管目录（DownVid 自己下载安装的）
-//  3. 登录 shell 的 PATH（GUI 应用常拿不到完整 PATH，这一步很关键）
-//  4. 各平台常见安装目录（Homebrew / winget / scoop / 发行版路径）
+//  2. `~/.downvid/runtime/bin` 托管目录（DownVid 自己下载安装的）
+//
+// **不再扫描系统 PATH / Homebrew / WinGet 等目录**：同一台机器上「装了 Homebrew 的
+// ffmpeg 但 yt-dlp 是托管的」这种混合状态会让三端表现各不相同，排障时说不清
+// 到底跑的是哪一份。现在只有一处来源，缺了就由边车下载到同一目录。
 package runtime
 
 import (
@@ -65,10 +67,12 @@ func BinaryName(kind Kind) string {
 type Source string
 
 const (
-	SourceManaged Source = "managed" // DownVid 下载到 userData 的
-	SourceSystem  Source = "system"  // 系统安装（PATH / 常见目录）
+	SourceManaged Source = "managed" // DownVid 下载到 ~/.downvid/runtime/bin 的
 	SourceManual  Source = "manual"  // 用户在设置里手动指定
-	SourceScanned Source = "scanned" // 保底全盘扫描发现的（不在已知安装位置）
+	// SourceSystem / SourceScanned 已不再产生：探测只认托管目录与手动路径。
+	// 常量保留是因为前端与历史结果里可能还带着这两个值，删掉会让旧数据解析成空串。
+	SourceSystem  Source = "system"
+	SourceScanned Source = "scanned"
 )
 
 // Options 探测输入
@@ -215,29 +219,6 @@ func findOneContext(parent context.Context, kind Kind, opts Options) Result {
 		return res
 	}
 
-	// 保底：已知目录都没命中时，做一次**有界的**全盘扫描。
-	//
-	// 为什么需要：候选目录是枚举出来的，覆盖不了便携版、自定义安装目录、
-	// 或者将来某个包管理器换的新落点。这类情况下用户明明装了却被告知缺失，
-	// 且无从下手。
-	//
-	// 为什么必须有界：全盘遍历在 Windows 上可能耗时很久（且会扫到网络盘）。
-	// 因此只扫几个最可能的根目录、限制深度与访问条目数、命中即停。
-	// 扫描预算从扫描开始计算，不能被前面的版本执行消耗掉。
-	b.resetScan()
-	if deadline, ok := ctx.Deadline(); ok && deadline.Before(b.scanDeadline) {
-		b.scanDeadline = deadline
-	}
-	if fallback := scanForBinary(ctx, kind, b); fallback != nil {
-		res.Found = true
-		res.Path = fallback.Path
-		res.Version = fallback.Version
-		res.Source = string(SourceScanned)
-		res.Managed = false
-		res.Form = binaryForm(kind, fallback.Path)
-		return res
-	}
-
 	res.RequiredVersion = requiredVersion(kind)
 	res.Stale = staleSeen
 	if staleSeen {
@@ -259,7 +240,7 @@ func findOneContext(parent context.Context, kind Kind, opts Options) Result {
 	case lastErr != nil && !isNotExist(lastErr):
 		res.Reason = lastErr.Error()
 	default:
-		res.Reason = "未在托管目录、PATH、常见安装目录中找到（已尝试扫描常见位置）"
+		res.Reason = "未在托管目录（~/.downvid/runtime/bin）或手动指定路径中找到，可在「设置 → 运行依赖」下载"
 	}
 	return res
 }
@@ -327,35 +308,19 @@ const probeTimeLimit = 45 * time.Second
 //
 // ## 为什么不再是包级变量（这是真出过事故的）
 //
-// `FindAllContext` 会并行探测四个依赖。早先 `scanDirsLeft` / `scanDeadline` /
-// `probeDeadline` 都是包级变量：四个 goroutine 同时 reset，彼此的额度互相覆盖。
-// 症状非常隐蔽——Windows 回归里「`Downloads/a-bad` 是坏文件，应继续找到
-// `b-valid`」这条**始终**失败（另一个依赖先把目录预算抢到 0），而单跑该用例
+// `FindAllContext` 会并行探测四个依赖，`probeDeadline` 早先是包级变量：
+// 四个 goroutine 同时 reset，彼此的额度互相覆盖。症状非常隐蔽——「A 是坏文件，
+// 应继续找到 B」这类用例**始终**失败（另一个依赖先把预算抢到 0），单跑该用例
 // 又必过；`go test -race` 一次就报出 DATA RACE。
 //
 // 预算天生是「一次探测之内」的状态，就该挂在这次探测上，而不是进程上。
 type budget struct {
-	scanDirsLeft  int
-	scanDeadline  time.Time
 	probeDeadline time.Time
 }
 
 // newBudget 构造一份满额预算。
 func newBudget() *budget {
-	return &budget{
-		scanDirsLeft:  scanMaxDirs,
-		scanDeadline:  time.Now().Add(scanTimeLimit),
-		probeDeadline: time.Now().Add(probeTimeLimit),
-	}
-}
-
-// resetScan 在保底扫描开始前重置扫描额度。
-//
-// 扫描预算从扫描开始计算，不能被前面那些「跑版本号」的候选消耗掉
-// ——一次探测里最坏要执行十几个候选。
-func (b *budget) resetScan() {
-	b.scanDirsLeft = scanMaxDirs
-	b.scanDeadline = time.Now().Add(scanTimeLimit)
+	return &budget{probeDeadline: time.Now().Add(probeTimeLimit)}
 }
 
 // probeBudgetExhausted 判断候选执行总预算是否已用尽。
@@ -364,169 +329,6 @@ func (b *budget) probeBudgetExhausted() bool {
 		return false
 	}
 	return time.Now().After(b.probeDeadline)
-}
-
-// scanForBinary 在常见根目录下有限度地搜索可执行文件。
-//
-// 只作为保底：正常路径（托管目录 / PATH / 常见安装目录）都已尝试过才会走到这里。
-// 扫到的结果标记为 SourceScanned，界面会提示"自动扫描发现"，便于用户判断来源。
-func scanForBinary(ctx context.Context, kind Kind, b *budget) *probe.Info {
-	name := BinaryName(kind)
-	seen := map[string]bool{}
-	var result *probe.Info
-
-	for _, root := range scanRoots() {
-		if seen[root] {
-			continue
-		}
-		seen[root] = true
-
-		found := scanDirMatching(b, root, name, 0, func(file string) bool {
-			probeCtx, cancel := context.WithDeadline(ctx, b.scanDeadline)
-			defer cancel()
-			info, err := probeToolContext(probeCtx, kind, file)
-			if err != nil || !isAcceptableVersion(kind, info) {
-				return false
-			}
-			result = &info
-			return true
-		})
-		if found != "" {
-			return result
-		}
-	}
-	return nil
-}
-
-// scanDir 在 dir 下最多下探 maxDepth 层查找 name。
-//
-// 限制点：
-//   - 深度（默认 4 层）：够到 `.../bin/yt-dlp`、`.../ffmpeg/bin/ffmpeg.exe` 这类层级
-//   - 目录数预算：真正决定耗时的是**递归进入的目录数**（每次 ReadDir 是系统调用），
-//     而不是单个目录里有多少文件
-//   - 跳过明显无关的目录（node_modules、缓存、系统目录）
-func scanDir(b *budget, dir string, name string, depth int) string {
-	return scanDirMatching(b, dir, name, depth, func(string) bool { return true })
-}
-
-// 无效或过旧的同名文件不应遮蔽同一目录树中的其他副本。
-func scanDirMatching(b *budget, dir string, name string, depth int, accept func(string) bool) string {
-	// 三道闸：深度、目录数预算、以及 wall-clock 上限。
-	// 加时间上限是因为目录数预算无法约束"每个目录都很慢"的情况
-	// （Windows 上 Program Files 叠加杀软扫描，单次 ReadDir 可能数百毫秒）。
-	// 没有它，"保底扫描"可能反而让用户看到"依赖检测超时"。
-	if depth > scanMaxDepth || b.scanDirsLeft <= 0 || b.scanExpired(time.Now()) {
-		return ""
-	}
-	b.scanDirsLeft--
-
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return ""
-	}
-
-	var subdirs []string
-	for _, e := range entries {
-		full := filepath.Join(dir, e.Name())
-
-		if e.IsDir() {
-			if shouldSkipDir(e.Name()) {
-				continue
-			}
-			subdirs = append(subdirs, full)
-			continue
-		}
-
-		// 命中：文件名完全匹配（Windows 上大小写不敏感）
-		if strings.EqualFold(e.Name(), name) && accept(full) {
-			return full
-		}
-	}
-
-	for _, sub := range subdirs {
-		if found := scanDirMatching(b, sub, name, depth+1, accept); found != "" {
-			return found
-		}
-	}
-	return ""
-}
-
-const scanMaxDepth = 4
-
-// scanMaxDirs 单次扫描允许进入的目录数上限。
-//
-// 刻意按目录数而不是条目数计：早先按条目计（20000 条），在 Windows 上扫
-// `C:\Program Files` 一个大目录就耗尽了预算，导致保底扫描形同虚设
-// ——CI 的 windows job 正是这样把它暴露出来的。
-const scanMaxDirs = 3000
-
-// scanTimeLimit 单次扫描最多占用多久。宁可漏扫也不要把检测拖成超时。
-//
-// 必须**大于** probe.CandidateTimeout：否则扫描命中的第一个可执行文件
-// （比如正是刚下载好的托管副本，首次执行本机实测最慢 12.4 秒）必然被扫描
-// 时限掐断，保底扫描就永远发现不了它。CandidateTimeout + 一个候选的余量。
-const scanTimeLimit = 18 * time.Second
-
-// scanExpired 判断扫描是否已超时。
-//
-// **零值必须视为"无期限"而不是"已过期"**：time.Time 的零值下
-// `now.After(zero)` 恒为 true，会让扫描静默地什么都不做。
-// 这个坑被 CI 抓到了——直接调用 scanDir 的用例（未经过 findOne 设置时限）
-// 在 Windows 上（更慢、更容易触到）失败。
-func (b *budget) scanExpired(now time.Time) bool {
-	if b == nil || b.scanDeadline.IsZero() {
-		return false
-	}
-	return now.After(b.scanDeadline)
-}
-
-// shouldSkipDir 跳过明显不可能放可执行文件、或体量过大的目录
-func shouldSkipDir(name string) bool {
-	switch strings.ToLower(name) {
-	case "node_modules", ".git", ".cache", "cache", "caches", "logs", "tmp", "temp",
-		"windows", "system32", "winsxs", "$recycle.bin", "appdata":
-		return true
-	}
-	return false
-}
-
-// scanRoots 返回扫描的根目录，按可能性排序。
-//
-// 只放"用户会自己放东西"的地方，不放整个磁盘根（在 Windows 上遍历 C:\ 太慢）。
-func scanRoots() []string {
-	home, _ := os.UserHomeDir()
-	var roots []string
-
-	if home != "" {
-		roots = append(roots,
-			filepath.Join(home, "Downloads"),
-			filepath.Join(home, "Desktop"),
-			filepath.Join(home, "Documents"),
-			filepath.Join(home, "bin"),
-			filepath.Join(home, ".local", "bin"),
-			filepath.Join(home, "scoop", "apps"),
-			filepath.Join(home, "AppData", "Local", "Programs"),
-		)
-	}
-
-	switch runtime.GOOS {
-	case "darwin":
-		roots = append(roots, "/opt/homebrew/bin", "/usr/local/bin", "/Applications", "/opt/local/bin")
-	case "linux":
-		roots = append(roots, "/usr/local/bin", "/usr/bin", "/opt", "/snap/bin")
-	case "windows":
-		local := envDir("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
-		roots = append(roots,
-			filepath.Join(local, "Programs"),
-			envDir("SCOOP", filepath.Join(home, "scoop")),
-			envDir("SCOOP_GLOBAL", filepath.Join(envDir("ProgramData", `C:\ProgramData`), "scoop")),
-			envDir("ProgramFiles", `C:\Program Files`),
-			envDir("ProgramFiles(x86)", `C:\Program Files (x86)`),
-			`C:\tools`,
-			`C:\ffmpeg`,
-		)
-	}
-	return roots
 }
 
 // MinVersions 是各依赖的最低可用版本，由 CLI 从清单注入。
@@ -597,9 +399,6 @@ func candidatesFor(kind Kind, opts Options) []candidate {
 		list = append(list, candidate{Path: p, Source: SourceManual})
 	}
 	add(opts.ManagedDir, SourceManaged)
-	for _, dir := range systemDirs() {
-		add(dir, SourceSystem)
-	}
 	return dedupe(list)
 }
 
@@ -627,15 +426,14 @@ func probeToolContext(ctx context.Context, kind Kind, path string) (probe.Info, 
 
 // probeToolCandidate 按候选来源决定执行时限。
 //
-// 托管副本是我们自己下载的官方构建（PyInstaller，首次执行最慢实测 12.4 秒），
-// 必须给足；系统副本通常是 0.2 秒的 zipapp，卡死时要尽快放弃——
-// 候选表里可能有十几个路径，每个都等 15 秒会把一次检测拖到几分钟。
+// 托管副本与用户手动指定的路径都可能是官方 PyInstaller 构建（首次执行最慢
+// 实测 12.4 秒），必须给足 15 秒；其余来源（理论上已不存在）用短预算尽快放弃。
 func probeToolCandidate(ctx context.Context, kind Kind, c candidate) (probe.Info, error) {
 	if _, err := os.Stat(c.Path); err != nil {
 		return probe.Info{Path: c.Path}, err
 	}
 	timeout := probe.SystemCandidateTimeout
-	if c.Source == SourceManaged {
+	if c.Source == SourceManaged || c.Source == SourceManual {
 		timeout = probe.CandidateTimeout
 	}
 	return probe.RunWithTimeout(ctx, string(kind), c.Path, timeout)
@@ -647,23 +445,6 @@ var (
 	shellPathsOnce sync.Once
 	shellPaths     []string
 )
-
-// systemDirs 返回登录 shell 的 PATH、当前 PATH 与各平台常见安装目录
-func systemDirs() []string {
-	dirs := filepath.SplitList(livePath())
-	dirs = append(dirs, commonInstallDirs()...)
-
-	filtered := make([]string, 0, len(dirs))
-	for _, d := range dirs {
-		d = strings.TrimSpace(d)
-		// 打包应用会把自身目录塞进 PATH，需排除以免误判
-		if d == "" || strings.Contains(d, "app.asar") {
-			continue
-		}
-		filtered = append(filtered, filepath.Clean(d))
-	}
-	return filtered
-}
 
 // livePath 合并当前进程 PATH 与登录 shell 的 PATH。
 //
@@ -794,150 +575,6 @@ func loginShellPath() []string {
 		return nil
 	}
 	return filepath.SplitList(strings.TrimSpace(string(out)))
-}
-
-// expandWindowsGlobs 展开 WinGet\Packages 下的通配路径。
-//
-// 那里的目录名带随机哈希（yt-dlp.yt-dlp_Microsoft.Winget.Source_8wekyb3d8bbwe），
-// 无法写死，只能列出来再按前缀匹配。
-func expandWindowsGlobs(base string, patterns []string) []string {
-	var out []string
-	for _, pattern := range patterns {
-		matches, err := filepath.Glob(filepath.Join(base, pattern))
-		if err != nil {
-			continue
-		}
-		out = append(out, matches...)
-	}
-	return out
-}
-
-func commonInstallDirs() []string {
-	home, _ := os.UserHomeDir()
-	var dirs []string
-
-	switch runtime.GOOS {
-	case "darwin":
-		dirs = []string{
-			"/opt/homebrew/bin", "/opt/homebrew/sbin",
-			"/usr/local/bin", "/usr/local/sbin",
-			"/opt/local/bin", "/opt/local/sbin",
-			"/Library/Apple/usr/bin",
-			"/usr/bin", "/bin", "/usr/sbin", "/sbin",
-			"/Applications/yt-dlp.app/Contents/MacOS",
-		}
-	case "linux":
-		dirs = []string{
-			"/usr/local/bin", "/usr/local/sbin",
-			"/usr/bin", "/bin", "/usr/sbin", "/sbin",
-			"/snap/bin",
-			"/var/lib/flatpak/exports/bin",
-			"/usr/lib/yt-dlp/bin", "/usr/local/lib/yt-dlp/bin",
-			"/app/bin", // Flatpak 沙箱内
-			// Nix / NixOS：declarative 安装把二进制放在 profile 的 bin 下
-			"/nix/var/nix/profiles/default/bin",
-			"/run/current-system/sw/bin",
-			// Homebrew on Linux
-			"/home/linuxbrew/.linuxbrew/bin",
-		}
-	case "windows":
-		dirs = windowsInstallDirs(home)
-		return append(dirs, extraDirs(home)...)
-	}
-
-	if home != "" {
-		dirs = append(dirs, filepath.Join(home, "bin"), filepath.Join(home, ".local", "bin"))
-	}
-	return dirs
-}
-
-// windowsInstallDirs 返回 Windows 上的候选目录。
-//
-// 抽成接受 home 的纯函数，是为了能**在 macOS 上测试 Windows 的路径**——
-// 直接读 os.UserHomeDir 的话，本地跑只能看到 macOS 的路径，等于没测
-// （平台键那个 bug 就是这么漏过去的）。
-func windowsInstallDirs(home string) []string {
-	// winget 的几种落点（查 winget 清单 + 实际安装结果得出，不是猜的）：
-	//   - WinGet\Links：portable 包（yt-dlp.yt-dlp）把 exe 软链到这里
-	//   - WinGet\Packages：真正解压出来的目录，层级带包名与随机哈希
-	//   - yt-dlp.FFmpeg 是 zip + nested portable，解压后为
-	//     <hash>\ffmpeg-N-xxxx-win64-gpl\bin\{ffmpeg,ffprobe}.exe
-	//   - DenoLand.Deno 提供 JS 运行时（yt-dlp 的清单把它列为依赖）
-	local := envDir("LOCALAPPDATA", filepath.Join(home, "AppData", "Local"))
-	programFiles := envDir("ProgramFiles", `C:\Program Files`)
-	programData := envDir("ProgramData", `C:\ProgramData`)
-	scoop := envDir("SCOOP", filepath.Join(home, "scoop"))
-	scoopGlobal := envDir("SCOOP_GLOBAL", filepath.Join(programData, "scoop"))
-	wingetBase := filepath.Join(local, "Microsoft", "WinGet")
-
-	// winget 有**两套**落点：用户级与机器级（`--scope machine`）。
-	// 只覆盖用户级会让"用管理员装"的用户被判为缺失。
-	machineBase := filepath.Join(programFiles, "WinGet")
-
-	dirs := []string{
-		filepath.Join(envDir("ChocolateyInstall", filepath.Join(programData, "chocolatey")), "bin"),
-		filepath.Join(programFiles, "yt-dlp"),
-		filepath.Join(envDir("ProgramFiles(x86)", `C:\Program Files (x86)`), "yt-dlp"),
-		`C:\ffmpeg\bin`,
-		filepath.Join(programFiles, "ffmpeg", "bin"),
-		filepath.Join(scoop, "shims"),
-		filepath.Join(scoop, "apps", "yt-dlp", "current"),
-		filepath.Join(scoop, "apps", "ffmpeg", "current", "bin"),
-		// aria2 的 Scoop 包：`scoop install aria2` → apps\aria2\current\aria2c.exe
-		// （不在 bin 子目录里，与 ffmpeg 不同）
-		filepath.Join(scoop, "apps", "aria2", "current"),
-		filepath.Join(scoopGlobal, "shims"),
-		filepath.Join(scoopGlobal, "apps", "yt-dlp", "current"),
-		filepath.Join(scoopGlobal, "apps", "ffmpeg", "current", "bin"),
-		filepath.Join(scoopGlobal, "apps", "aria2", "current"),
-		// 用户级 winget
-		filepath.Join(wingetBase, "Links"),
-		// 机器级 winget（--scope machine）
-		filepath.Join(machineBase, "Links"),
-		filepath.Join(local, "Microsoft", "WindowsApps"),
-	}
-
-	// Packages 下的目录名含随机哈希，只能展开通配；用户级与机器级都要展开
-	dirs = append(dirs, expandWindowsGlobs(wingetBase, WindowsPackagePatterns)...)
-	dirs = append(dirs, expandWindowsGlobs(machineBase, WindowsPackagePatterns)...)
-
-	return dirs
-}
-
-func envDir(key, fallback string) string {
-	if value := strings.TrimSpace(os.Getenv(key)); value != "" {
-		return value
-	}
-	return fallback
-}
-
-// WindowsPackagePatterns 是 WinGet\Packages 下需要展开的通配模式。
-//
-// 用 filepath.Join 拼接而不是写死反斜杠，有两个好处：
-//  1. 在 Windows 上得到正确的 `\` 分隔（filepath.Glob 用宿主分隔符匹配）
-//  2. 在 macOS 上得到 `/`，于是可以用一个仿造的目录树**真正验证展开逻辑**
-//     ——写死反斜杠时本地只能看到"展开结果为空"，等于没测
-var WindowsPackagePatterns = []string{
-	// yt-dlp.yt-dlp 是 portable 包，解压后的 exe 直接在包目录下
-	filepath.Join("Packages", "yt-dlp.yt-dlp_*"),
-	// yt-dlp.FFmpeg 是 zip + nested portable，多一层解压目录与 bin
-	filepath.Join("Packages", "yt-dlp.FFmpeg_*"),
-	filepath.Join("Packages", "yt-dlp.FFmpeg_*", "*", "bin"),
-	// DenoLand.Deno 提供 JS 运行时（yt-dlp 的清单把它列为依赖）
-	filepath.Join("Packages", "DenoLand.Deno_*"),
-	// 用户直接装 Gyan.FFmpeg 的情况
-	filepath.Join("Packages", "Gyan.FFmpeg_*"),
-	filepath.Join("Packages", "Gyan.FFmpeg_*", "*", "bin"),
-	// aria2：`winget install aria2.aria2` 是 portable 包，exe 直接在包目录下
-	filepath.Join("Packages", "aria2.aria2_*"),
-}
-
-// extraDirs 跨平台都适用的用户级目录
-func extraDirs(home string) []string {
-	if home == "" {
-		return nil
-	}
-	return []string{filepath.Join(home, "bin"), filepath.Join(home, ".local", "bin")}
 }
 
 func outputWithTimeout(cmd *exec.Cmd, timeout time.Duration) ([]byte, error) {

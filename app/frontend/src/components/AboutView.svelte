@@ -999,7 +999,7 @@
   /* ---------- 赞助卡片（对齐 README 的赞助章节） ---------- */
   .support-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr);
     gap: 10px;
     margin-top: 14px;
   }
@@ -1029,13 +1029,13 @@
   .support-qr {
     flex-direction: column;
     align-items: center;
-    gap: 6px;
-    padding: 12px 10px;
+    gap: 8px;
+    padding: 14px 12px;
     text-align: center;
     justify-content: center;
   }
   .support-qr img {
-    width: 118px;
+    width: 176px;
     max-width: 100%;
     border-radius: 8px;
     border: 1px solid var(--rule);

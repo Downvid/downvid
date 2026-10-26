@@ -233,12 +233,15 @@ bash app/scripts/build.sh            # 单文件产物
 
 ## 运行依赖（yt-dlp / ffmpeg / aria2）
 
-**安装包不携带这些二进制**。启动后由 Go 边车按「系统优先，缺失才下载」的顺序解析：
+**安装包不携带这些二进制**。探测**只认两个位置**，三端完全一致：
 
 1. 设置里手动指定的路径（**只对探测生效**）
 2. `~/.downvid/runtime/bin/`（DownVid 下载的，可覆盖更新；旧版 `userData/runtime/bin` 会自动搬过来）
-3. 登录 shell 的 PATH（GUI 应用只有精简 PATH，这一步是关键）＋ 各平台常见安装目录
-4. 裸命令名交给 PATH 兜底
+
+**不再扫描系统 PATH / Homebrew / WinGet / 常见安装目录**：混合来源（ffmpeg 来自 Homebrew、
+yt-dlp 来自托管）会让三端表现各异、排障时说不清跑的是哪一份。缺了就由边车下载到同一目录。
+登录 shell 的 PATH 仍会被合并（`LivePath` / `EnsureChildPath`），但只用于**让托管的 zipapp 找到
+合格的 Python 3.11+**，不参与依赖探测。
 
 ### 边车（`backend/`）
 
@@ -257,14 +260,11 @@ bash app/scripts/build.sh            # 单文件产物
 ### 探测预算（数字各有唯一来源，不要在多处重复书写）
 
 - 检测总时限 **80 秒**：`rt.DetectTimeout`
-- 每个依赖 45 秒；候选执行预算按来源区分：托管副本 15 秒、系统副本 5 秒
-- 扫描另有 18 秒预算
+- 每个依赖 45 秒；候选执行预算：托管副本与手动路径 15 秒（`probe.CandidateTimeout`）
 
 **这几个数字不能随手调小**：yt-dlp 官方 macOS 构建（PyInstaller，约 37MB）`--version`
-本机实测要 8～10 秒、首次执行最慢 12.4 秒，而 Homebrew / uv 装的是 Python zipapp、
-只要 0.2 秒——托管副本预算一旦低于 15 秒，**刚下载好的副本会被判为「执行超时，文件可能损坏」**。
-反过来系统副本**不能给长预算**：候选表里可能有十几个路径，每个卡死的都给 15 秒
-会把一次检测拖到几分钟。
+本机实测要 8～10 秒、首次执行最慢 12.4 秒，而 zipapp 只要 0.2 秒——托管副本预算一旦低于
+15 秒，**刚下载好的副本会被判为「执行超时，文件可能损坏」**。
 
 `probe.run` 的 `cmd.WaitDelay` **不能删**：超时只杀直接子进程，而候选可能是 shell 脚本或
 PyInstaller 启动器，孙进程仍持有 stdout 管道，`cmd.Run()` 会一直等 I/O。

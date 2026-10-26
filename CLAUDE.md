@@ -264,9 +264,11 @@ Things that fail silently, all covered by `pnpm lint:website`:
 1. Manual paths from settings (**detection only**)
 2. `~/.downvid/runtime/bin/` (downloaded by DownVid, overwritable; the legacy
    `userData/runtime/bin` is migrated automatically)
-3. The login shell's PATH (GUI apps get a minimal PATH, this step is essential) plus common install
-   directories per platform
-4. Bare command names resolved through PATH
+
+**Nothing else is scanned** — no system PATH, no Homebrew/WinGet/common install directories —
+so the three platforms behave identically. A missing tool is downloaded into that same directory.
+The login shell's PATH is still merged (`LivePath` / `EnsureChildPath`) but only so the managed
+zipapp can find a Python 3.11+; it does not take part in detection.
 
 ### Sidecar (`backend/`)
 
@@ -287,14 +289,12 @@ Two subcommands only: `detect` (NDJSON on stdout) and `fetch` (download and inst
 ### Detection budgets (one source of truth each, do not duplicate the numbers)
 
 - Total detection budget **80 s**: `rt.DetectTimeout`
-- 45 s per dependency; per-candidate budget by source: managed copy 15 s, system copy 5 s
-- A further 18 s budget for path scanning
+- 45 s per dependency; per-candidate budget: 15 s for managed copies and manual paths
+  (`probe.CandidateTimeout`)
 
-**Do not shrink these casually**: the official macOS yt-dlp build (PyInstaller, ~37 MB) takes 8–10 s
-for `--version` on a warm machine and up to 12.4 s on first run, while Homebrew / uv ship the Python
-zipapp which takes 0.2 s. If the managed-copy budget drops below 15 s, **a freshly downloaded copy is
-judged "execution timed out, file may be corrupt"**. Conversely system copies must not get a long
-budget: the candidate list may contain a dozen paths, and 15 s each turns one detection into minutes.
+**Do not shrink these numbers.** The official macOS yt-dlp build (PyInstaller, ~37 MB) needs
+8–10 s for `--version` and 12.4 s on the slowest first run, while a zipapp needs 0.2 s — below a
+15 s budget a **freshly downloaded copy is reported as "timed out, the file may be corrupt"**.
 
 `cmd.WaitDelay` in `probe.run` **must not be removed**: on timeout only the direct child is killed,
 and a candidate may be a shell script or a PyInstaller launcher whose grandchild still holds the

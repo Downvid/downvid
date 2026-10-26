@@ -212,7 +212,7 @@ const messages: Record<Locale, Record<string, string>> = {
     'settings.aria2Found': '已检测到 {version}',
     'settings.aria2Missing': '未安装，使用内置分块下载器',
     'settings.depsTitle': '运行时依赖',
-    'settings.depsHint': '优先使用系统已安装的版本，缺失时由 DownVid 下载到托管目录。',
+    'settings.depsHint': '依赖统一放在 ~/.downvid/runtime/bin，缺失时由 DownVid 下载到该目录。',
     'settings.depsNotInstalledYet': '还没有下载过依赖',
     'settings.depsRecheck': '重新检测',
     'settings.depsChecking': '检测中…',

@@ -58,12 +58,13 @@ pnpm --dir app/frontend install   # app/frontend 是独立包，不在根 worksp
 
 ### 运行依赖（yt-dlp / ffmpeg / aria2c）
 
-**安装包不携带这些工具**，构建前无需下载任何二进制。运行时由 Go 边车按「系统优先」查找：
+**安装包不携带这些工具**，构建前无需下载任何二进制。探测只认两个位置（三端一致）：
 
 1. 设置里手动指定的路径（只对探测生效）
 2. `~/.downvid/runtime/bin/`（由界面上的下载按钮安装；历史文件 `download-history.json` 也在这个目录下）
-3. 登录 shell 的 `PATH` 与各平台常见安装目录
-4. 裸命令名交给 `PATH` 兜底
+
+系统里已装的 Homebrew / winget / apt 版本**不再被自动复用**——想要「用自己的 ffmpeg」，
+在「设置 → 运行依赖」里手动指定路径即可。
 
 macOS / Linux 上从 Finder 或桌面启动的应用只能拿到很精简的 `PATH`，
 因此边车会额外执行一次登录 shell 来补全 `~/.local/bin`、`/opt/homebrew/bin` 这类目录。

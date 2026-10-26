@@ -12,7 +12,7 @@ downvid/
 │   ├── cmd/downvid-deps/    # 入口：detect / fetch 两个子命令
 │   └── internal/
 │       ├── probe/           # 执行二进制并解析版本号（含本地化输出的 aria2）
-│       ├── runtime/         # 候选路径解析（系统优先，登录 shell 补 PATH）
+│       ├── runtime/         # 依赖探测（只认手动路径 + ~/.downvid 托管目录）
 │       ├── fetch/           # 下载、SHA-256 校验、镜像回退、原子安装
 │       ├── manifest/        # 版本与哈希清单（由脚本生成，勿手改）
 │       └── cli/             # NDJSON 输出（stdout 只放 JSON，日志走 stderr）

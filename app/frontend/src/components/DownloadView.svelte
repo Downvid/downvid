@@ -9,7 +9,7 @@
   import { t } from '../lib/i18n.svelte'
   import { formatClock } from '../lib/format'
 
-  const recent = $derived(app.history.slice(0, 4))
+  const recent = $derived(app.history.slice(0, 5))
 
   let dragging = $state(false)
   let dragDepth = 0
@@ -360,15 +360,27 @@
   }
 
   /* ---------- 最近下载：主卡 + 列表 ---------- */
+  /* 「最近下载」吃掉余下的纵向空间：条目少时主卡跟着长高，
+     而不是底部留一大片空白（原先主卡被 max-height:145px 钉死）。 */
+  .recent {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+  }
   .recent-bento {
     display: grid;
-    grid-template-columns: minmax(0, 1.22fr) minmax(0, 1fr);
-    gap: 14px;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
+    gap: 16px;
     align-items: stretch;
+    flex: 1;
+    min-height: clamp(160px, 24vh, 250px);
   }
 
   .feature {
-    display: block;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
     padding: 0;
     border: 0;
     background: none;
@@ -377,8 +389,8 @@
   .feature-frame {
     position: relative;
     display: block;
-    aspect-ratio: 21 / 9;
-    max-height: clamp(100px, 16vh, 145px);
+    flex: 1;
+    min-height: 0;
     border-radius: var(--radius-card);
     border: 1px solid var(--rule);
     background: var(--paper-sunk);
@@ -478,16 +490,18 @@
   .recent-list {
     display: flex;
     flex-direction: column;
+    justify-content: stretch;
+    height: 100%;
     border-top: 1px solid var(--rule);
   }
   .recent-row {
     flex: 1;
     display: grid;
-    grid-template-columns: 22px 58px minmax(0, 1fr) auto 16px;
+    grid-template-columns: 22px 66px minmax(0, 1fr) auto 16px;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
     min-width: 0;
-    padding: 8px 6px;
+    padding: 10px 8px;
     border: 0;
     border-bottom: 1px solid var(--rule);
     background: none;
@@ -506,8 +520,8 @@
   }
   .row-thumb {
     display: block;
-    width: 58px;
-    height: 33px;
+    width: 66px;
+    height: 38px;
     border-radius: var(--radius-small);
     border: 1px solid var(--rule);
     background-color: var(--paper-sunk);
