@@ -98,6 +98,10 @@ jobs:
           go vet ./...
           go test -shuffle=on -count=1 ./...
 
+      # main.go 里有 `//go:embed all:frontend/dist`：目录不存在时 vet/测试直接编译失败
+      - name: 准备 embed 目录
+        run: bash app/scripts/prepare-embed-dir.sh
+
       - name: Go 核心（格式 / 静态检查 / 测试）
         working-directory: app
         shell: bash
