@@ -3,6 +3,7 @@ package update
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -134,7 +135,9 @@ func TestValidateDownloadNilAsset(t *testing.T) {
 // 开发模式下不能自动安装：替换的是 go build 的临时产物，
 // 装完下次 `go run` 又变回去，只会让开发者困惑。
 func TestCanSelfInstallRejectsDevMode(t *testing.T) {
-	ok, reason := CanSelfInstall("/tmp/go-build123/b001/exe/downvid", func(string) bool { return true })
+	// 用 FromSlash：分隔符在 Windows 上是 `\`，字面量的 `/go-build` 匹配不到
+	exe := filepath.FromSlash("/tmp/go-build123/b001/exe/downvid")
+	ok, reason := CanSelfInstall(exe, func(string) bool { return true })
 	if ok {
 		t.Error("go run 的产物不该允许自更新")
 	}

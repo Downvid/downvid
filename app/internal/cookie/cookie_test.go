@@ -3,6 +3,7 @@ package cookie
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -130,7 +131,8 @@ func TestCookieFailureHint(t *testing.T) {
 	if hint == "" {
 		t.Errorf("应生成失败提示")
 	}
-	if !filepath.IsAbs("/") { // dummy check to keep compiler happy
-		t.Errorf("unexpected")
+	// 提示里得说清是哪个浏览器失败了，否则用户不知道该去登录哪一个
+	if !strings.Contains(strings.ToLower(hint), "chrome") {
+		t.Errorf("提示应点名失败的浏览器，got %q", hint)
 	}
 }

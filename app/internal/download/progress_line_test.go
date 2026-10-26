@@ -2,6 +2,7 @@ package download
 
 import (
 	"math"
+	"path/filepath"
 	"reflect"
 	"testing"
 )
@@ -153,22 +154,26 @@ func TestParseLinePostprocess(t *testing.T) {
 
 func TestParseLineFile(t *testing.T) {
 	st := &LineState{}
-	ev := ParseLine("[dvfile]/tmp/out/video.mp4", st, nil)
+	// 用相对路径 + filepath.Abs 现算期望值：写死 `/tmp/out/...` 在 Windows 上
+	// 会被生产代码的 filepath.Abs 归一成 `D:\...`，与字面量永不相等
+	want, _ := filepath.Abs(filepath.Join("out", "video.mp4"))
+	ev := ParseLine("[dvfile]out/video.mp4", st, nil)
 	if ev.Kind != "file" {
 		t.Fatalf("Kind = %q", ev.Kind)
 	}
-	if ev.FilePath != "/tmp/out/video.mp4" {
-		t.Errorf("FilePath = %q", ev.FilePath)
+	if ev.FilePath != want {
+		t.Errorf("FilePath = %q，期望 %q", ev.FilePath, want)
 	}
 }
 
 func TestParseLineSubs(t *testing.T) {
 	st := &LineState{}
-	body := `{"zh-Hans":{"filepath":"/tmp/out/v.zh-Hans.srt"},"en":{"filepath":"/tmp/out/v.en.srt"}}`
+	body := `{"zh-Hans":{"filepath":"out/v.zh-Hans.srt"},"en":{"filepath":"out/v.en.srt"}}`
+	wantEn, _ := filepath.Abs(filepath.Join("out", "v.en.srt"))
 
 	// 优先取用户要的语言
 	ev := ParseLine("[dvsubs]"+body, st, []string{"en"})
-	if ev.FilePath != "/tmp/out/v.en.srt" {
+	if ev.FilePath != wantEn {
 		t.Errorf("应优先 en，got %q", ev.FilePath)
 	}
 
