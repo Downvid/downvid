@@ -307,8 +307,26 @@ func TestArgsAria2OnlyForHTTP(t *testing.T) {
 	if got, _ := valueAfter(args, "-o"); got != "%(title)s"+qualitySuffix+".%(ext)s" {
 		t.Fatalf("-o got %q，aria2 模式下应为纯模板", got)
 	}
-	if !contains(args, "temp:"+filepath.Join(outDir, ".downvid-aria2")) {
-		t.Fatal("必须隔离 aria2 稀疏片段目录")
+	// 临时目录按任务再分一层：完成后只删本任务那份，别的任务的续传数据不受影响
+	want := "temp:" + TempDirFor(outDir, baseOptions().TaskID)
+	if !contains(args, want) {
+		t.Fatalf("必须隔离 aria2 稀疏片段目录，期望 %q", want)
+	}
+}
+
+// TempDirFor 必须落在下载目录下、且把任务 ID 里的非法字符换掉。
+func TestTempDirFor(t *testing.T) {
+	out := t.TempDir()
+	got := TempDirFor(out, "a/b c")
+	if filepath.Dir(got) != filepath.Join(out, ".downvid-aria2") {
+		t.Errorf("临时目录应位于 <输出目录>/.downvid-aria2 下，got %q", got)
+	}
+	if strings.ContainsAny(filepath.Base(got), "/ ") {
+		t.Errorf("任务 ID 里的非法字符应被替换，got %q", filepath.Base(got))
+	}
+	// 空 taskID 也要有稳定的目录名（否则会写到 .downvid-aria2 根上）
+	if base := filepath.Base(TempDirFor(out, "")); base == "" || base == "." {
+		t.Errorf("空任务 ID 应回退成固定名字，got %q", base)
 	}
 }
 

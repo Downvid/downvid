@@ -356,9 +356,12 @@ func BuildArgs(o Options, outputDir string, ctx BuildArgsContext) []string {
 				connections, connections),
 		)
 		// 隔离 aria2 稀疏片段；更换引擎时不能被原生顺序下载器误认为连续数据。
+		//
+		// 再按任务分一层子目录：完成后只删本任务那一个目录（见 CleanupTempDir），
+		// 不会误删别的任务的断点数据，也不会像以前那样把整个目录越堆越大。
 		args = append(args,
 			"--paths", "home:"+outputDir,
-			"--paths", "temp:"+filepath.Join(outputDir, ".downvid-aria2"))
+			"--paths", "temp:"+TempDirFor(outputDir, o.TaskID))
 	}
 
 	if isYoutube && ctx.JSRuntime != nil {
@@ -375,4 +378,22 @@ func BuildArgs(o Options, outputDir string, ctx BuildArgsContext) []string {
 	// 拼在这里会让后续加 cookie 参数的调用方把 URL 放到错误位置——
 	// yt-dlp 会把它当成又一个输入源，不报错但行为变了。
 	return args
+}
+
+// TempDirFor 返回某个任务专用的临时目录（aria2 分片与 .aria2 控制文件都放这里）。
+//
+// 为什么按任务隔离：以前所有任务共用一个 `.downvid-aria2`，完成后没人清理，
+// 实测在一台机器上堆了 **36 GB** 的半成品；而「清理整个目录」又会毁掉别的
+// 任务正在续传的数据。按任务分目录后，成功即删自己那份。
+func TempDirFor(outputDir, taskID string) string {
+	safe := strings.Map(func(r rune) rune {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			return r
+		}
+		return '_'
+	}, taskID)
+	if safe == "" {
+		safe = "task"
+	}
+	return filepath.Join(outputDir, ".downvid-aria2", safe)
 }

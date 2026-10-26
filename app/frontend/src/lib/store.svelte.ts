@@ -689,6 +689,7 @@ class AppStore {
       // 直链要固化在任务上：它是几十分钟后过期的 CDN 地址，
       // 续传时若回去读解析面板，可能已经指向别的视频了
       directUrl: video.directUrl,
+      cacheFile: video.cacheFile,
       subtitles: [...this.subtitles],
       totalBytes: pick.totalBytes,
       bytesDone: 0,
@@ -728,6 +729,8 @@ class AppStore {
       subtitles: snap.subtitles,
       audioTrack: snap.audioTrack,
       directUrl: task.directUrl,
+      // 解析缓存：让 yt-dlp 用 --load-info-json 跳过二次提取（YouTube 上省 15~25 秒）
+      infoJson: task.cacheFile ?? '',
       title: task.title,
       outputDir: this.settings.downloadDir,
       // 有分辨率才让它进文件名。

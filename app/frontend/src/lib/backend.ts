@@ -353,6 +353,8 @@ export interface StartDownloadParams {
   directUrl?: string
   /** 标题：直链路径拿不到 info JSON，文件名只能由前端带过来 */
   title?: string
+  /** 解析阶段落盘的 info JSON：有它就走 --load-info-json，跳过二次提取 */
+  infoJson?: string
 }
 
 /**

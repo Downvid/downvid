@@ -170,6 +170,8 @@ export interface TaskItem {
    * 可能已经指向另一个视频了。
    */
   directUrl?: string
+  /** 解析缓存的 info JSON 路径（下载时 --load-info-json 用） */
+  cacheFile?: string
   subtitles: string[]
   /** 最近 24 次采样的速度（画迷你折线用） */
   speedHistory: number[]

@@ -472,11 +472,23 @@ func (a *App) StartDownload(opts DownloadRequest) StartDownloadResult {
 		var err error
 		var failedBrowsers []string
 
+		// 有解析缓存就用它跳过二次提取；失败（缓存过期/字段缺失）再退回正常提取。
+		useInfo := ""
+		if opts.InfoJSON != "" && fileExists(opts.InfoJSON) {
+			useInfo = opts.InfoJSON
+		}
+
 		for _, att := range attempts {
+			runArgs := args
+			runURL := opts.URL
+			if useInfo != "" {
+				runArgs = append(append([]string{}, args...), "--load-info-json", useInfo)
+				runURL = "" // 有 info JSON 时 yt-dlp 不需要 URL
+			}
 			res, err = a.runner.Run(opts.TaskID, download.RunOptions{
 				YtdlpPath:     ytdlp,
-				Args:          args,
-				URL:           opts.URL,
+				Args:          runArgs,
+				URL:           runURL,
 				CookieArgs:    att.Args,
 				OutputDir:     opts.OutputDir,
 				WantSubtitles: opts.Subtitles,
@@ -488,12 +500,24 @@ func (a *App) StartDownload(opts DownloadRequest) StartDownloadResult {
 				a.emitProgress(DownloadProgress{TaskID: opts.TaskID, URL: opts.URL, Status: "paused", FilePath: res.FilePath})
 				return
 			}
+			// 缓存不可用（过期、缺 formats、被清理）→ 丢掉缓存重跑一次完整提取。
+			if useInfo != "" && (err != nil || (res.Code != nil && *res.Code != 0)) {
+				log.Printf("[downvid] --load-info-json 失败，回落完整提取：%v", err)
+				useInfo = ""
+				continue
+			}
 			if err != nil {
 				a.emitProgress(DownloadProgress{TaskID: opts.TaskID, URL: opts.URL, Status: "error", Error: err.Error()})
 				return
 			}
 			if res.Code != nil && *res.Code == 0 {
 				a.cookieManager().OnAttemptSuccess(att)
+				// 成功即清掉本任务的 aria2 临时目录：否则半成品会一直堆在
+				// 下载目录的 `.downvid-aria2/` 下（实测有机器堆到 36 GB）。
+				// 暂停 / 失败**不清**——那份 `.aria2` 控制文件正是续传依据。
+				if opts.OutputDir != "" {
+					_ = os.RemoveAll(download.TempDirFor(opts.OutputDir, opts.TaskID))
+				}
 				a.emitProgress(DownloadProgress{
 					TaskID: opts.TaskID, URL: opts.URL, Status: "completed",
 					Percent: 100, FilePath: res.FilePath,
@@ -590,6 +614,12 @@ type DownloadRequest struct {
 	DirectURL string `json:"directUrl,omitempty"`
 	// Title 用于直链路径的文件名（拿不到 info JSON，标题只能由前端带过来）
 	Title string `json:"title,omitempty"`
+	// InfoJSON 是解析阶段落盘的原始 info JSON（`userData/parse-cache/…`）。
+	//
+	// 有它就走 `--load-info-json`：下载不必再提取一遍。YouTube 上第二次提取
+	// 实测要 15~25 秒（网页 + player API + nsig），这正是「点了下载半天不动」。
+	// 文件不存在或 yt-dlp 报错时自动回落成正常提取（见下面的重试）。
+	InfoJSON string `json:"infoJson,omitempty"`
 	// AudioTrack 是选中的音轨（仅 YouTube 多音轨）。
 	//
 	// 早先这个字段根本不存在，于是界面上的「音轨」选择器**完全不起作用**：
