@@ -31,6 +31,7 @@
  * 以主进程为准——前端多发的会被后端排队或拒绝。
  */
 import {
+  appBuildDate,
   appVersion,
   checkUpdate as backendCheckUpdate,
   defaultDownloadDir,
@@ -70,7 +71,7 @@ import {
   stripMarker,
   testProxy as backendTestProxy,
 } from './backend'
-import { CONNECTION_STOPS, nearestConnectionStop, type Mode, type Tab } from './constants'
+import { APP_VERSION, BUILD_DATE, CONNECTION_STOPS, nearestConnectionStop, type Mode, type Tab } from './constants'
 import { getLocale, resolveLocale, setLocale, t, type Locale } from './i18n.svelte'
 import {
   DEFAULT_SETTINGS,
@@ -252,7 +253,8 @@ class AppStore {
   cookieStatus = $state<CookieStatus | null>(null)
 
   // ===== 应用信息 =====
-  version = $state('0.0.0-dev')
+  version = $state(APP_VERSION)
+  buildDate = $state(BUILD_DATE)
 
   /**
    * 平台标识（`darwin` / `windows` / `linux`）。
@@ -297,7 +299,9 @@ class AppStore {
     this.applyRadius(this.settings.radius)
     this.applyLanguage(this.settings.language)
 
-    this.version = await appVersion()
+    const [v, bd] = await Promise.all([appVersion(), appBuildDate()])
+    this.version = v || APP_VERSION
+    this.buildDate = bd || BUILD_DATE
     this.platform = await backendPlatform()
     void this.loadChangelog()
 
@@ -1292,14 +1296,7 @@ class AppStore {
   }
 
   /**
-   * 安装更新。
-   *
-   * 桌面端由 electron-updater 负责（Go 侧未移植），容器版靠拉新镜像。
-   * 这里**如实打开 Releases 页面**，不假装安装成功——假装会让用户
-   * 以为已经升级，然后继续用旧版本。
-   */
-  /**
-   * 打开新架构（Wails）包的下载页。
+   * 打开安装包下载页（迁移路径）。
    *
    * 只打开 Releases 页、不自动下载安装：迁移是单向门（装上新架构后
    * 没有 electron-updater 可用，回不到 Electron 版），所以这一步必须
@@ -1329,12 +1326,6 @@ class AppStore {
     this.toast(t('update.installing'), 'info')
   }
 
-  /**
-   * 下载更新。
-   *
-   * **后端没有实现这条**（Go 侧只有更新检查，没有 electron-updater 的下载/安装）。
-   * 如实告知用户去 Releases 页面手动下载，而不是假装下载成功。
-   */
   /**
    * 下载更新包（异步，进度走 `update:progress`）。
    *

@@ -31,9 +31,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/Downvid/downvid/app/internal/changelog"
 	"github.com/Downvid/downvid/app/internal/cookie"
 	"github.com/Downvid/downvid/app/internal/deps"
 	"github.com/Downvid/downvid/app/internal/download"
@@ -49,6 +51,9 @@ import (
 
 // version 由构建期注入：-ldflags "-X main.version=1.6.0"
 var version = "0.0.0-dev"
+
+// buildDate 由构建期注入：-ldflags "-X main.buildDate=2026.10.26"
+var buildDate = ""
 
 // arch 由构建期注入：-ldflags "-X main.arch=wails"
 //
@@ -154,7 +159,34 @@ func (a *App) shutdown(ctx context.Context) {
 // ===== 应用信息 =====
 
 // GetVersion 返回应用版本。
-func (a *App) GetVersion() string { return version }
+func (a *App) GetVersion() string {
+	if version != "" && version != "0.0.0-dev" {
+		return version
+	}
+	if entries, err := changelog.Local(); err == nil {
+		for _, e := range entries {
+			if !e.Unreleased && e.Version != "" {
+				return e.Version
+			}
+		}
+	}
+	return version
+}
+
+// GetBuildDate 返回应用构建日期（格式形如 2026.10.26）。
+func (a *App) GetBuildDate() string {
+	if buildDate != "" {
+		return buildDate
+	}
+	if entries, err := changelog.Local(); err == nil {
+		for _, e := range entries {
+			if !e.Unreleased && e.Date != "" {
+				return strings.ReplaceAll(e.Date, "-", ".")
+			}
+		}
+	}
+	return time.Now().Format("2006.01.02")
+}
 
 // GetPlatform 返回平台标识（Go 风格：windows / darwin / linux）。
 //

@@ -39,6 +39,12 @@ func TestBindingsBasicInfo(t *testing.T) {
 	if app.GetVersion() == "" {
 		t.Fatal("版本号不该为空")
 	}
+	if app.GetVersion() == "0.0.0-dev" {
+		t.Fatal("未注入版本号时 GetVersion 应回落到 CHANGELOG 最新版本，不该返回 0.0.0-dev")
+	}
+	if app.GetBuildDate() == "" {
+		t.Fatal("构建日期不该为空")
+	}
 	if app.GetPlatform() == "" {
 		t.Fatal("平台不该为空")
 	}

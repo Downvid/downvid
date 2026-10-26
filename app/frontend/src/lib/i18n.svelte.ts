@@ -301,7 +301,6 @@ const messages: Record<Locale, Record<string, string>> = {
     'about.update': '检查更新',
     'about.upToDate': '已是最新版本',
     'about.updateAvailable': '新版本 v{version} 可用',
-    'about.buildValue': '2026.10.17',
     'about.licenseValue': 'MIT License',
 
     'update.title': '发现新版本',
@@ -655,7 +654,6 @@ const messages: Record<Locale, Record<string, string>> = {
     'about.update': 'Check for updates',
     'about.upToDate': 'You are up to date',
     'about.updateAvailable': 'v{version} is available',
-    'about.buildValue': '2026.10.17',
     'about.licenseValue': 'MIT License',
 
     'update.title': 'New version available',

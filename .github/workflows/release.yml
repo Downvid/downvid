@@ -16,10 +16,6 @@ on:
         type: boolean
         required: false
         default: false
-      migrate_to_wails:
-        description: '把哪些平台的自动更新切到新架构（逗号分隔：macos,linux,windows；留空默认=macos）'
-        required: false
-        default: 'macos'
 
 permissions:
   contents: write
@@ -54,9 +50,8 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
           # 预发布：让「测试版本」不进稳定用户的更新通道。
-          # 已实测确认（用 electron 自己的仓库对照）：GitHub 的 /releases/latest
-          # 与 releases.atom 都会跳过标记为 prerelease 的版本，而 electron-updater
-          # 正是靠这两个端点找最新版的，所以稳定用户不会被推到 beta 上。
+          # GitHub 的 /releases/latest 与 releases.atom 都会跳过 prerelease，
+          # 而应用内的自更新正是靠这两个端点找最新版。
           PRERELEASE="${{ inputs.prerelease }}"
           echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
           if [ "$PRERELEASE" = "true" ]; then
@@ -66,9 +61,9 @@ jobs:
   # ===== 发布门禁：全量测试 =====
   #
   # 发布是不可逆的：产物一旦推给用户，就只能靠下一个版本修回来，
-  # 而「下一个版本」本身还得依赖更新通道是好的。所以这里把三平台的
-  # 关键回归再跑一遍 —— 平时 CI 已经在跑，这里是**发布前的最后一道闸**，
-  # 宁可晚发十分钟，也不要发一个用户装完用不了的版本。
+  # 而「下一个版本」本身还得依赖更新通道是好的。所以这里把关键回归再跑一遍 ——
+  # 平时 CI 已经在跑，这里是**发布前的最后一道闸**，宁可晚发十分钟，
+  # 也不要发一个用户装完用不了的版本。
   gate:
     needs: version
     if: needs.version.outputs.version != ''
@@ -103,30 +98,32 @@ jobs:
           go vet ./...
           go test -shuffle=on -count=1 ./...
 
-      - name: 类型检查
-        run: pnpm vue-tsc --noEmit
-
-      - name: 契约与静态校验（IPC / 图标 / 官网 / 依赖清单）
+      - name: Go 核心（格式 / 静态检查 / 测试）
+        working-directory: app
+        shell: bash
         run: |
-          pnpm lint:ipc
+          UNFORMATTED=$(gofmt -l .)
+          if [ -n "$UNFORMATTED" ]; then
+            echo "::error::以下文件未经过 gofmt 格式化："
+            echo "$UNFORMATTED"
+            exit 1
+          fi
+          go vet ./...
+          go test -shuffle=on -count=1 ./...
+
+      - name: 契约与静态校验（图标 / 官网 / 依赖清单 / 边界 / 文档）
+        run: |
           pnpm lint:icons
           pnpm lint:website
+          pnpm lint:boundaries
+          pnpm lint:docs
+          pnpm lint:workflows
           pnpm deps:manifest:check
+          pnpm sync:repo
+          pnpm sync:changelog
 
       - name: 纯逻辑单测
         run: pnpm test
-
-      # 更新流程与设置迁移：发布前必须确认这两层没坏
-      - name: 更新流程回归
-        run: pnpm test:updater
-
-      - name: 设置迁移与向后兼容
-        run: pnpm test:settings:migration
-
-      - name: 下载与解析集成回归
-        run: |
-          pnpm test:download:integration
-          pnpm test:parse:integration
 
       # 边车必须能编出全部 5 个平台：任一编不过，对应平台的用户就装不上
       - name: 交叉编译全部平台
@@ -139,188 +136,137 @@ jobs:
             echo "  ok ${target}"
           done
 
-  build-mac-arm64:
+  # ===== 三平台构建 =====
+  #
+  # 产物命名 `DownVid-Wails-<平台>-<版本>.<ext>` 同时出现在三处：
+  #   · 本工作流的打包步骤
+  #   · `app/internal/update/migration.go`（识别安装包）
+  #   · `website/app.js`（官网直链下载）与 `scripts/gen-release-notes.mjs`
+  # 改一处必须改四处，`pnpm lint:website` 会拦官网那一侧。
+  build-wails:
     needs: [version, gate]
-    runs-on: macos-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v7
-      - name: Setup Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: '1.25'
-          # 侧车只用标准库，没有 go.sum，无需缓存依赖
-          cache: false
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-      - name: Install pnpm
-        uses: pnpm/action-setup@v6
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Build
-        run: pnpm build:mac:arm64
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: mac-arm64-builds
-          path: |
-            release/**/*-arm64-Mac-*.dmg
-            release/**/*-arm64-Mac-*.zip
-            release/**/latest-mac.yml
-            release/**/*.blockmap
-          retention-days: 7
-
-  build-mac-x64:
-    needs: [version, gate]
-    runs-on: macos-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v7
-      - name: Setup Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: '1.25'
-          # 侧车只用标准库，没有 go.sum，无需缓存依赖
-          cache: false
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-      - name: Install pnpm
-        uses: pnpm/action-setup@v6
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Build
-        run: pnpm build:mac:x64
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: mac-x64-builds
-          path: |
-            release/**/*-x64-Mac-*.dmg
-            release/**/*-x64-Mac-*.zip
-            release/**/latest-mac.yml
-            release/**/*.blockmap
-          retention-days: 7
-
-  build-win:
-    needs: [version, gate]
-    runs-on: windows-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v7
-      - name: Setup Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: '1.25'
-          # 侧车只用标准库，没有 go.sum，无需缓存依赖
-          cache: false
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-      - name: Install pnpm
-        uses: pnpm/action-setup@v6
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Build
-        run: pnpm build:win
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ELECTRON_BUILDER_HTTP_TIMEOUT: 600000
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: win-builds
-          path: |
-            release/**/DownVid-Setup-*.exe
-            release/**/DownVid-Portable-*.exe
-            release/**/latest.yml
-            release/**/*.blockmap
-          retention-days: 7
-
-  build-linux-x64:
-    needs: [version, gate]
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     strategy:
+      fail-fast: false
       matrix:
-        target: [appimage, deb, rpm, tar.gz]
+        include:
+          - os: macos-latest
+            platform: darwin/universal
+            suffix: mac-universal
+          - os: windows-latest
+            platform: windows/amd64
+            suffix: windows-x64
+          - os: ubuntu-22.04
+            platform: linux/amd64
+            suffix: linux-x64
     steps:
       - uses: actions/checkout@v7
-      - name: Setup Go
-        uses: actions/setup-go@v7
-        with:
-          go-version: '1.25'
-          # 侧车只用标准库，没有 go.sum，无需缓存依赖
-          cache: false
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-      - name: Install pnpm
-        uses: pnpm/action-setup@v6
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-      - name: Build
-        run: pnpm build:linux:x64:${{ matrix.target }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: linux-x64-${{ matrix.target }}
-          path: |
-            release/**/*.AppImage
-            release/**/*.deb
-            release/**/*.rpm
-            release/**/*-Linux-*.tar.gz
-            release/**/*.blockmap
-          retention-days: 7
 
-  build-linux-arm64:
-    needs: [version, gate]
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v7
-      - name: Setup Go
-        uses: actions/setup-go@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: '1.25'
-          # 侧车只用标准库，没有 go.sum，无需缓存依赖
           cache: false
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
+
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
-      - name: Install pnpm
-        uses: pnpm/action-setup@v6
-      - name: Install dependencies
+
+      - uses: pnpm/action-setup@v6
+
+      # Linux 构建 Wails 需要 cgo 链接 GTK / WebKit。
+      #
+      # ## 为什么是 4.0 而不是 4.1
+      #
+      # Wails v2.16 的 cgo 指令默认要 `webkit2gtk-4.0`：
+      #
+      #     #cgo !webkit2_41 pkg-config: webkit2gtk-4.0
+      #     #cgo  webkit2_41 pkg-config: webkit2gtk-4.1
+      #
+      # 只有加 `-tags webkit2_41` 才用 4.1。装了 4.1 却没加 tag 时，
+      # pkg-config 找不到 4.0 —— 而报错信息只说「Package webkit2gtk-4.0
+      # was not found」，不会告诉你是 tag 的问题。
+      #
+      # 这里选 4.0：它是 Wails 的默认路径，不需要额外 tag，少一个变量。
+      # 全部依赖（grep 出所有 pkg-config 指令后去重）：gtk+-3.0 / gio-unix-2.0 /
+      # webkit2gtk-4.0；libsoup-2.4 由 libwebkit2gtk-4.0-dev 传递引入。
+      - name: Install Linux build deps
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config \
+            libgtk-3-dev libwebkit2gtk-4.0-dev \
+            libayatana-appindicator3-dev
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
+
+      - name: Install frontend deps
+        working-directory: app/frontend
         run: pnpm install --frozen-lockfile
-      - name: Build
-        run: pnpm build:linux:arm64
+
+      # wailsjs/ 是 `wails generate module` 生成的、不入库。
+      # 不生成就直接构建，前端会因为找不到 `../../wailsjs/go/main/App` 而失败：
+      #   Could not resolve "../../wailsjs/go/main/App" from "src/lib/backend.ts"
+      #
+      # **顺序不能反**：`wails generate module` 会先把 Go 包编译一遍，
+      # 而 main.go 里有 `//go:embed all:frontend/dist` —— dist 不存在时
+      # 直接报 `pattern all:frontend/dist: no matching files found`。
+      # 所以要先准备 embed 目录，再生成绑定。
+      - name: 准备 embed 目录
+        run: bash app/scripts/prepare-embed-dir.sh
+
+      - name: 生成 Wails 绑定（wailsjs）
+        working-directory: app
+        run: wails generate module
+
+      # 必须用 build.sh：它先把依赖边车编译好再带 `-tags withsidecar` 构建。
+      # 直接 `wails build` 出来的应用**没有依赖探测能力**（边车不在包里），
+      # 用户看到的是「依赖页只剩一条」——这个故障真实发生过。
+      - name: Build (Wails)
+        working-directory: app
+        run: bash scripts/build.sh -platform ${{ matrix.platform }} -skipbindings
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
+          VERSION: ${{ needs.version.outputs.version }}
+
+      - name: Package macOS
+        if: matrix.os == 'macos-latest'
+        run: |
+          cd app/build/bin
+          # universal 产出的名字是 downvid.app；压成 zip 保留可执行权限
+          ditto -c -k --sequesterRsrc --keepParent downvid.app \
+            "../../../DownVid-Wails-${{ matrix.suffix }}-${{ needs.version.outputs.version }}.zip"
+          ls -la ../../../DownVid-Wails-*.zip
+
+      - name: Package Windows
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $v = "${{ needs.version.outputs.version }}"
+          Compress-Archive -Path app/build/bin/downvid.exe `
+            -DestinationPath "DownVid-Wails-windows-x64-$v.zip"
+          Get-Item DownVid-Wails-*.zip | Format-List Name, Length
+
+      - name: Package Linux
+        if: matrix.os == 'ubuntu-22.04'
+        run: |
+          cd app/build/bin
+          tar -czf "../../../DownVid-Wails-${{ matrix.suffix }}-${{ needs.version.outputs.version }}.tar.gz" downvid
+          ls -la ../../../DownVid-Wails-*.tar.gz
+
+      - uses: actions/upload-artifact@v7
         with:
-          name: linux-arm64-builds
+          name: wails-${{ matrix.suffix }}
+          # macOS / Windows 出 zip，Linux 出 tar.gz（保留可执行位）
           path: |
-            release/**/*-Linux-*.AppImage
-            release/**/*-Linux-*.tar.gz
-            release/**/latest-linux-arm64.yml
-            release/**/*.blockmap
+            DownVid-Wails-*.zip
+            DownVid-Wails-*.tar.gz
           retention-days: 7
+          if-no-files-found: error
 
   release:
-    needs: [version, build-mac-arm64, build-mac-x64, build-win, build-linux-x64, build-linux-arm64, build-wails]
+    needs: [version, build-wails]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     if: needs.version.outputs.version != ''
@@ -339,22 +285,6 @@ jobs:
         uses: actions/setup-node@v7
         with:
           node-version: 22
-
-      # 各 job 生成的 latest*.yml 汇总时会互相覆盖，按最终上传的文件重新生成
-      #
-      # `MIGRATE_TO_WAILS` 控制哪些平台的自动更新指向新架构产物。
-      # **默认留空 = 一个都不切**，老用户继续拿 Electron 版。
-      #
-      # 按平台逐个切（workflow_dispatch 的输入，或改这里的默认值）：
-      #   macos  → 已可切（安装由我们自己的代码完成，不依赖 NSIS）
-      #   linux  → 需先确认 AppImage 产物存在
-      #   windows→ 需先让 NSIS 脚本支持 --updated / --force-run
-      #
-      # 这是单向门：切了以后老用户会被换成新架构且回不到 Electron。
-      - name: Generate update manifests
-        env:
-          MIGRATE_TO_WAILS: ${{ inputs.migrate_to_wails != '' && inputs.migrate_to_wails || 'macos' }}
-        run: node scripts/gen-update-manifests.mjs artifacts "$VERSION"
 
       # 正文顶部生成「点徽章即下载」的引导区：Release 里 CHANGELOG 内容较长，
       # 此前不少用户拉到页面后不知道点哪里下载。下载链接按实际产物生成，
@@ -382,25 +312,13 @@ jobs:
           prerelease: ${{ needs.version.outputs.prerelease == 'true' }}
           body: ${{ steps.changelog.outputs.notes }}
           files: |
-            artifacts/**/*.dmg
-            artifacts/**/*.zip
-            artifacts/**/DownVid-Setup-*.exe
-            artifacts/**/DownVid-Portable-*.exe
-            artifacts/**/*.AppImage
-            artifacts/**/*.deb
-            artifacts/**/*.rpm
-            artifacts/**/*.tar.gz
-            artifacts/latest*.yml
-            artifacts/**/*.blockmap
-            # Wails 版（新架构）的独立产物：与 Electron 版同时挂在同一个 Release 上，
-            # 但文件名前缀不同（DownVid-Wails-*），electron-updater 不会把它
-            # 当成更新包 —— 那正是我们要的（见 build-wails 的注释）
-            artifacts/DownVid-Wails-*
+            artifacts/DownVid-Wails-*.zip
+            artifacts/DownVid-Wails-*.tar.gz
 
-      # 发布**完成后**回头核对一次：Release 真的存在、且带着全部平台的更新清单。
+      # 发布**完成后**回头核对一次：Release 真的存在、且三个平台的包都齐。
       # 为什么需要这一步：实测 `v1.3.5` 的 tag 推上去了、CHANGELOG 也写了，
       # 但这次运行在 3 分钟后**被取消**，于是 GitHub Release 里没有 v1.3.5，
-      # 自动更新通道仍指向 v1.3.4 —— 所有存量用户永远收不到这次修复，
+      # 更新通道仍指向 v1.3.4 —— 所有存量用户永远收不到这次修复，
       # 而版本号已经继续往前走了。这种失败**没有任何提示**：
       # tag 在、CHANGELOG 在、package.json 也在，只有 Release 页面少了一条。
       #
@@ -413,7 +331,7 @@ jobs:
 
       # ===== 官网版本号：只在确认发布成功之后才刷 =====
       #
-      # 官网是单文件、无构建，页面上的版本号只能是硬编码的：脚本拉到 releases/latest
+      # 官网是无构建的静态站，页面上的版本号只能是硬编码的：脚本拉到 releases/latest
       # 会覆盖成真实 tag，但离线 / 被限流 / 禁用 sessionStorage 时会退回那个写死的值。
       # 不刷新它不会报错，只会安静地过期——页面上写着 v1.3.4 而实际最新版是 v1.4.0。
       #
@@ -512,150 +430,3 @@ jobs:
           done
           echo "::error::5 分钟内线上官网仍未出现 v$VERSION：去 Vercel 面板看这次部署的日志。"
           exit 1
-
-  # ===== Wails 版（新架构）=====
-  #
-  # 与上面的 Electron 版**并行发布**，产物用独立命名（`DownVid-Wails-*`），
-  # 互不干扰。这是刻意的：
-  #
-  #   存量 9600+ 用户装的是 Electron 版，靠 electron-updater 读
-  #   `latest*.yml` + NSIS/dmg。Wails 产出的是裸 `.app` / `.exe`，
-  #   格式对不上 —— 直接替换产物会让他们的自动更新**永远失败**，
-  #   而那是「唯一一旦坏掉就再也修不好」的通道。
-  #
-  # 所以分阶段：
-  #   1. 现在：两套并行，Wails 版作为「独立下载」的预览产物
-  #   2. 稳定几个版本后：单独做一次迁移器，把老用户导过去
-  build-wails:
-    needs: [version]
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: macos-latest
-            platform: darwin/universal
-            suffix: mac-universal
-          - os: windows-latest
-            platform: windows/amd64
-            suffix: windows-x64
-          - os: ubuntu-22.04
-            platform: linux/amd64
-            suffix: linux-x64
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-go@v7
-        with:
-          go-version: '1.25'
-          cache: false
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-
-      - uses: pnpm/action-setup@v6
-
-      # Linux 构建 Wails 需要 GTK / WebKit 开发包，运行需要它们的运行时库。
-      # 这两组包名在不同发行版上不同，这里按 Ubuntu 22.04 写。
-      # Linux 构建 Wails 需要 cgo 链接 GTK / WebKit。
-      #
-      # ## 为什么是 4.0 而不是 4.1
-      #
-      # Wails v2.16 的 cgo 指令默认要 `webkit2gtk-4.0`：
-      #
-      #     #cgo !webkit2_41 pkg-config: webkit2gtk-4.0
-      #     #cgo  webkit2_41 pkg-config: webkit2gtk-4.1
-      #
-      # 只有加 `-tags webkit2_41` 才用 4.1。我第一版装了 4.1 却没加 tag，
-      # 于是 pkg-config 找不到 4.0 —— 而报错信息只说「Package webkit2gtk-4.0
-      # was not found」，不会告诉你是 tag 的问题。
-      #
-      # 这里选 4.0：它是 Wails 的默认路径，不需要额外 tag，少一个变量。
-      #
-      # ## 全部依赖（grep 出所有 pkg-config 指令后去重得到）
-      #
-      #   gtk+-3.0  gio-unix-2.0  webkit2gtk-4.0  libsoup-2.4
-      #
-      # libsoup-2.4 由 libwebkit2gtk-4.0-dev 传递引入，不必单列。
-      - name: Install Linux build deps
-        if: matrix.os == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential pkg-config \
-            libgtk-3-dev libwebkit2gtk-4.0-dev \
-            libayatana-appindicator3-dev
-
-      - name: Install Wails CLI
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
-
-      - name: Install frontend deps
-        working-directory: app/frontend
-        run: pnpm install --frozen-lockfile
-
-      # wailsjs/ 是 `wails generate module` 生成的、不入库。
-      # 不生成就直接构建，前端会因为找不到 `../../wailsjs/go/main/App` 而失败：
-      #   Could not resolve "../../wailsjs/go/main/App" from "src/lib/backend.ts"
-      #
-      # `build.sh` 里不会替我们生成它 —— 那是 `wails build` 的职责，
-      # 但它要等到编译阶段才跑，而前端在这之前就已经构建完了。
-      #
-      # **顺序不能反**：`wails generate module` 会先把 Go 包编译一遍，
-      # 而 main.go 里有 `//go:embed all:frontend/dist` —— dist 不存在时
-      # 直接报 `pattern all:frontend/dist: no matching files found`。
-      # 所以要先准备 embed 目录，再生成绑定。
-      - name: 准备 embed 目录
-        run: bash app/scripts/prepare-embed-dir.sh
-
-      - name: 生成 Wails 绑定（wailsjs）
-        working-directory: app
-        run: wails generate module
-
-      # 必须用 build.sh：它先把依赖边车编译好再带 `-tags withsidecar` 构建。
-      # 直接 `wails build` 出来的应用**没有依赖探测能力**（边车不在包里），
-      # 用户看到的是「依赖页只剩一条」——这个故障真实发生过。
-      - name: Build (Wails)
-        working-directory: app
-        run: bash scripts/build.sh -platform ${{ matrix.platform }} -skipbindings
-
-      - name: Package macOS
-        if: matrix.os == 'macos-latest'
-        run: |
-          cd app/build/bin
-          # universal 产出的名字是 downvid.app；压成 zip 保留可执行权限
-          ditto -c -k --sequesterRsrc --keepParent downvid.app \
-            "../../../DownVid-Wails-${{ matrix.suffix }}-${{ needs.version.outputs.version }}.zip"
-          # 同时生成 arm64 与 x64 别名，使存量 Electron 客户端（根据 includes('arm64') 选包）顺利识别
-          cp "../../../DownVid-Wails-${{ matrix.suffix }}-${{ needs.version.outputs.version }}.zip" \
-            "../../../DownVid-Wails-mac-arm64-${{ needs.version.outputs.version }}.zip"
-          cp "../../../DownVid-Wails-${{ matrix.suffix }}-${{ needs.version.outputs.version }}.zip" \
-            "../../../DownVid-Wails-mac-x64-${{ needs.version.outputs.version }}.zip"
-          ls -la ../../../DownVid-Wails-*.zip
-
-      - name: Package Windows
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          $v = "${{ needs.version.outputs.version }}"
-          Compress-Archive -Path app/build/bin/downvid.exe `
-            -DestinationPath "DownVid-Wails-windows-x64-$v.zip"
-          Get-Item DownVid-Wails-*.zip | Format-List Name, Length
-
-      - name: Package Linux
-        if: matrix.os == 'ubuntu-22.04'
-        run: |
-          cd app/build/bin
-          tar -czf "../../../DownVid-Wails-${{ matrix.suffix }}-${{ needs.version.outputs.version }}.tar.gz" downvid
-          ls -la ../../../DownVid-Wails-*.tar.gz
-
-      - uses: actions/upload-artifact@v7
-        with:
-          name: wails-${{ matrix.suffix }}
-          # macOS / Windows 出 zip，Linux 出 tar.gz（保留可执行位）
-          path: |
-            DownVid-Wails-*.zip
-            DownVid-Wails-*.tar.gz
-          retention-days: 7
-          if-no-files-found: error

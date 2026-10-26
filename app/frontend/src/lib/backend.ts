@@ -31,6 +31,7 @@ import type {
 } from './types'
 import { detectPlatform, platformName, hostOf } from './url'
 import { t } from './i18n.svelte'
+import { APP_VERSION, BUILD_DATE } from './constants'
 
 /** 后端是否可用（浏览器里为 false） */
 export const hasBackend = (): boolean =>
@@ -135,6 +136,7 @@ type Bindings = {
   HistoryClear(): Promise<boolean>
   CheckUpdate(source: string): Promise<Record<string, unknown>>
   GetVersion(): Promise<string>
+  GetBuildDate?(): Promise<string>
   GetDefaultDownloadDir(): Promise<string>
   GetDataDir(): Promise<string>
   GetPlatform(): Promise<string>
@@ -614,11 +616,27 @@ export async function fetchImage(url: string, referer = ''): Promise<string> {
 
 export async function appVersion(): Promise<string> {
   const b = await backend()
-  if (!b) return '0.0.0-preview'
+  if (!b) return APP_VERSION
   try {
-    return await b.GetVersion()
+    const v = await b.GetVersion()
+    if (v && v !== '0.0.0-dev' && v !== '0.0.0-preview') return v
+    return APP_VERSION
   } catch {
-    return '0.0.0-preview'
+    return APP_VERSION
+  }
+}
+
+export async function appBuildDate(): Promise<string> {
+  const b = await backend()
+  if (!b) return BUILD_DATE
+  try {
+    if (b.GetBuildDate) {
+      const d = await b.GetBuildDate()
+      if (d) return d
+    }
+    return BUILD_DATE
+  } catch {
+    return BUILD_DATE
   }
 }
 

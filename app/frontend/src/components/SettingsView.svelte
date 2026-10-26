@@ -12,7 +12,7 @@
   import type { SettingsSection } from '../lib/types'
   import type { DepItem } from '../lib/types'
   import { t } from '../lib/i18n.svelte'
-  import { APP_VERSION } from '../lib/constants'
+  import { APP_VERSION, BUILD_DATE } from '../lib/constants'
   import type { AppSettings as DemoSettings } from '../lib/settings'
 
   const navItems: { id: SettingsSection; key: string; icon: string }[] = [
@@ -606,8 +606,8 @@
             <span class="row-hint">{t('about.build')}</span>
           </div>
           <div class="row-control">
-            <span class="version num">v{APP_VERSION}</span>
-            <span class="build muted">{t('about.buildValue')}</span>
+            <span class="version num">v{app.version || APP_VERSION}</span>
+            <span class="build muted">{app.buildDate || BUILD_DATE}</span>
           </div>
         </div>
       {/if}

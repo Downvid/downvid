@@ -34,7 +34,11 @@ export { REPO_URL, WEBSITE_URL, REPO_SLUG } from '../../../../shared/app'
  */
 declare const __APP_VERSION__: string
 export const APP_VERSION: string =
-  typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '0.0.0-dev'
+  typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.6.4'
+
+declare const __BUILD_DATE__: string
+export const BUILD_DATE: string =
+  typeof __BUILD_DATE__ !== 'undefined' ? __BUILD_DATE__ : '2026.10.26'
 
 export const KB = 1024
 export const MB = 1024 * KB

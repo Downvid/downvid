@@ -122,14 +122,23 @@ bash "${APP_DIR}/scripts/prepare-embed-dir.sh"
 #
 # 写成 `-X main.arch=wails` 而不是在代码里硬编码：Electron 版也有同一份
 # 代码路径，靠注入区分两者。
-VERSION="$(node -p "require('${REPO_DIR}/package.json').version" 2>/dev/null || echo 0.0.0-dev)"
+if [[ -z "${VERSION:-}" ]]; then
+  # 优先直接从 package.json 提取 version，避免 Windows 下 MSYS 路径传给 node require 报错
+  VERSION="$(grep -m1 '"version":' "${REPO_DIR}/package.json" 2>/dev/null | sed -E 's/.*"version": *"([^"]+)".*/\1/' || true)"
+fi
+if [[ -z "${VERSION:-}" ]]; then
+  VERSION="$(cd "${REPO_DIR}" && node -p "require('./package.json').version" 2>/dev/null || true)"
+fi
+if [[ -z "${VERSION:-}" ]]; then
+  VERSION="1.6.4"
+fi
+
+BUILD_DATE="$(date +%Y.%m.%d)"
 ARCH_TAG="wails"
 if [[ " ${WAILS_ARGS[*]} " == *" --electron "* ]]; then
   ARCH_TAG="electron"
 fi
-LDFLAGS="-s -w -X main.version=${VERSION}"
-# `main.arch` 由 app.go 的 init() 转给 update.CurrentArchitecture
-LDFLAGS="${LDFLAGS} -X main.arch=${ARCH_TAG}"
+LDFLAGS="-s -w -X main.version=${VERSION} -X main.arch=${ARCH_TAG} -X main.buildDate=${BUILD_DATE}"
 
 echo "→ wails build -tags withsidecar（version=${VERSION} arch=${ARCH_TAG}）"
 cd "${APP_DIR}"

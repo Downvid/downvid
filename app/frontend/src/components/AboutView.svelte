@@ -10,7 +10,7 @@
   import { app } from '../lib/store.svelte'
   import { parseInline, splitSummary } from '../lib/markdown'
   import { t } from '../lib/i18n.svelte'
-  import { APP_VERSION, REPO_URL, WEBSITE_URL } from '../lib/constants'
+  import { APP_VERSION, BUILD_DATE, REPO_URL, WEBSITE_URL } from '../lib/constants'
   import { openExternal } from '../lib/backend'
   // 邮箱与 mailto 拼装沿用应用现有的唯一来源，避免在演示里复制一份
   import { CONTACT_EMAIL, contactMailto } from '../../../../shared/app'
@@ -271,7 +271,7 @@
       <div class="identity-foot">
         <span class="identity-build num">
           <span class="meta-label">{t('about.build')}</span>
-          {t('about.buildValue')}
+          {app.buildDate || BUILD_DATE}
         </span>
         <button
           type="button"
