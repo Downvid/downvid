@@ -21,12 +21,15 @@ const I18N = {
     'dl.offline': '暂时拿不到最新版本信息，点击将打开 Releases 页面。',
     'dl.missing': '最新版里没有找到对应安装包，请到 Releases 页面查看。',
     'dl.unknown': '没识别出桌面系统，请从下面的列表里选。',
-    'dl.win.installer': 'Windows x64 安装程序 (.exe)',
-    'dl.win.zip': 'Windows x64 便携版 (.zip)',
-    'dl.mac.dmg': 'macOS 通用版安装器 (.dmg)',
-    'dl.mac.universal': 'macOS 通用版 (.zip)',
-    'dl.linux.deb': 'Linux x64 安装包 (.deb)',
-    'dl.linux.targz': 'Linux x64 便携包 (.tar.gz)',
+    'dl.recommended': '推荐',
+    'dl.portable': '便携',
+    'dl.selfupdate': '自动更新用',
+    'dl.win.installer': 'Windows 安装程序 (.exe)',
+    'dl.win.zip': 'Windows 便携版 (.zip)',
+    'dl.mac.dmg': 'macOS 安装器 (.dmg)',
+    'dl.mac.universal': 'macOS 便携 / 自更新包 (.zip)',
+    'dl.linux.deb': 'Linux 安装包 (.deb)',
+    'dl.linux.targz': 'Linux 便携包 (.tar.gz)',
     'dev.copy': '复制',
     'dev.copied': '已复制',
     'demo.start': '开始',
@@ -122,12 +125,15 @@ const I18N = {
     'dl.offline': "Couldn't fetch the latest version; the button opens the Releases page instead.",
     'dl.missing': 'No matching package in the latest release — see the Releases page.',
     'dl.unknown': 'Could not detect a desktop OS — pick one from the list below.',
-    'dl.win.installer': 'Windows x64 Installer (.exe)',
-    'dl.win.zip': 'Windows x64 Portable (.zip)',
-    'dl.mac.dmg': 'macOS Universal Installer (.dmg)',
-    'dl.mac.universal': 'macOS Universal (.zip)',
-    'dl.linux.deb': 'Linux x64 Package (.deb)',
-    'dl.linux.targz': 'Linux x64 Portable (.tar.gz)',
+    'dl.recommended': 'Recommended',
+    'dl.portable': 'Portable',
+    'dl.selfupdate': 'Self-update',
+    'dl.win.installer': 'Windows Installer (.exe)',
+    'dl.win.zip': 'Windows Portable (.zip)',
+    'dl.mac.dmg': 'macOS Installer (.dmg)',
+    'dl.mac.universal': 'macOS Portable / self-update (.zip)',
+    'dl.linux.deb': 'Linux Package (.deb)',
+    'dl.linux.targz': 'Linux Portable (.tar.gz)',
     'plat.macos': 'macOS',
     'plat.windows': 'Windows',
     'plat.linux': 'Linux',
@@ -296,7 +302,7 @@ const ARTIFACTS = {
   ],
   macos: [
     { name: 'DownVid-Wails-mac-universal-{version}.dmg', key: 'dl.mac.dmg', arch: 'arm64', primary: true },
-    { name: 'DownVid-Wails-mac-universal-{version}.zip', key: 'dl.mac.universal', arch: 'arm64' },
+    { name: 'DownVid-Wails-mac-universal-{version}.zip', key: 'dl.mac.universal', arch: 'arm64', selfUpdate: true },
   ],
   linux: [
     { name: 'DownVid-Wails-linux-x64-{version}.deb', key: 'dl.linux.deb', arch: 'x64', primary: true },
@@ -588,6 +594,20 @@ function renderMenu(currentOs) {
         meta.textContent = size;
         link.appendChild(meta);
       }
+      // 徽章说明这个产物**是干什么的**：安装器是推荐路径，zip / tar.gz 是便携
+      // （macOS 的 .zip 同时是应用自更新下载的那份包，容易被误当"只是压缩包"）。
+      const tag = document.createElement('span');
+      if (item.variant.primary) {
+        tag.className = 'dl-item-tag is-primary';
+        tag.textContent = t('dl.recommended');
+      } else if (item.variant.selfUpdate) {
+        tag.className = 'dl-item-tag';
+        tag.textContent = t('dl.selfupdate');
+      } else {
+        tag.className = 'dl-item-tag';
+        tag.textContent = t('dl.portable');
+      }
+      link.appendChild(tag);
       box.appendChild(link);
     }
     host.appendChild(box);

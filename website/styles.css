@@ -110,6 +110,9 @@ header.is-stuck::before{opacity:1}
 .dl-item{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 9px;border-radius:8px;font-size:13px;color:var(--on-surface-variant)}
 .dl-item:hover{background:var(--surface-container);color:var(--on-surface)}
 .dl-item-size{font-variant-numeric:tabular-nums;opacity:.75}
+/* 产物用途徽章：安装器=推荐，zip/tar.gz=便携，macOS 的 .zip 另标「自动更新用」 */
+.dl-item-tag{margin-left:auto;padding:1px 7px;border-radius:999px;border:1px solid var(--outline-variant);font-size:11px;line-height:1.6;color:var(--on-surface-variant);white-space:nowrap}
+.dl-item-tag.is-primary{border-color:color-mix(in oklab,var(--primary) 45%,transparent);background:color-mix(in oklab,var(--primary) 12%,transparent);color:var(--primary);font-weight:600}
 .dl-menu-empty{margin:0;font-size:13px;color:var(--on-surface-variant)}
 .dl-menu-all{display:block;margin-top:14px;padding-top:12px;border-top:1px solid var(--outline-variant);font-size:13px;font-weight:600;color:var(--primary)}
 .hero-shot{position:relative;z-index:2;margin-top:64px}
