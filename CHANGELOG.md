@@ -2,7 +2,7 @@
 
 本文件记录 DownVid 的所有版本更新。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
-## [Unreleased]
+## [1.9.0] - 2026-10-28
 
 ### 变更
 

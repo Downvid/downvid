@@ -12,7 +12,6 @@ name: Sync mirrors
 on:
   push:
     branches: [main]
-    tags: ["v*"]
   workflow_dispatch:
 
 permissions:
@@ -44,11 +43,6 @@ jobs:
           git -c "http.extraHeader=Authorization: Basic $auth" push \
             "https://gitee.com/Xynrin/downvid.git" \
             "HEAD:refs/heads/main"
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            git -c "http.extraHeader=Authorization: Basic $auth" push \
-              "https://gitee.com/Xynrin/downvid.git" \
-              "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
-          fi
 
   cnb:
     if: github.repository == 'Downvid/downvid'
