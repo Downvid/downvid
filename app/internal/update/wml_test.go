@@ -3,6 +3,7 @@ package update
 import (
 	"errors"
 	"runtime"
+	"strings"
 	"testing"
 
 	wmlupdate "github.com/yxxbc/wmlUpdate"
@@ -32,6 +33,10 @@ func TestWMLSourceMapping(t *testing.T) {
 		if len(sc.Sources[2].ManifestURLs) != len(wmlManifestURLs) {
 			t.Fatalf("manifest urls = %d, want %d", len(sc.Sources[2].ManifestURLs), len(wmlManifestURLs))
 		}
+		// 最新的源必须排第一：static 源只在「请求失败」时切下一个，不会因为内容过期而切。
+		if sc.Sources[2].ManifestURLs[0] != wmlManifestURLs[0] {
+			t.Fatalf("first manifest url = %q, want website first (%q)", sc.Sources[2].ManifestURLs[0], wmlManifestURLs[0])
+		}
 	})
 
 	t.Run("钉死单个源", func(t *testing.T) {
@@ -39,13 +44,13 @@ func TestWMLSourceMapping(t *testing.T) {
 			source string
 			typ    string
 			api    string
-			url    string
+			host   string
 		}{
 			{"github", wmlupdate.SourceGitHub, "", ""},
 			{"ghproxy", wmlupdate.SourceGitHub, wmlGHProxyAPI, ""},
-			{"jsdelivr", wmlupdate.SourceStatic, "", wmlManifestURLs[0]},
-			{"gitee", wmlupdate.SourceStatic, "", wmlManifestURLs[1]},
-			{"website", wmlupdate.SourceStatic, "", wmlManifestURLs[2]},
+			{"jsdelivr", wmlupdate.SourceStatic, "", "cdn.jsdelivr.net"},
+			{"gitee", wmlupdate.SourceStatic, "", "gitee.com"},
+			{"website", wmlupdate.SourceStatic, "", "downvid-coral.vercel.app"},
 		}
 		for _, tc := range cases {
 			t.Run(tc.source, func(t *testing.T) {
@@ -56,9 +61,9 @@ func TestWMLSourceMapping(t *testing.T) {
 				if sc.APIBase != tc.api {
 					t.Fatalf("api_base = %q, want %q", sc.APIBase, tc.api)
 				}
-				if tc.url != "" {
-					if len(sc.ManifestURLs) != 1 || sc.ManifestURLs[0] != tc.url {
-						t.Fatalf("manifest urls = %v, want [%s]", sc.ManifestURLs, tc.url)
+				if tc.host != "" {
+					if len(sc.ManifestURLs) != 1 || !strings.Contains(sc.ManifestURLs[0], tc.host) {
+						t.Fatalf("manifest urls = %v, want host %s", sc.ManifestURLs, tc.host)
 					}
 				}
 			})
@@ -70,6 +75,23 @@ func TestWMLSourceMapping(t *testing.T) {
 			t.Fatalf("type = %q, want chain", sc.Type)
 		}
 	})
+}
+
+// TestWMLManifestOrder 钉住 static 镜像的顺序。
+//
+// wmlUpdate 的 static 源只在「请求失败」时切下一个 URL，**不会因为内容过期而切**。
+// 所以最新鲜的源必须排第一：官网由 release.yml 发布后立即验证，jsDelivr 的
+// @main 有缓存，Gitee 是最后兜底。顺序写反了不会报错，只会让国内用户读到上一版。
+func TestWMLManifestOrder(t *testing.T) {
+	want := []string{"downvid-coral.vercel.app", "cdn.jsdelivr.net", "gitee.com"}
+	if len(wmlManifestURLs) != len(want) {
+		t.Fatalf("manifest urls = %d, want %d", len(wmlManifestURLs), len(want))
+	}
+	for i, host := range want {
+		if !strings.Contains(wmlManifestURLs[i], host) {
+			t.Errorf("manifest urls[%d] = %q, want host %s", i, wmlManifestURLs[i], host)
+		}
+	}
 }
 
 // TestWMLAssetRulesOrder 钉住平台资产的选择顺序。

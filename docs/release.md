@@ -246,7 +246,7 @@ README 顶部目前有 Downloads / Release / Stars / License / Product Hunt。�
 
 ### 更新源不可用
 
-更新按 wmlUpdate 的源链自动降级（GitHub 直连 → gh-proxy → jsDelivr / Gitee / 官网的 static
+更新按 wmlUpdate 的源链自动降级（GitHub 直连 → gh-proxy → 官网 / jsDelivr / Gitee 的 static
 manifest），全部失败时**不会静默当成「已是最新」**：界面显示失败摘要。用户可：
 - 在「设置 → 代理」配置代理后重试
 - 直接前往 Releases 页面手动下载

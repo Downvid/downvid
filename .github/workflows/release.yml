@@ -524,6 +524,11 @@ jobs:
           fi
           git commit -m "chore(website): 发布后同步官网版本号与更新清单至 v$VERSION" -m "由 release.yml 在 Release 创建成功后自动写入，离线兜底值与 wmlUpdate 更新源不再是过期的。"
           git push origin main
+          # jsDelivr 会缓存 @main 文件；发布后主动清一次，避免国内用户读到上一版清单。
+          # 失败只警告：官网是第一顺位，jsDelivr 只是后备。
+          curl -fsS --max-time 20 \
+            "https://purge.jsdelivr.net/gh/Downvid/downvid@main/website/updates/manifest.json" >/dev/null \
+            || echo "::warning::jsDelivr 清理失败，static 镜像可能仍返回上一版"
 
       # ===== 显式触发官网部署：不指望「Git 集成恰好收到了这次 push」 =====
       #

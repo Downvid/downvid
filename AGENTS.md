@@ -407,8 +407,9 @@ m3u8 仅在该清晰度无直链时保留、都没有分辨率时提供 `bv*+ba/
 原因是 wmlUpdate 的 directory/file/command 策略要求固定安装路径，deferred helper 也只对
 它自己的 CLI 生效——嵌入到 DownVid 时复制出来的是 DownVid 本身，不会执行安装计划。
 
-- `auto` = GitHub 直连 → GitHub API 经 gh-proxy → static manifest 镜像（jsDelivr / Gitee / 官网）。
-  用户设置里的 `updateSource` 仍可钉死某个源，非法值**一律回退 `auto`**。
+- `auto` = GitHub 直连 → GitHub API 经 gh-proxy → static manifest 镜像（官网 / jsDelivr / Gitee；
+  同一份文件，官网最新所以排第一）。用户设置里的 `updateSource` 仍可钉死某个源，非法值
+  **一律回退 `auto`**。
 - 三个 static 镜像读同一份 `website/updates/manifest.json`（`scripts/gen-update-manifest.mjs`
   生成；`release.yml` 每次发布重写，并与官网版本号在同一个提交里推回 main）。清单里带每个
   产物的 SHA-256。

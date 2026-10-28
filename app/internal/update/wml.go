@@ -50,12 +50,15 @@ const (
 
 // wmlManifestURLs 是同一份 static manifest 的三个镜像。
 //
-// 顺序即优先级：jsDelivr 国内可达且不限流；Gitee 是仓库镜像的 raw；
-// 官网最后兜底。三者都必须由发布流程写入，否则该源会直接失败并切下一个。
+// 顺序即优先级：**官网第一**，因为 release.yml 在发布后显式触发并回读 Vercel，
+// 它一定是最新的；jsDelivr 第二（@main 有缓存，发布流程会主动 purge，但仍可能
+// 落后）；Gitee 是仓库镜像的 raw，最后兜底。wmlUpdate 的 static 源只会在
+// 「前一个 URL 请求失败」时切下一个，不会因为内容过期而切 —— 所以最新的源必须
+// 排在前面。
 var wmlManifestURLs = []string{
+	"https://downvid-coral.vercel.app/updates/manifest.json",
 	"https://cdn.jsdelivr.net/gh/Downvid/downvid@main/website/updates/manifest.json",
 	"https://gitee.com/Downvid/downvid/raw/main/website/updates/manifest.json",
-	"https://downvid-coral.vercel.app/updates/manifest.json",
 }
 
 // wmlAssetMirrors 是产物下载的镜像模板，顺序与旧链路一致。
@@ -148,14 +151,14 @@ func wmlSource(source string, manifestURLs []string) wmlupdate.SourceConfig {
 		return wmlGitHubSource("")
 	case SourceGHPROXY:
 		return wmlGitHubSource(wmlGHProxyAPI)
-	case SourceJSDelivr:
+	case SourceWebsite:
 		return wmlStaticSource(manifestURLs[0])
-	case SourceGitee:
+	case SourceJSDelivr:
 		if len(manifestURLs) > 1 {
 			return wmlStaticSource(manifestURLs[1])
 		}
 		return wmlStaticSource(manifestURLs[0])
-	case SourceWebsite:
+	case SourceGitee:
 		if len(manifestURLs) > 2 {
 			return wmlStaticSource(manifestURLs[2])
 		}
