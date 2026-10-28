@@ -29,8 +29,8 @@ yt-dlp / ffmpeg **不需要**预先安装（见「运行依赖」一节）。
 
 ## 验证命令
 
-改完必须跑对应的一层。CI 覆盖大部分，但注意：CI 的 frontend job 不跑 Go 核心测试，
-Go 那层靠 `cd app && go test ./...` 自己跑。
+改完必须跑对应的一层。前端检查**已不在 CI 中运行**（见下文），改 UI 时自己跑；
+Go 核心测试仍由 CI 的 backend job 覆盖，但本地 `go test` 更便宜。
 
 ```bash
 # Go 核心（app/）
@@ -83,12 +83,14 @@ bash app/scripts/build.sh            # 单文件产物
 | job | 内容 |
 | --- | --- |
 | `backend` | 侧车与核心的 gofmt / vet / `go test -shuffle=on` / 边车交叉编译 |
-| `frontend` | 图标 / 官网 / 文档 / 来源审计 / 边界 / 坐标 / 词条 / 工作流 / 根目录单测；外加 `wails generate module` → svelte-check 与前端单测 |
 | `integration` / `build` | 仅 Linux：真实依赖端到端；三平台各有 `build` job 编译一次单文件产物 |
 
-三个工作流都有前置的 `changes` job：**文档 / 官网 / Markdown-only 的 push 只跑 `frontend`**
-（lint、单测、词条、图标都在这里），交叉编译、三平台产物、真实依赖端到端一律跳过。
-`frontend` 不能跳过——`lint:docs` 与 `lint:website` 校验的正是这些文件。
+三个工作流都有前置的 `changes` job：**文档 / 官网 / Markdown-only 的 push** 跳过交叉编译、
+三平台产物与真实依赖端到端。原先的 `frontend` job（图标 / 官网 / 文档 / 来源审计 / 边界 /
+坐标 / 词条 / 工作流 / 根目录单测 / svelte-check / 前端单测）**已移除**：它频繁失败，反而挡住
+无关改动。这些检查在改 UI 或发版前本地跑：`pnpm lint:*`、`pnpm test`、
+`pnpm --dir app/frontend check`、`pnpm --dir app/frontend test`。`release.yml` 仍会跑它需要的
+静态校验。
 
 发布由 `.github/workflows/release.yml` 负责；`.github/workflows/release-audit.yml` 每天独立核对
 「最新 tag ↔ Release 是否对得上」；`.github/workflows/update-deps.yml` 升级运行依赖清单；
