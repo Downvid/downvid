@@ -275,6 +275,7 @@ const I18N = {
     'foot.issues': 'Issues',
     'foot.changelog': 'Changelog',
     'foot.security': 'Security',
+    'foot.updater': 'Updater',
   },
 };
 

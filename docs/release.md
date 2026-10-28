@@ -42,6 +42,7 @@ pnpm test
 pnpm deps:manifest:check      # 依赖清单是否落后上游
 pnpm lint:website             # 官网（含版本号占位）静态约束
 pnpm lint:docs && pnpm lint:workflows
+pnpm sync:changelog           # 内嵌的 CHANGELOG 副本必须与根部一致
 ```
 
 > **不要**为了发版去手工改 `website/index.html` 的版本号：`release.yml` 会在
@@ -49,8 +50,9 @@ pnpm lint:docs && pnpm lint:workflows
 
 ### 2. 升版本号
 
-只改 `package.json` 的 `version`。应用内更新直接读 GitHub Releases 的产物列表
-（`app/internal/update`），没有额外的清单文件需要同步。
+只改 `package.json` 的 `version`。wmlUpdate 的更新通道读两处：GitHub Releases，
+以及 `website/updates/manifest.json`（GitHub 受限时降级用）。后者由 `release.yml`
+从本次产物自动生成，**不要手工编辑**；它会和官网版本号在同一个提交里推回 main。
 
 ### 3. 写 CHANGELOG
 
