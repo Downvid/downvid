@@ -1290,6 +1290,21 @@ class AppStore {
       return
     }
 
+    // 全链路失败（Go 的 release 为 null）。**必须排在 hasUpdate 判断之前**：
+    // 后端刻意不抛错，全挂时 hasUpdate 也是 false；先判 hasUpdate 会把
+    // 「离线 / 被墙 / 全部限流」显示成「已是最新版本」，用户永远不知道
+    // 检查没做成。summary 里是「哪个源、什么原因」，留给诊断用。
+    if (res.failed) {
+      this.updateInfo = {
+        status: 'error',
+        progress: 0,
+        summary: res.summary || t('update.offline'),
+        architecture: res.architecture,
+      }
+      if (!silent) this.toast(t('update.offline'), 'error')
+      return
+    }
+
     if (!res.hasUpdate) {
       this.updateInfo = {
         status: 'latest',

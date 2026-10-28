@@ -655,6 +655,15 @@ export async function defaultDownloadDir(): Promise<string> {
 // ===== 更新 =====
 
 export interface UpdateCheckResult {
+  /**
+   * 整条更新源链路全部失败（Go 侧 `release == null`）。
+   *
+   * **必须与 `hasUpdate === false` 分开**：Go 的 `LookupLatestRelease` 刻意
+   * 不返回错误，全挂时只是 `release: null` + `hasUpdate: false`。只判断
+   * `hasUpdate` 会把「离线 / 被墙 / 全部限流」显示成「已是最新版本」——
+   * 用户看不到任何失败提示，于是永远停在旧版本上。
+   */
+  failed: boolean
   hasUpdate: boolean
   version?: string
   currentVersion?: string
@@ -688,23 +697,39 @@ export interface MigrationHint {
   reason?: string
 }
 
+/**
+ * 把 `CheckUpdate` 的原始返回值映射成前端形状。
+ *
+ * 单独抽成纯函数有两个理由：
+ *   - 这是一组**逐字对齐**的字段名（Go 的 map key ↔ 前端的 camelCase），
+ *     写错不会报类型错误，只会显示空白；
+ *   - `failed` 的判定是这条链路上最容易写错的一处：Go 全挂时返回
+ *     `release: null` 而不是抛错（`app/internal/update/update.go`），
+ *     漏掉这个信号就会把「检查失败」显示成「已是最新」。
+ */
+export function toUpdateCheckResult(raw: Record<string, unknown>): UpdateCheckResult {
+  // `release` 为 null 或 undefined 都表示「没有拿到版本信息」。
+  // Go 的 map 里显式写了 `"release": nil`，JSON 化后是 null。
+  const release = (raw.release ?? null) as { version?: string; releaseNotes?: string; releaseDate?: string } | null
+  return {
+    failed: release === null,
+    hasUpdate: Boolean(raw.hasUpdate),
+    version: release?.version,
+    currentVersion: raw.version as string | undefined,
+    attempts: raw.attempts as UpdateCheckResult['attempts'],
+    summary: raw.summary as string | undefined,
+    notes: release?.releaseNotes,
+    date: release?.releaseDate,
+    architecture: raw.architecture as 'electron' | 'wails' | undefined,
+    migration: raw.migration as MigrationHint | undefined,
+  }
+}
+
 export async function checkUpdate(source = 'auto'): Promise<UpdateCheckResult | null> {
   const b = await backend()
   if (!b) return null
   try {
-    const raw = await b.CheckUpdate(source)
-    const release = raw.release as { version?: string; releaseNotes?: string; releaseDate?: string } | null
-    return {
-      hasUpdate: Boolean(raw.hasUpdate),
-      version: release?.version,
-      currentVersion: raw.version as string | undefined,
-      attempts: raw.attempts as UpdateCheckResult['attempts'],
-      summary: raw.summary as string | undefined,
-      notes: release?.releaseNotes,
-      date: release?.releaseDate,
-      architecture: raw.architecture as 'electron' | 'wails' | undefined,
-      migration: raw.migration as MigrationHint | undefined,
-    }
+    return toUpdateCheckResult(await b.CheckUpdate(source))
   } catch {
     return null
   }

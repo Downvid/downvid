@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { toVideoInfo, errorMarker, stripMarker, type BackendVideoInfo } from './backend'
+import { toVideoInfo, errorMarker, stripMarker, toUpdateCheckResult, type BackendVideoInfo } from './backend'
 
 /**
  * 后端适配层：把 Go 的 `parse.VideoInfo` 转成前端 store 的形状。
@@ -135,5 +135,36 @@ describe('stripMarker', () => {
 
   it('没有标记时原样返回', () => {
     expect(stripMarker('普通错误')).toBe('普通错误')
+  })
+})
+
+describe('toUpdateCheckResult', () => {
+  // Go 的 LookupLatestRelease 全挂时**不抛错**，只返回 release:null +
+  // hasUpdate:false。如果前端只看 hasUpdate，离线就会显示成「已是最新」。
+  it('release 为 null 时标记为失败', () => {
+    const r = toUpdateCheckResult({
+      release: null,
+      hasUpdate: false,
+      summary: 'GitHub API 无法连接；jsDelivr 无法连接',
+    })
+    expect(r.failed).toBe(true)
+    expect(r.hasUpdate).toBe(false)
+    // 失败原因要保留，诊断时能看出是哪个源
+    expect(r.summary).toContain('GitHub API 无法连接')
+  })
+
+  it('字段缺失（undefined）也按失败处理，而不是当成最新', () => {
+    expect(toUpdateCheckResult({ hasUpdate: false }).failed).toBe(true)
+  })
+
+  it('拿到版本信息时不算失败（即使没有更新可装）', () => {
+    const r = toUpdateCheckResult({
+      release: { version: '1.7.1', releaseNotes: 'notes', releaseDate: '2026-10-26' },
+      hasUpdate: false,
+    })
+    expect(r.failed).toBe(false)
+    expect(r.version).toBe('1.7.1')
+    expect(r.notes).toBe('notes')
+    expect(r.date).toBe('2026-10-26')
   })
 })
