@@ -2,6 +2,12 @@
 
 本文件记录 DownVid 的所有版本更新。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased]
+
+### 变更
+
+- **Gitee 完整镜像**：Release 资产同步到 Gitee，`website/updates/manifest.gitee.json` 的下载地址指向 Gitee 自己的 Release；GitHub 与反代都不可达时，检查与下载都可以在 Gitee 内完成。GitHub 清单的下载回退也增加了 Gitee Release。
+
 ## [1.8.0] - 2026-10-28
 
 ### 修复

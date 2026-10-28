@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "app_id": "com.downvid.downvid",
+  "channel": "stable",
+  "version": "1.8.0",
+  "published_at": "2026-10-28T11:37:13.672Z",
+  "notes": "<!-- 此正文由 scripts/gen-release-notes.mjs 生成，请勿手动编辑 -->\n<div align=\"center\">\n\n### ⬇️ 点击直接下载 / Direct Downloads\n\n[![macOS](https://img.shields.io/static/v1?style=for-the-badge&label=macOS&labelColor=black&color=000000&logo=apple&message=%E4%B8%8B%E8%BD%BD%20DMG%20%E5%AE%89%E8%A3%85%E5%99%A8)](https://github.com/Downvid/downvid/releases/download/v1.8.0/DownVid-Wails-mac-universal-1.8.0.dmg)\n[![Windows](https://img.shields.io/static/v1?style=for-the-badge&label=Windows&labelColor=black&color=0078D6&logo=windows&message=%E4%B8%8B%E8%BD%BD%20EXE%20%E5%AE%89%E8%A3%85%E5%90%91%E5%AF%BC)](https://github.com/Downvid/downvid/releases/download/v1.8.0/DownVid-Wails-windows-x64-1.8.0-installer.exe)\n[![Linux](https://img.shields.io/static/v1?style=for-the-badge&label=Linux&labelColor=black&color=FFB300&logo=linux&message=%E4%B8%8B%E8%BD%BD%20DEB%20%E5%AE%89%E8%A3%85%E5%8C%85)](https://github.com/Downvid/downvid/releases/download/v1.8.0/DownVid-Wails-linux-x64-1.8.0.deb)\n\n<sub>选择对应系统的主推版本直接下载 · 更多格式参见下方对照表</sub><br>\n<sub>Select your platform to download · See table below for portable & update packages</sub>\n\n</div>\n\n---\n\n## 📦 下载对照表 / Download Matrix\n\n| 平台 / Platform | 架构 / Arch | 类型 / Type | 安装包 / Package | 说明 / Description |\n|:---|:---|:---|:---|:---|\n| macOS | Universal (Apple / Intel) | 安装器 / Installer | [DownVid-Wails-mac-universal-1.8.0.dmg](https://github.com/Downvid/downvid/releases/download/v1.8.0/DownVid-Wails-mac-universal-1.8.0.dmg) | 推荐，挂载后拖入「应用程序」 / Recommended DMG installer |\n| macOS | Universal (Apple / Intel) | 更新便携 / Update | [DownVid-Wails-mac-universal-1.8.0.zip](https://github.com/Downvid/downvid/releases/download/v1.8.0/DownVid-Wails-mac-universal-1.8.0.zip) | 解压即用，应用内自更新使用 / Portable & auto-update zip |\n| Windows | x64 | 安装器 / Installer | [DownVid-Wails-windows-x64-1.8.0-installer.exe](https://github.com/Downvid/downvid/releases/download/v1.8.0/DownVid-Wails-windows-x64-1.8.0-installer.exe) | 推荐安装向导，创建快捷方式与静默更新 / Recommended NSIS installer |\n| Windows | x64 | 便携版 / Portable | [DownVid-Wails-windows-x64-1.8.0.zip](https://github.com/Downvid/downvid/releases/download/v1.8.0/DownVid-Wails-windows-x64-1.8.0.zip) | 绿色免安装版，解压即用 / Portable standalone zip |\n| Linux | x64 | 安装包 / Deb Package | [DownVid-Wails-linux-x64-1.8.0.deb](https://github.com/Downvid/downvid/releases/download/v1.8.0/DownVid-Wails-linux-x64-1.8.0.deb) | Debian / Ubuntu 推荐安装包 / Recommended deb package |\n| Linux | x64 | 便携包 / Portable | [DownVid-Wails-linux-x64-1.8.0.tar.gz](https://github.com/Downvid/downvid/releases/download/v1.8.0/DownVid-Wails-linux-x64-1.8.0.tar.gz) | 解压后赋予执行权限即可运行 / Portable tar.gz archive |\n\n> 运行依赖 **yt-dlp / ffmpeg 不随安装包分发**：启动后会自动识别机器上已安装的版本并复用，识别不到时在「设置 → 运行依赖」里一键下载即可。<br>\n> **Dependencies are not bundled**: Installed tools on your machine will be detected automatically; one-click download is available in Settings → Dependencies.\n\n---\n\n### ⚠️ 各平台说明 / Platform Notes\n\n| 🇨🇳 中文说明 | 🇺🇸 English Notes |\n|:---|:---|\n| **macOS**：推荐下载 `.dmg` 安装。应用未购买商业证书签名，首次打开若提示未受信任，请在「系统设置 → 隐私与安全性」中点击「仍要打开」。 | **macOS**: Recommended `.dmg`. Build is unsigned; if prompted about an untrusted developer, allow it in System Settings → Privacy & Security. |\n| **Windows**：推荐下载 `-installer.exe`，安装后自动创建快捷方式并支持应用内静默更新；亦可下载 `.zip` 免安装版。 | **Windows**: Recommended `-installer.exe` NSIS installer with shortcuts and silent in-app update; portable `.zip` is also available. |\n| **Linux**：Debian / Ubuntu 推荐安装 `.deb`；其他发行版可下载 `.tar.gz` 便携包，解压后执行 `chmod +x downvid && ./downvid`。 | **Linux**: `.deb` recommended for Debian/Ubuntu; other distros can extract `.tar.gz` and run `chmod +x downvid && ./downvid`. |\n| **运行依赖**：yt-dlp 与 ffmpeg **不随安装包分发**。软件会自动检测系统已有环境，若缺失可在「设置 → 运行依赖」中一键下载。 | **Dependencies**: yt-dlp & ffmpeg are not bundled. Existing system installations are reused; missing tools can be downloaded in Settings → Dependencies. |\n| **自动更新**：软件内置更新机制，可在「关于」页面检查更新并自动应用，无需手动重装。 | **Auto Update**: Built-in updater allows seamless updates without manual re-installation. |\n\n---\n\n## 📝 更新内容 / Changelog\n\n### 修复\n\n- **GitHub 被限流时 macOS（以及 Windows）检查得到更新、却下载不了**：更新源链路原来会在 jsDelivr 处停下——它只能给版本号，给不出产物清单，于是「检查到新版本、点下载却打开浏览器」。现在下载会继续沿链找到带产物的源（gh-proxy），并把产物直链改写成反代地址；直链不可达时按 `gh-proxy → ghproxy.net → ghfast.top` 依次重试。\n\n### 变更\n\n- **更新通道迁移到 wmlUpdate**：检查与下载改由 [wmlUpdate](https://github.com/yxxbc/wmlUpdate) 的源链负责（GitHub 直连 → GitHub API 经 gh-proxy → jsDelivr / Gitee / 官网的同一份 `manifest.json`），SHA-256 校验、断点续传与同名版本镜像回退都在库内完成；安装仍走三平台原生安装器。国内网络下 GitHub 不可达时，会继续尝试 gh-proxy 与三个 manifest 镜像，不再停在旧版本；下载仍然强制校验 SHA-256。发布流程现在会生成 `website/updates/manifest.json` 并和官网版本号一起推回 main。\n- **移除 GitHub CI 的 `frontend` job**：图标 / 官网 / 文档 / 来源审计 / 边界 / 坐标 / 词条 / 工作流 / 根目录单测 / svelte-check / 前端单测不再由 CI 自动执行。改 UI 或发版前请本地运行 `pnpm lint:*`、`pnpm test`、`pnpm --dir app/frontend check`、`pnpm --dir app/frontend test`；Go 的 `backend` job、集成测试与三平台构建保持不变。\n\n---\n\n<sub>完整历史见 [CHANGELOG.md](https://github.com/Downvid/downvid/blob/main/CHANGELOG.md) · 遇到问题请先看 [故障排除 / Troubleshooting](https://github.com/Downvid/downvid/blob/main/docs/troubleshooting.md)</sub>",
+  "assets": [
+    {
+      "name": "DownVid-Wails-linux-x64-1.8.0.deb",
+      "os": "linux",
+      "arch": "amd64",
+      "url": "https://gitee.com/Xynrin/downvid/releases/download/v1.8.0/DownVid-Wails-linux-x64-1.8.0.deb",
+      "sha256": "e4b234b468668ab8d768adb35f6f53046e5a812f7581dffe2bdbf5cad778bde7",
+      "size": 5799104
+    },
+    {
+      "name": "DownVid-Wails-linux-x64-1.8.0.tar.gz",
+      "os": "linux",
+      "arch": "amd64",
+      "url": "https://gitee.com/Xynrin/downvid/releases/download/v1.8.0/DownVid-Wails-linux-x64-1.8.0.tar.gz",
+      "sha256": "ed327ed3b784d34a73515c833f55073cc3c8a064109dafbf9355eef5fc1d2d5a",
+      "size": 8102310,
+      "format": "tar.gz"
+    },
+    {
+      "name": "DownVid-Wails-mac-universal-1.8.0.dmg",
+      "os": "darwin",
+      "arch": "universal",
+      "url": "https://gitee.com/Xynrin/downvid/releases/download/v1.8.0/DownVid-Wails-mac-universal-1.8.0.dmg",
+      "sha256": "5555e36c7d95ae0bd8d054a589f142ae75ead36fcce00016e269daa05830659d",
+      "size": 21393341,
+      "format": "dmg"
+    },
+    {
+      "name": "DownVid-Wails-mac-universal-1.8.0.zip",
+      "os": "darwin",
+      "arch": "universal",
+      "url": "https://gitee.com/Xynrin/downvid/releases/download/v1.8.0/DownVid-Wails-mac-universal-1.8.0.zip",
+      "sha256": "62c3fbaee0e0ae02b1ab2ab7419892f2450b8d50eec0051f3d172abbe88c29c9",
+      "size": 21439772,
+      "format": "zip"
+    },
+    {
+      "name": "DownVid-Wails-windows-x64-1.8.0-installer.exe",
+      "os": "windows",
+      "arch": "amd64",
+      "url": "https://gitee.com/Xynrin/downvid/releases/download/v1.8.0/DownVid-Wails-windows-x64-1.8.0-installer.exe",
+      "sha256": "c96ba9d4cf5da5c417b6fadcba2cc0a7badea028e55118e799f7668edb776a7c",
+      "size": 10432295,
+      "format": "exe"
+    },
+    {
+      "name": "DownVid-Wails-windows-x64-1.8.0.zip",
+      "os": "windows",
+      "arch": "amd64",
+      "url": "https://gitee.com/Xynrin/downvid/releases/download/v1.8.0/DownVid-Wails-windows-x64-1.8.0.zip",
+      "sha256": "a8e4739fd437e832db6f0b9be12781cef3a7be03d206dbd8a71fda4a60e2f347",
+      "size": 8695336,
+      "format": "zip"
+    }
+  ]
+}

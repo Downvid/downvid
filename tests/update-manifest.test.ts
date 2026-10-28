@@ -76,6 +76,17 @@ describe('buildManifest', () => {
     expect(mac.size).toBe(20)
   })
 
+  it('支持镜像自己的产物地址', () => {
+    const m = buildManifest({
+      ...base,
+      releaseBase: 'https://gitee.com/Xynrin/downvid/releases/download/v1.7.3',
+    })
+    const mac = m.assets.find((a: { os: string }) => a.os === 'darwin')
+    expect(mac.url).toBe(
+      'https://gitee.com/Xynrin/downvid/releases/download/v1.7.3/DownVid-Wails-mac-universal-1.7.3.zip',
+    )
+  })
+
   it('缺少 SHA-256 直接失败', () => {
     expect(() =>
       buildManifest({

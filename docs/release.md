@@ -246,12 +246,22 @@ README 顶部目前有 Downloads / Release / Stars / License / Product Hunt。�
 
 ### 更新源不可用
 
-更新按 wmlUpdate 的源链自动降级（GitHub 直连 → gh-proxy → 官网 / jsDelivr / Gitee 的 static
-manifest），全部失败时**不会静默当成「已是最新」**：界面显示失败摘要。用户可：
+更新按 wmlUpdate 的源链自动降级（GitHub 直连 → gh-proxy → 官网 / jsDelivr → Gitee），全部失败时
+**不会静默当成「已是最新」**：界面显示失败摘要。用户可：
 - 在「设置 → 代理」配置代理后重试
 - 直接前往 Releases 页面手动下载
 
 降级只影响「发现与下载」，安装仍由各平台的原生安装器完成；不会出现「更新了一半」的状态。
+
+### Gitee 完整镜像
+
+Gitee（`Xynrin/downvid`）不是只放一份清单：Release 里上传同一批产物，
+`website/updates/manifest.gitee.json` 的资产 URL 指向 Gitee 自己的下载地址，因此 Gitee 源
+可以在 GitHub 与反代都不可达时独立完成检查与下载。
+
+发布后需要同步一次 Gitee（本地 `gitee` CLI + API 上传 Release 资产，再生成这份清单并推回
+Gitee 的 main）；否则 Gitee 源会停在上一版。GitHub 的清单不带 Gitee 资产 URL，下载时会通过
+`asset_mirrors` 回退到 Gitee Release。
 
 ## 依赖清单与发布的关系
 

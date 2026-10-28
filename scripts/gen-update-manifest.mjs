@@ -20,6 +20,11 @@
  *     --artifacts artifacts --notes-file /tmp/release-notes.md
  *
  *   node scripts/gen-update-manifest.mjs --tag v1.7.3 --out /tmp/manifest.json
+ *
+ * 生成国内镜像清单时用 --release-base 指向该镜像自己的产物地址，例如：
+ *   node scripts/gen-update-manifest.mjs --version 1.8.0 --tag v1.8.0 \
+ *     --artifacts /tmp/assets --out website/updates/manifest.gitee.json \
+ *     --release-base "https://gitee.com/Xynrin/downvid/releases/download/v1.8.0"
  */
 
 import crypto from 'node:crypto'
@@ -91,6 +96,7 @@ async function main() {
   const out = path.resolve(arg('out', DEFAULT_OUT))
   const notesFile = arg('notes-file', '')
   const artifactsDir = arg('artifacts', '')
+  const releaseBase = arg('release-base', '')
   let version = arg('version', '')
   let tag = arg('tag', '')
   let notes = notesFile ? fs.readFileSync(notesFile, 'utf8') : ''
@@ -126,6 +132,7 @@ async function main() {
     assets,
     notes: notes.trim(),
     publishedAt: publishedAt || new Date().toISOString(),
+    releaseBase: releaseBase || undefined,
   })
 
   fs.mkdirSync(path.dirname(out), { recursive: true })

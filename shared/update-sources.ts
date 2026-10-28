@@ -7,7 +7,8 @@ import { APP, GITHUB_API, REPO_SLUG, WEBSITE_URL } from './app'
  *
  *   1. `github`  —— 官方 API / Release（海外用户的正常路径）
  *   2. `ghproxy` —— GitHub API 经 gh-proxy 透传
- *   3. `static`  —— 官网 / jsDelivr / Gitee 读取同一份
+ *   3. `static`  —— 官网 / jsDelivr 读取 GitHub 资产清单
+ *   4. `gitee`   —— Gitee Release 资产，清单也放在 Gitee
  *                  `website/updates/manifest.json`
  *
  * `auto` 是以上三级的组合；用户仍可钉死单个源。这里保留 ID 列表与标签，

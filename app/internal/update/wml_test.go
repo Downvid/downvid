@@ -13,13 +13,13 @@ import (
 //
 // 这里错一处不会报错，只会让某个源永远失败，所以每个分支都要断言。
 func TestWMLSourceMapping(t *testing.T) {
-	t.Run("auto 是三级链", func(t *testing.T) {
+	t.Run("auto 是四级链", func(t *testing.T) {
 		sc := wmlSource("auto", nil)
 		if sc.Type != "chain" {
 			t.Fatalf("type = %q, want chain", sc.Type)
 		}
-		if len(sc.Sources) != 3 {
-			t.Fatalf("sources = %d, want 3", len(sc.Sources))
+		if len(sc.Sources) != 4 {
+			t.Fatalf("sources = %d, want 4", len(sc.Sources))
 		}
 		if sc.Sources[0].Type != wmlupdate.SourceGitHub || sc.Sources[0].APIBase != "" {
 			t.Fatalf("source[0] = %+v, want direct github", sc.Sources[0])
@@ -36,6 +36,12 @@ func TestWMLSourceMapping(t *testing.T) {
 		// 最新的源必须排第一：static 源只在「请求失败」时切下一个，不会因为内容过期而切。
 		if sc.Sources[2].ManifestURLs[0] != wmlManifestURLs[0] {
 			t.Fatalf("first manifest url = %q, want website first (%q)", sc.Sources[2].ManifestURLs[0], wmlManifestURLs[0])
+		}
+		if sc.Sources[3].Type != wmlupdate.SourceStatic || len(sc.Sources[3].ManifestURLs) != 1 {
+			t.Fatalf("source[3] = %+v, want gitee static", sc.Sources[3])
+		}
+		if !strings.Contains(sc.Sources[3].ManifestURLs[0], "manifest.gitee.json") {
+			t.Fatalf("gitee manifest = %q", sc.Sources[3].ManifestURLs[0])
 		}
 	})
 
@@ -83,7 +89,7 @@ func TestWMLSourceMapping(t *testing.T) {
 // 所以最新鲜的源必须排第一：官网由 release.yml 发布后立即验证，jsDelivr 的
 // @main 有缓存，Gitee 是最后兜底。顺序写反了不会报错，只会让国内用户读到上一版。
 func TestWMLManifestOrder(t *testing.T) {
-	want := []string{"downvid-coral.vercel.app", "cdn.jsdelivr.net", "gitee.com"}
+	want := []string{"downvid-coral.vercel.app", "cdn.jsdelivr.net"}
 	if len(wmlManifestURLs) != len(want) {
 		t.Fatalf("manifest urls = %d, want %d", len(wmlManifestURLs), len(want))
 	}
@@ -92,9 +98,32 @@ func TestWMLManifestOrder(t *testing.T) {
 			t.Errorf("manifest urls[%d] = %q, want host %s", i, wmlManifestURLs[i], host)
 		}
 	}
-	// Gitee 的镜像仓库在 Xynrin 名下（Downvid 组织只存在于 GitHub）。
-	if !strings.Contains(wmlManifestURLs[2], "/Xynrin/downvid/") {
-		t.Errorf("gitee manifest = %q, want /Xynrin/downvid/", wmlManifestURLs[2])
+	// Gitee 的镜像仓库在 Xynrin 名下（Downvid 组织只存在于 GitHub），
+	// 且必须读 Gitee 自己的 manifest（资产 URL 指向 Gitee Release）。
+	if !strings.Contains(wmlGiteeManifestURL, "/Xynrin/downvid/") ||
+		!strings.Contains(wmlGiteeManifestURL, "manifest.gitee.json") {
+		t.Errorf("gitee manifest = %q", wmlGiteeManifestURL)
+	}
+}
+
+// TestWMLAssetMirrors 钉住产物镜像模板：GitHub 反代 + Gitee 同名资产。
+func TestWMLAssetMirrors(t *testing.T) {
+	want := []string{
+		"https://gh-proxy.com/{url}",
+		"https://ghproxy.net/{url}",
+		"https://ghfast.top/{url}",
+		wmlGiteeAssetMirror,
+	}
+	if len(wmlAssetMirrors) != len(want) {
+		t.Fatalf("asset mirrors = %d, want %d", len(wmlAssetMirrors), len(want))
+	}
+	for i := range want {
+		if wmlAssetMirrors[i] != want[i] {
+			t.Errorf("asset mirrors[%d] = %q, want %q", i, wmlAssetMirrors[i], want[i])
+		}
+	}
+	if !strings.Contains(wmlGiteeAssetMirror, "/releases/download/{tag}/{asset}") {
+		t.Errorf("gitee asset mirror = %q", wmlGiteeAssetMirror)
 	}
 }
 
