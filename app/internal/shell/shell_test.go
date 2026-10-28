@@ -3,7 +3,6 @@ package shell
 import (
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -136,31 +135,6 @@ func TestDiskSpaceRejectsEmpty(t *testing.T) {
 	}
 }
 
-// --- 启动系统命令：退出码语义 ---
-
-// explorer.exe 即使窗口正常打开也常返回 1（请求被交给已运行的实例）。
-// 这条用例确认 launch 在 Windows 上不把退出码当失败——issue #95 的回归防线。
-func TestLaunchIgnoresWindowsExitCode(t *testing.T) {
-	if runtime.GOOS != "windows" {
-		t.Skip("explorer 的退出码问题只在 Windows 上出现")
-	}
-	cmd := exec.Command("cmd", "/c", "exit", "1")
-	if err := launch(cmd); err != nil {
-		t.Fatalf("Windows 上不该把非 0 退出码当失败，got %v", err)
-	}
-}
-
-// 其余平台仍然要如实报出失败，不能为了修 Windows 把全局的退出码检查去掉。
-func TestLaunchReportsUnixFailure(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("open / xdg-open 的退出码检查只适用于 POSIX")
-	}
-	cmd := exec.Command("sh", "-c", "exit 1")
-	if err := launch(cmd); err == nil {
-		t.Fatal("非 0 退出码应返回错误，否则真正的失败会被吞掉")
-	}
-}
-
 // --- 平台命令选择 ---
 //
 // 命令名是「平台相关但不依赖 GUI」的部分，可以断言。
@@ -170,7 +144,7 @@ func TestShowInFolderCommandSemantics(t *testing.T) {
 	// 真正的命令差异（open -R / explorer /select, / xdg-open）靠真机验证——
 	// 自动化里起文件管理器没有意义。
 	if runtime.GOOS == "windows" {
-		t.Log("Windows: explorer /select,<path>（/select, 后不能有空格）")
+		t.Log("Windows: Shell API（SHOpenFolderAndSelectItems，不经过 explorer 命令行）")
 	} else if runtime.GOOS == "darwin" {
 		t.Log("macOS: open -R <path>")
 	} else {

@@ -2,13 +2,14 @@
 //
 // 对应 Electron 的 `shell.openPath` / `shell.showItemInFolder` / `shell.openExternal`。
 //
-// ## 为什么不用 Go 的第三方库
-//
-// 三个平台各一条命令就够了，引入库只会增加依赖与审计面：
+// ## 各平台的实现
 //
 //	macOS   open / open -R
-//	Windows explorer / start
+//	Windows Shell API（ShellExecute / SHOpenFolderAndSelectItems）
 //	Linux   xdg-open
+//
+// 不引入第三方库：Windows 用的 `golang.org/x/sys/windows` 本来就是 Wails
+// 的依赖；`explorer.exe` 的退出码与命令行解析都不可靠（issue #95）。
 //
 // ## 安全：只打开已存在的路径
 //
@@ -21,9 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 )
 
@@ -33,27 +32,10 @@ var ErrNotFound = errors.New("路径不存在")
 // ErrEmpty 表示路径为空。
 var ErrEmpty = errors.New("路径为空")
 
-// launch 启动一条系统命令。
-//
-// Windows 上有个必须绕开的坑：`explorer.exe` 即使窗口已经正常打开，退出码也常是 1
-// （请求被交给已运行的 explorer 实例时）。用 `cmd.Run()` 会把成功当成失败——
-// 「在目录中显示」于是每次都提示「打开失败：exit status 1」（issue #95）。
-// 所以 Windows 上只确认进程能启动，既不等它退出，也不看退出码；
-// 其余平台仍然保留退出码检查（open / xdg-open 失败时应该报出来）。
-func launch(cmd *exec.Cmd) error {
-	hideWindow(cmd)
-	if runtime.GOOS == "windows" {
-		if err := cmd.Start(); err != nil {
-			return err
-		}
-		return cmd.Process.Release()
-	}
-	return cmd.Run()
-}
-
 // OpenPath 用系统默认程序打开文件或目录。
 //
 // 打开目录时用文件管理器；打开文件时用关联的默认应用。
+// 平台实现见 shell_windows.go / shell_other.go。
 func OpenPath(path string) error {
 	if strings.TrimSpace(path) == "" {
 		return ErrEmpty
@@ -63,19 +45,7 @@ func OpenPath(path string) error {
 	if _, err := os.Stat(path); err != nil {
 		return fmt.Errorf("%w：%s", ErrNotFound, path)
 	}
-
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", path)
-	case "windows":
-		// 用 explorer 而不是 `start`：`start` 是 cmd 内建命令，
-		// 需要经过 `cmd /c`，路径含空格与特殊字符时引号处理很容易出错
-		cmd = exec.Command("explorer", path)
-	default:
-		cmd = exec.Command("xdg-open", path)
-	}
-	if err := launch(cmd); err != nil {
+	if err := openPathOS(path); err != nil {
 		return fmt.Errorf("打开失败：%w", err)
 	}
 	return nil
@@ -84,11 +54,7 @@ func OpenPath(path string) error {
 // ShowInFolder 在文件管理器里定位到该文件（选中它）。
 //
 // 与 OpenPath 的区别：用户点「在目录中显示」是想**找到**这个文件，
-// 而不是打开它。三个平台的实现差别很大：
-//
-//	macOS   open -R <file>       （-R 是 reveal，会选中）
-//	Windows explorer /select,<file>
-//	Linux   xdg-open <dir>       （没有统一的「选中」语义，退回打开所在目录）
+// 而不是打开它。平台实现见 shell_windows.go / shell_other.go。
 func ShowInFolder(path string) error {
 	if strings.TrimSpace(path) == "" {
 		return ErrEmpty
@@ -96,21 +62,7 @@ func ShowInFolder(path string) error {
 	if _, err := os.Stat(path); err != nil {
 		return fmt.Errorf("%w：%s", ErrNotFound, path)
 	}
-
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", "-R", path)
-	case "windows":
-		// `/select,` 后面**不能有空格**，且路径要用引号包住（含空格时必需）
-		cmd = exec.Command("explorer", "/select,"+path)
-	default:
-		// Linux 没有跨桌面环境的「选中文件」协议：
-		// Nautilus 有 `nautilus --select`，Dolphin 有 `--select`，Thunar 没有。
-		// 与其猜，不如稳定地打开所在目录——文件就在里面，用户能找到。
-		cmd = exec.Command("xdg-open", filepath.Dir(path))
-	}
-	if err := launch(cmd); err != nil {
+	if err := showInFolderOS(path); err != nil {
 		return fmt.Errorf("打开目录失败：%w", err)
 	}
 	return nil
@@ -142,19 +94,7 @@ func OpenExternal(url string) error {
 	if err := validateExternalURL(url); err != nil {
 		return err
 	}
-
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", url)
-	case "windows":
-		// 用 rundll32 而不是 `start`：同样避开 cmd 的引号问题
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-	default:
-		cmd = exec.Command("xdg-open", url)
-	}
-	hideWindow(cmd)
-	if err := cmd.Run(); err != nil {
+	if err := openExternalOS(url); err != nil {
 		return fmt.Errorf("打开链接失败：%w", err)
 	}
 	return nil
