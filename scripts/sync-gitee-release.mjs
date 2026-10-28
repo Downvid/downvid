@@ -72,27 +72,45 @@ async function gitee(repo, token, endpoint, init = {}) {
     throw new Error(`Gitee API ${init.method || 'GET'} ${endpoint} 失败（${response.status}）：${await response.text()}`)
   }
   if (response.status === 204) return null
-  return await response.json()
+  const text = await response.text()
+  if (!text.trim()) return null
+  return JSON.parse(text)
 }
 
 async function ensureRelease(repo, token, { tag, version, notes }) {
-  try {
-    return await gitee(repo, token, `/releases/tags/${encodeURIComponent(tag)}`)
-  } catch (err) {
-    // 404 表示还没有这个 Release；其余错误继续抛出。
-    if (!String(err.message).includes('（404）')) throw err
+  const getByTag = async () => {
+    try {
+      return await gitee(repo, token, `/releases/tags/${encodeURIComponent(tag)}`)
+    } catch (err) {
+      // 404 表示还没有这个 Release；其余错误继续抛出。
+      if (!String(err.message).includes('（404）')) throw err
+      return null
+    }
   }
-  return await gitee(repo, token, '/releases', {
+
+  const existing = await getByTag()
+  if (existing) return existing
+
+  const created = await gitee(repo, token, '/releases', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       tag_name: tag,
       target_commitish: 'main',
       name: `DownVid v${version}`,
-      body: notes,
+      body: notes || `DownVid ${tag}`,
       prerelease: false,
     }),
   })
+  if (created?.id) return created
+
+  // Gitee 偶尔返回 201 空 body；给索引一点时间再读一次。
+  for (let i = 0; i < 10; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    const release = await getByTag()
+    if (release) return release
+  }
+  return null
 }
 
 async function listAttachments(repo, token, releaseId) {
