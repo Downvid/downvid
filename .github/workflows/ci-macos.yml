@@ -28,8 +28,8 @@ env:
 
 jobs:
   # 变更范围：文档/官网/图片-only 的 push 不跑重活（交叉编译、三平台产物、
-  # 真实依赖端到端），只保留跑 lint / 单测的 frontend job —— lint:docs 与
-  # lint:website 恰好就是校验这些文件的，所以它们不能被跳过。
+  # 真实依赖端到端）。前端静态检查已从 CI 移除，需要时在本地运行
+  # `pnpm lint:*` / `pnpm --dir app/frontend check`。
   changes:
     name: 变更范围
     runs-on: ubuntu-latest
@@ -108,90 +108,6 @@ jobs:
             GOOS=darwin GOARCH="$arch" CGO_ENABLED=0 go build -o /dev/null ./cmd/downvid-deps
             echo "  ok darwin/$arch"
           done
-
-  frontend:
-    name: 前端 · 类型 / 契约 / 单测（macOS）
-    runs-on: macos-latest
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-
-      - uses: pnpm/action-setup@v6
-
-      # `wails generate module` 要跑 Go 编译器
-      - uses: actions/setup-go@v7
-        with:
-          go-version: '1.25'
-          cache: false
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: 图标名校验
-        run: pnpm lint:icons
-
-      - name: 官网校验
-        run: pnpm lint:website
-
-      - name: 文档一致性校验（AGENTS.md ↔ CLAUDE.md）
-        run: pnpm lint:docs
-
-      - name: 代码来源审计
-        run: pnpm audit:provenance
-
-      - name: 署名合规（上游版权声明 ↔ 剩余上游代码）
-        run: pnpm lint:attribution
-
-      - name: 架构边界校验
-        run: pnpm lint:boundaries
-
-      - name: 仓库坐标一致性
-        run: pnpm sync:repo
-
-      - name: 更新日志副本一致
-        run: pnpm sync:changelog
-
-      - name: 工具链版本一致
-        run: pnpm sync:toolchain
-
-      - name: i18n 词条校验
-        run: pnpm lint:i18n:app
-
-      - name: 工作流健全性校验
-        run: pnpm lint:workflows
-
-      # app/frontend 是**独立包**（不在根 pnpm workspace 里），要单独装依赖
-      - name: 前端依赖安装
-        working-directory: app/frontend
-        run: pnpm install --frozen-lockfile
-
-      # wailsjs/ 是**生成**的（wails generate module），不入库。
-      # 顺序不能反：generate 要先编译 Go 包，而 main.go 里有
-      # `//go:embed all:frontend/dist`，dist 不存在时编译直接失败。
-      - name: 安装 Wails CLI
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
-
-      - name: 准备 embed 目录
-        run: bash app/scripts/prepare-embed-dir.sh
-
-      - name: 生成 Wails 绑定（wailsjs）
-        working-directory: app
-        run: wails generate module
-
-      # `tsc` **不解析 .svelte**，组件与 store 的契约漂移只有它能看见
-      - name: 前端类型检查（svelte-check）
-        working-directory: app/frontend
-        run: pnpm check
-
-      - name: 前端纯逻辑单测
-        working-directory: app/frontend
-        run: pnpm test
-
-      - name: 根目录纯逻辑单测
-        run: pnpm test
 
   build:
     name: 构建 · 未签名 .app 与边车

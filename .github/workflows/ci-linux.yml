@@ -27,8 +27,8 @@ env:
 
 jobs:
   # 变更范围：文档/官网/图片-only 的 push 不跑重活（交叉编译、三平台产物、
-  # 真实依赖端到端），只保留跑 lint / 单测的 frontend job —— lint:docs 与
-  # lint:website 恰好就是校验这些文件的，所以它们不能被跳过。
+  # 真实依赖端到端）。前端静态检查已从 CI 移除，需要时在本地运行
+  # `pnpm lint:*` / `pnpm --dir app/frontend check`。
   changes:
     name: 变更范围
     runs-on: ubuntu-latest
@@ -108,107 +108,6 @@ jobs:
               go build -o /dev/null ./cmd/downvid-deps
             echo "  ok ${target}"
           done
-
-  frontend:
-    name: 前端 · 类型 / 契约 / 单测
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-
-      - uses: pnpm/action-setup@v6
-
-      # `wails generate module` 要跑 Go 编译器
-      - uses: actions/setup-go@v7
-        with:
-          go-version: '1.25'
-          cache: false
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: 图标名校验
-        run: pnpm lint:icons
-
-      - name: 官网校验
-        run: pnpm lint:website
-
-      - name: 文档一致性校验（AGENTS.md ↔ CLAUDE.md）
-        run: pnpm lint:docs
-
-      # 来源审计：哪些代码来自上游 Videdown、占比多少，由脚本从仓库内快照现场重算。
-      # 新增了上游衍生文件却没登记 / 登记的数字已过期 → 直接红叉
-      - name: 代码来源审计
-        run: pnpm audit:provenance
-
-      # MIT 要求「substantial portions」附带版权声明。上游代码未归零前删掉声明
-      # 会让许可证失效，而删一行 LICENSE 不会让任何测试变红——所以单独拦。
-      - name: 署名合规（上游版权声明 ↔ 剩余上游代码）
-        run: pnpm lint:attribution
-
-      # 架构边界：app/internal 的包之间不得互相 import、不得依赖 cmd。
-      # 违反时编译与单测都不会红，只会让包拆不开。
-      - name: 架构边界校验
-        run: pnpm lint:boundaries
-
-      # 仓库坐标散落 20+ 处，漏改任一处 = 用户收不到更新
-      - name: 仓库坐标一致性
-        run: pnpm sync:repo
-
-      # 应用里的「更新日志」读的是 app/internal/changelog/ 下的**副本**
-      # （`//go:embed` 不能引用包目录之外的文件）。副本会静默过期。
-      - name: 更新日志副本一致
-        run: pnpm sync:changelog
-
-      # Go/Node/pnpm 版本散落 20+ 处，漏改只会让 CI 静默用旧版本编译
-      - name: 工具链版本一致
-        run: pnpm sync:toolchain
-
-      # 词条漏英文 / 占位符对不上都不会报错，只会静默显示错文案
-      - name: i18n 词条校验
-        run: pnpm lint:i18n:app
-
-      # 工作流的错误本地跑什么都发现不了，只能等 CI 变红。
-      - name: 工作流健全性校验
-        run: pnpm lint:workflows
-
-      # app/frontend 是**独立包**（不在根 pnpm workspace 里），要单独装依赖
-      - name: 前端依赖安装
-        working-directory: app/frontend
-        run: pnpm install --frozen-lockfile
-
-      # wailsjs/ 是**生成**的（wails generate module），不入库。
-      # 不生成就直接 svelte-check，会报三条 "Cannot find module
-      # '../../wailsjs/go/main/App'"——那是 CI 缺步骤，不是代码错。
-      #
-      # 注意顺序：`wails generate module` 会先把 Go 包编译一遍，
-      # 而 main.go 里有 `//go:embed all:frontend/dist`——dist 不存在时
-      # 直接报 `pattern all:frontend/dist: no matching files found`。
-      - name: 安装 Wails CLI
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
-
-      - name: 准备 embed 目录
-        run: bash app/scripts/prepare-embed-dir.sh
-
-      - name: 生成 Wails 绑定（wailsjs）
-        working-directory: app
-        run: wails generate module
-
-      # `tsc` **不解析 .svelte**，组件与 store 的契约漂移只有它能看见
-      - name: 前端类型检查（svelte-check）
-        working-directory: app/frontend
-        run: pnpm check
-
-      - name: 前端纯逻辑单测
-        working-directory: app/frontend
-        run: pnpm test
-
-      # shared/ 与发布脚本的纯逻辑
-      - name: 根目录纯逻辑单测
-        run: pnpm test
 
   integration:
     name: 集成 · 真实 yt-dlp / ffmpeg

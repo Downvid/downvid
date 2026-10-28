@@ -361,6 +361,103 @@ func TestBadResponseFallsThrough(t *testing.T) {
 	}
 }
 
+// --- 下载必须拿到产物清单，不能停在只报版本号的源 ---
+
+// GitHub 不可达 → jsDelivr 只给版本号 → 继续到 gh-proxy 拿到产物。
+// 这是 macOS / Windows 在受限网络下「检查得到、下载不了」的直接修复。
+func TestRequireAssetsSkipsVersionOnlySource(t *testing.T) {
+	var calls []string
+	res := LookupLatestRelease(LookupOptions{
+		Client: fakeClient(map[string]func() (HTTPResponse, error){
+			"data.jsdelivr.com": okJSON(`{"versions":[{"version":"1.7.3"}]}`),
+			"gh-proxy.com": okJSON(`{"tag_name":"v1.7.3","assets":[{
+				"name":"DownVid-Wails-mac-universal-1.7.3.zip",
+				"browser_download_url":"https://github.com/Downvid/downvid/releases/download/v1.7.3/DownVid-Wails-mac-universal-1.7.3.zip",
+				"size":42,
+				"digest":"sha256:abc"
+			}]}`),
+		}, &calls),
+		Repo:          testRepo(),
+		Endpoint:      testEndpoints(),
+		RequireAssets: true,
+	})
+	if res.Release == nil {
+		t.Fatal("应拿到带产物的结果")
+	}
+	if res.Release.Source != SourceGHPROXY {
+		t.Fatalf("结果应来自 gh-proxy，实际 %s", res.Release.Source)
+	}
+	if len(res.Release.AssetDetails) != 1 {
+		t.Fatalf("应拿到 1 个产物，got %d", len(res.Release.AssetDetails))
+	}
+	// 经 gh-proxy 拿到的直链也必须改写成反代地址，否则下载仍会失败
+	wantURL := "https://gh-proxy.com/https://github.com/Downvid/downvid/releases/download/v1.7.3/DownVid-Wails-mac-universal-1.7.3.zip"
+	if got := res.Release.AssetDetails[0].URL; got != wantURL {
+		t.Errorf("产物 URL 未改写：\n got %q\nwant %q", got, wantURL)
+	}
+	// jsDelivr 仍然会试一次（部分网络下它比 gh-proxy 快），但不能停在它那里
+	if len(calls) < 2 {
+		t.Fatalf("应继续尝试后续源，calls=%v", calls)
+	}
+}
+
+// 所有能给产物的源都失败时，退回版本号结果，让界面提示手动下载，
+// 而不是当成「检查失败」。
+func TestRequireAssetsFallsBackToVersionOnly(t *testing.T) {
+	res := LookupLatestRelease(LookupOptions{
+		Client: fakeClient(map[string]func() (HTTPResponse, error){
+			"data.jsdelivr.com": okJSON(`{"versions":[{"version":"1.7.3"}]}`),
+		}, nil),
+		Repo:          testRepo(),
+		Endpoint:      testEndpoints(),
+		RequireAssets: true,
+	})
+	if res.Release == nil || res.Release.Version != "1.7.3" {
+		t.Fatalf("应退回版本号结果，got %+v", res.Release)
+	}
+	if len(res.Release.AssetDetails) != 0 {
+		t.Fatalf("这个源本来就没有产物，got %d", len(res.Release.AssetDetails))
+	}
+}
+
+// --- 下载地址的镜像候选 ---
+
+func TestDownloadURLs(t *testing.T) {
+	raw := "https://github.com/Downvid/downvid/releases/download/v1.7.3/x.zip"
+	got := DownloadURLs(raw)
+	if len(got) != 4 {
+		t.Fatalf("GitHub 直链应有 4 个候选（直链 + 3 个反代），got %v", got)
+	}
+	if got[0] != raw {
+		t.Errorf("应优先直链，got %q", got[0])
+	}
+	if got[1] != "https://gh-proxy.com/"+raw {
+		t.Errorf("第二个候选应是 gh-proxy，got %q", got[1])
+	}
+
+	// 已经是 gh-proxy 地址：该反代优先，其余候选仍保留，且不能二次拼接
+	proxied := "https://gh-proxy.com/" + raw
+	got = DownloadURLs(proxied)
+	if len(got) != 4 || got[0] != proxied || got[1] != raw {
+		t.Errorf("反代地址应优先且保留其它候选，got %v", got)
+	}
+	for _, u := range got {
+		if strings.Count(u, "https://gh-proxy.com/") > 1 {
+			t.Errorf("出现二次拼接：%q", u)
+		}
+	}
+
+	// 非 GitHub 托管（Gitee / 自建存储）：原样使用
+	gitee := "https://gitee.com/Downvid/downvid/releases/download/v1.7.3/x.zip"
+	if got := DownloadURLs(gitee); len(got) != 1 || got[0] != gitee {
+		t.Errorf("非 GitHub 地址不该改写，got %v", got)
+	}
+
+	if got := DownloadURLs(""); got != nil {
+		t.Errorf("空地址应返回 nil，got %v", got)
+	}
+}
+
 // --- 官网纯文本源走 text 分支 ---
 
 func TestWebsiteTextBranch(t *testing.T) {

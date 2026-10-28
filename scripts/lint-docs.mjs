@@ -197,7 +197,7 @@ for (const [doc, text] of Object.entries(docs)) {
 // 首页徽章是一个 `shields.io/.../actions/workflow/status/<owner>/<repo>/<file>.yml`
 // 的 URL。工作流被改名或删除后，徽章会**静默变成灰色**（"no status"），
 // 而不是报错——首页看起来就像项目没人维护。两个 README 都要查。
-for (const readme of ['README.md', 'README.zh-CN.md']) {
+for (const readme of ['README.md', 'README.en.md']) {
   if (!exists(readme)) continue
   const text = read(readme)
   // 注意是 `actions/workflow/status/`（单数 workflow）——shields.io 的路径就是这样

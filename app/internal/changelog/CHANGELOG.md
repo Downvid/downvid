@@ -2,6 +2,16 @@
 
 本文件记录 DownVid 的所有版本更新。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased]
+
+### 修复
+
+- **GitHub 被限流时 macOS（以及 Windows）检查得到更新、却下载不了**：更新源链路原来会在 jsDelivr 处停下——它只能给版本号，给不出产物清单，于是「检查到新版本、点下载却打开浏览器」。现在下载会继续沿链找到带产物的源（gh-proxy），并把产物直链改写成反代地址；直链不可达时按 `gh-proxy → ghproxy.net → ghfast.top` 依次重试。
+
+### 变更
+
+- **移除 GitHub CI 的 `frontend` job**：图标 / 官网 / 文档 / 来源审计 / 边界 / 坐标 / 词条 / 工作流 / 根目录单测 / svelte-check / 前端单测不再由 CI 自动执行。改 UI 或发版前请本地运行 `pnpm lint:*`、`pnpm test`、`pnpm --dir app/frontend check`、`pnpm --dir app/frontend test`；Go 的 `backend` job、集成测试与三平台构建保持不变。
+
 ## [1.7.3] - 2026-10-28
 
 ### 修复

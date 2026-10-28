@@ -331,13 +331,12 @@ func (a *App) ShouldOfferIssue(kind string) bool {
 
 // ===== 更新检查（真实网络）=====
 
-// CheckUpdate 沿降级链查最新版本。
+// lookupLatest 沿降级链查最新版本。
 //
-// 返回结构里带上每次尝试的轨迹：用户遇到「检查失败」时，诊断面板能显示
-// 「哪个源、什么原因」，而不是一句笼统的「网络错误」。
-//
-// **不抛错**：全挂时 `Release` 为 nil + 轨迹，前端据此显示人话提示。
-func (a *App) CheckUpdate(source string) map[string]any {
+// requireAssets=true 表示「这次结果要用来下载」，只接受带产物清单的源：
+// jsDelivr / 官网只能给版本号，若在它们那里停下，界面会显示有新版本、
+// 点下载却退回浏览器。GitHub 被限流而 gh-proxy 可用时，这一点决定更新能否完成。
+func (a *App) lookupLatest(source string, requireAssets bool) update.LookupResult {
 	if source == "" {
 		st := a.GetSettings()
 		source = st.UpdateSource
@@ -366,7 +365,7 @@ func (a *App) CheckUpdate(source string) map[string]any {
 		}
 	}
 
-	result := update.LookupLatestRelease(update.LookupOptions{
+	return update.LookupLatestRelease(update.LookupOptions{
 		Source:    update.NormalizeSource(source),
 		Client:    httpClient,
 		Repo:      update.Repo{Owner: "Downvid", Repo: "downvid"},
@@ -375,7 +374,18 @@ func (a *App) CheckUpdate(source string) map[string]any {
 			// GitHub API 缺 UA 会直接 403
 			"User-Agent": "DownVid/" + effectiveVersion(),
 		},
+		RequireAssets: requireAssets,
 	})
+}
+
+// CheckUpdate 沿降级链查最新版本。
+//
+// 返回结构里带上每次尝试的轨迹：用户遇到「检查失败」时，诊断面板能显示
+// 「哪个源、什么原因」，而不是一句笼统的「网络错误」。
+//
+// **不抛错**：全挂时 `Release` 为 nil + 轨迹，前端据此显示人话提示。
+func (a *App) CheckUpdate(source string) map[string]any {
+	result := a.lookupLatest(source, false)
 
 	current := effectiveVersion()
 	out := map[string]any{
@@ -416,9 +426,9 @@ func (a *App) DownloadUpdate(version string, source string) StartDownloadResult 
 		return StartDownloadResult{OK: false, Error: "缺少版本号"}
 	}
 
-	// 复用 CheckUpdate 的结果拿产物列表：那里已经处理了降级链与代理
-	info := a.CheckUpdate(source)
-	release, _ := info["release"].(*update.Release)
+	// 必须用 RequireAssets：只给版本号的源（jsDelivr / 官网）没有下载地址，
+	// 在它们那里停下就会出现「查到新版本、点下载跳浏览器」。
+	release := a.lookupLatest(source, true).Release
 	if release == nil {
 		return StartDownloadResult{OK: false, Error: "拿不到版本信息，请先检查更新"}
 	}
@@ -459,17 +469,29 @@ func (a *App) DownloadUpdate(version string, source string) StartDownloadResult 
 
 	go func() {
 		dir := filepath.Join(a.dataDir, "pending-update")
-		path, err := update.Downloader{Client: client, Dir: dir}.Download(
-			context.Background(), picked,
-			func(p update.DownloadProgress) {
-				a.emit("update:progress", map[string]any{
-					"status":   "downloading",
-					"percent":  p.Percent,
-					"received": p.Received,
-					"total":    p.Total,
-				})
-			},
-		)
+		progress := func(p update.DownloadProgress) {
+			a.emit("update:progress", map[string]any{
+				"status":   "downloading",
+				"percent":  p.Percent,
+				"received": p.Received,
+				"total":    p.Total,
+			})
+		}
+
+		// GitHub 直链在部分网络下不可达：按「直链 → gh-proxy → …」依次重试。
+		// 与依赖下载同一思路；代价是失败时多几次请求，收益是更新真的能下完。
+		var path string
+		var err error
+		for _, url := range update.DownloadURLs(picked.URL) {
+			attempt := *picked
+			attempt.URL = url
+			path, err = update.Downloader{Client: client, Dir: dir}.Download(
+				context.Background(), &attempt, progress,
+			)
+			if err == nil {
+				break
+			}
+		}
 		if err != nil {
 			a.emit("update:progress", map[string]any{
 				"status": "error", "message": err.Error(),
@@ -478,7 +500,7 @@ func (a *App) DownloadUpdate(version string, source string) StartDownloadResult 
 		}
 
 		state := update.PendingUpdate{
-			Version:      version,
+			Version:      release.Version,
 			Path:         path,
 			Kind:         picked.Kind,
 			DownloadedAt: nowISO(),
@@ -489,7 +511,7 @@ func (a *App) DownloadUpdate(version string, source string) StartDownloadResult 
 			})
 			return
 		}
-		a.emit("update:progress", map[string]any{"status": "downloaded", "version": version})
+		a.emit("update:progress", map[string]any{"status": "downloaded", "version": release.Version})
 	}()
 
 	return StartDownloadResult{OK: true}

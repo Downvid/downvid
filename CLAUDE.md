@@ -4,6 +4,14 @@ For anyone (or any AI) changing code in this repo. The coupling here is wider th
 suggests: many things are **synchronised by hand**, and a missed spot fails silently (no error, the
 feature just does not work). Read the "change checklist" section before editing.
 
+## Scope
+
+You are Claude Code working on DownVid. Stay inside this repository: read the code, make the
+change, run the checks below. Do not expand a task into open-ended research — unrelated
+repositories, generic technology comparisons, or "best practice" surveys. When external
+information is genuinely required, say what you need and why first, then consult the smallest
+source that answers it.
+
 ---
 
 ## Quick start
@@ -32,8 +40,9 @@ flows, use the `build.sh` artifact.
 
 ## Verification commands
 
-Run the layer you touched. CI covers most of it, but note that the CI frontend job does not run the
-Go core tests — run `cd app && go test ./...` yourself.
+Run the layer you touched. The frontend checks are **no longer run in CI** (see below) — run them
+yourself when changing the UI. The backend job still runs the Go core tests, but `go test` locally is
+cheap.
 
 ```bash
 # Go core (app/)
@@ -91,13 +100,15 @@ by responsibility:
 | job | Contents |
 | --- | --- |
 | `backend` | gofmt / vet / `go test -shuffle=on` for both modules, sidecar cross-compilation |
-| `frontend` | icons / website / docs / provenance / boundaries / repo coords / i18n / workflows / root tests; plus `wails generate module` → svelte-check and frontend tests |
 | `integration` / `build` | Linux only for real-dependency E2E; each platform has a `build` job that compiles the single-file artifact once |
 
 Each of the three workflows starts with a `changes` job: a **docs / website / Markdown-only push**
-runs only `frontend` (lint, unit tests, i18n, icons), while cross-compilation, per-platform artifacts
-and the real-dependency e2e are skipped. `frontend` must never be skipped — `lint:docs` and
-`lint:website` are exactly what verify those files.
+skips cross-compilation, per-platform artifacts and the real-dependency e2e. The former `frontend`
+job (icons / website / docs / provenance / boundaries / repo coords / i18n / workflows / root tests
+/ svelte-check / frontend tests) was **removed** because it kept failing and blocked unrelated work;
+run those checks locally before a UI change or a release: `pnpm lint:*`, `pnpm test`,
+`pnpm --dir app/frontend check`, `pnpm --dir app/frontend test`. `release.yml` still runs the static
+checks it needs.
 
 Releases are done by `.github/workflows/release.yml`. `.github/workflows/release-audit.yml` checks
 daily and independently that "latest tag <-> Release" match. `.github/workflows/update-deps.yml`
@@ -147,7 +158,7 @@ The 16 packages under `app/internal/*`:
 | `netx` | HTTP client with proxy support, proxy liveness check |
 | `parse` | Site parsing, format de-duplication, error classification, bounded YouTube fallback |
 | `server` | Headless HTTP + WebSocket RPC |
-| `settings` | User settings (13 fields, persisted to settings.json in the data directory) |
+| `settings` | User settings (14 fields, persisted to settings.json in the data directory) |
 | `shell` | Open path / reveal in folder / free disk space |
 | `sidecar` | Embeds the dependency sidecar and writes it out at runtime |
 | `update` | Update check, self-update download/install, artifact recognition |

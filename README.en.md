@@ -102,7 +102,7 @@ Built as a graphical frontend for [yt-dlp](https://github.com/yt-dlp/yt-dlp) and
 - 🌐 **1000+ Platforms Supported**: Seamlessly extracts high-quality video and audio across YouTube, Bilibili, Douyin, TikTok, Xiaohongshu, Kuaishou, Twitter/X, Instagram, and more.
 - ⚡ **Built-in Acceleration**: Optimized multi-part chunk worker queues (up to 16 threads) and optional aria2 integration ensure lightning-fast downloads.
 - 🔒 **Zero Ads & Privacy-Focused**: No popups, no bundled junkware, no telemetry, and no forced watermarks. Fully open source under the MIT license.
-- 📦 **Automated Dependency Management**: Built-in Go sidecar checks and manages runtime dependencies, with one-click setup to `~/.downvid`.
+- 📦 **Automated Dependency Management**: Built-in Go sidecar detects and manages yt-dlp / FFmpeg, with one-click install into `~/.downvid/runtime/bin` — no environment variables.
 - 🎨 **Modern Native UX**: Clean Material 3 design crafted with Svelte 5 and Wails v2.
 
 ## Features
@@ -114,7 +114,7 @@ Built as a graphical frontend for [yt-dlp](https://github.com/yt-dlp/yt-dlp) and
 | Download Manager | Queue management, pause, resume, retry, download progress, speed, ETA, and file size |
 | Acceleration | Chunked worker queue (default 8, up to 16 connections), optional aria2 |
 | Authenticated Content | Import cookies from installed browsers or import `cookies.txt` |
-| Runtime Dependencies | Auto-detects local yt-dlp & FFmpeg; one-click download to `~/.downvid` |
+| Runtime Dependencies | Detects manual paths and `~/.downvid/runtime/bin`; one-click download when missing |
 | History | Tracks your last 100 downloads with quick reveal in file manager |
 | Auto Update | Built-in updater via GitHub Releases with silent in-place installation |
 
