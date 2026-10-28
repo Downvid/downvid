@@ -378,120 +378,126 @@ func (a *App) lookupLatest(source string, requireAssets bool) update.LookupResul
 	})
 }
 
-// CheckUpdate 沿降级链查最新版本。
-//
-// 返回结构里带上每次尝试的轨迹：用户遇到「检查失败」时，诊断面板能显示
-// 「哪个源、什么原因」，而不是一句笼统的「网络错误」。
-//
-// **不抛错**：全挂时 `Release` 为 nil + 轨迹，前端据此显示人话提示。
-func (a *App) CheckUpdate(source string) map[string]any {
-	result := a.lookupLatest(source, false)
+// updateSourceID 解析用户选的更新源；空值读设置，非法值回退 auto。
+func (a *App) updateSourceID(source string) update.SourceID {
+	if source == "" {
+		source = a.GetSettings().UpdateSource
+	}
+	return update.NormalizeSource(source)
+}
 
+// wmlOptions 是 wmlUpdate 的运行参数。代理与状态目录都由壳解析后传入。
+func (a *App) wmlOptions(source update.SourceID) update.WMLOptions {
+	return update.WMLOptions{
+		Source:         string(source),
+		CurrentVersion: effectiveVersion(),
+		Proxy:          a.currentProxy(),
+		StateDir:       filepath.Join(a.dataDir, "updater"),
+	}
+}
+
+// CheckUpdate 查最新版本（wmlUpdate 的源链）。
+//
+// 返回结构沿用旧契约：`release` 为 nil 表示整条链失败，前端据此区分
+// 「离线 / 被墙」和「已是最新」。
+//
+// 一个刻意的回退：wmlUpdate 的 chain 在「拿到 Release 但没有本平台资产」
+// （no_asset）或产物缺少 SHA-256（integrity）时会整体失败，不会继续切下一个源
+// （旧链路已在 197bf30 修过前一种）。遇到这两类错误时再走一次旧链路，只为了
+// 把版本号和尝试轨迹显示出来；下载仍由 wmlUpdate 负责，资产缺失时会明确提示
+// 手动下载。
+func (a *App) CheckUpdate(source string) map[string]any {
+	norm := a.updateSourceID(source)
 	current := effectiveVersion()
 	out := map[string]any{
-		"attempts": result.Attempts,
-		"summary":  update.SummarizeFailures(result.Attempts),
-		"version":  current,
-		// 当前这个二进制是哪个架构（electron / wails）。前端据此决定
-		// 「要不要提示迁移到新架构」以及「该读哪套更新通道」。
+		"version":      current,
 		"architecture": string(update.CurrentArchitecture),
 	}
-	if result.Release != nil {
-		out["release"] = result.Release
-		out["hasUpdate"] = hasNewerRelease(result.Release.Version)
-		// 新架构迁移检测：这一版有没有发布适合本机的 Wails 包。
-		//
-		// 刻意只**告知**、不自动迁移 —— 迁移是单向门：装上新架构后
-		// 没有 electron-updater 可用，回不到 Electron 版。
-		out["migration"] = update.EvaluateMigration(update.CurrentArchitecture, result.Release)
-	} else {
-		out["release"] = nil
-		out["hasUpdate"] = false
-		out["migration"] = update.MigrationHint{Reason: "检查更新失败，无法判断新架构版本"}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+
+	rel, err := update.CheckWML(ctx, a.wmlOptions(norm))
+	if err == nil {
+		date := ""
+		if !rel.PublishedAt.IsZero() {
+			date = rel.PublishedAt.Format(time.RFC3339)
+		}
+		out["release"] = map[string]any{
+			"version":      rel.Version,
+			"releaseNotes": rel.Notes,
+			"releaseDate":  date,
+			"source":       rel.Source,
+		}
+		out["hasUpdate"] = rel.Available
+		out["attempts"] = []map[string]any{{"source": rel.Source, "ok": true}}
+		out["summary"] = ""
+		// 迁移判定：Wails 版会直接得到「当前已经是新架构」；过渡版（Electron）
+		// 则根据选中的 Wails 产物判断这一版能不能迁移。
+		migrationRelease := &update.Release{Version: rel.Version}
+		if rel.AssetName != "" {
+			migrationRelease.Assets = []string{rel.AssetName}
+		}
+		out["migration"] = update.EvaluateMigration(update.CurrentArchitecture, migrationRelease)
+		return out
 	}
+
+	if code := update.WMLErrorCode(err); code == "no_asset" || code == "integrity" {
+		legacy := a.lookupLatest(string(norm), false)
+		if legacy.Release != nil {
+			out["release"] = legacy.Release
+			out["hasUpdate"] = hasNewerRelease(legacy.Release.Version)
+			out["attempts"] = legacy.Attempts
+			out["summary"] = update.SummarizeFailures(legacy.Attempts)
+			out["migration"] = update.EvaluateMigration(update.CurrentArchitecture, legacy.Release)
+			return out
+		}
+	}
+
+	out["release"] = nil
+	out["hasUpdate"] = false
+	out["attempts"] = []map[string]any{{
+		"source":  string(norm),
+		"ok":      false,
+		"failure": update.WMLErrorCode(err),
+		"detail":  err.Error(),
+	}}
+	out["summary"] = err.Error()
+	out["migration"] = update.MigrationHint{Reason: "检查更新失败，无法判断新架构版本"}
 	return out
 }
 
 // ===== 自更新：下载与安装 =====
 
-// DownloadUpdate 下载新版本安装包并校验。
+// DownloadUpdate 用 wmlUpdate 下载并校验新版本安装包。
 //
 // **异步**：立即返回，进度走 `update:progress` 事件。安装包可能有几十 MB，
 // 同步等待会让界面卡住且无法显示进度。
 //
 // 只做「下载 + 校验 + 记到 pending」，不安装 —— 用户可以继续手头的活，
-// 下次启动时再装（或主动点「重启并安装」）。
+// 下次启动时再装（或主动点「重启并安装」）。安装仍走 install_*.go：
+// wmlUpdate 的 deferred helper 只对它自己的 CLI 生效，嵌入到 DownVid 时
+// 复制出来的是 DownVid 本身，不会执行安装计划。
 func (a *App) DownloadUpdate(version string, source string) StartDownloadResult {
 	if version == "" {
 		return StartDownloadResult{OK: false, Error: "缺少版本号"}
 	}
 
-	// 必须用 RequireAssets：只给版本号的源（jsDelivr / 官网）没有下载地址，
-	// 在它们那里停下就会出现「查到新版本、点下载跳浏览器」。
-	release := a.lookupLatest(source, true).Release
-	if release == nil {
-		return StartDownloadResult{OK: false, Error: "拿不到版本信息，请先检查更新"}
-	}
-
-	shaOf := map[string]string{}
-	sizeOf := map[string]int64{}
-	urlOf := map[string]string{}
-	digestOf := map[string]string{}
-	names := make([]string, 0, len(release.AssetDetails))
-	for _, asset := range release.AssetDetails {
-		names = append(names, asset.Name)
-		urlOf[asset.Name] = asset.URL
-		sizeOf[asset.Name] = asset.Size
-		if asset.SHA512 != "" {
-			shaOf[asset.Name] = asset.SHA512
-		}
-		if asset.Digest != "" {
-			digestOf[asset.Name] = asset.Digest
-		}
-	}
-
-	picked := update.PickInstallAsset(names, shaOf, sizeOf)
-	if picked == nil {
-		return StartDownloadResult{
-			OK:    false,
-			Error: "这一版没有提供适合本机自动更新的安装包，请到 Releases 页面手动下载",
-		}
-	}
-	picked.URL = urlOf[picked.Name]
-	// GitHub 的产物没有 sha512（那是我们自己清单里才算的），
-	// 用它的 digest 兜底 —— 两条通道都要能校验
-	picked.Digest = digestOf[picked.Name]
-
-	client, err := netx.Client(a.currentProxy(), 0)
-	if err != nil {
-		return StartDownloadResult{OK: false, Error: err.Error()}
+	opts := a.wmlOptions(a.updateSourceID(source))
+	opts.OnProgress = func(p update.WMLProgress) {
+		a.emit("update:progress", map[string]any{
+			"status":   "downloading",
+			"percent":  p.Percent,
+			"received": p.Bytes,
+			"total":    p.Total,
+		})
 	}
 
 	go func() {
-		dir := filepath.Join(a.dataDir, "pending-update")
-		progress := func(p update.DownloadProgress) {
-			a.emit("update:progress", map[string]any{
-				"status":   "downloading",
-				"percent":  p.Percent,
-				"received": p.Received,
-				"total":    p.Total,
-			})
-		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
 
-		// GitHub 直链在部分网络下不可达：按「直链 → gh-proxy → …」依次重试。
-		// 与依赖下载同一思路；代价是失败时多几次请求，收益是更新真的能下完。
-		var path string
-		var err error
-		for _, url := range update.DownloadURLs(picked.URL) {
-			attempt := *picked
-			attempt.URL = url
-			path, err = update.Downloader{Client: client, Dir: dir}.Download(
-				context.Background(), &attempt, progress,
-			)
-			if err == nil {
-				break
-			}
-		}
+		res, err := update.DownloadWML(ctx, opts, version)
 		if err != nil {
 			a.emit("update:progress", map[string]any{
 				"status": "error", "message": err.Error(),
@@ -500,9 +506,9 @@ func (a *App) DownloadUpdate(version string, source string) StartDownloadResult 
 		}
 
 		state := update.PendingUpdate{
-			Version:      release.Version,
-			Path:         path,
-			Kind:         picked.Kind,
+			Version:      res.Version,
+			Path:         res.Path,
+			Kind:         res.Kind,
 			DownloadedAt: nowISO(),
 		}
 		if err := update.SavePending(a.pendingUpdatePath(), state); err != nil {
@@ -511,7 +517,7 @@ func (a *App) DownloadUpdate(version string, source string) StartDownloadResult 
 			})
 			return
 		}
-		a.emit("update:progress", map[string]any{"status": "downloaded", "version": release.Version})
+		a.emit("update:progress", map[string]any{"status": "downloaded", "version": res.Version})
 	}()
 
 	return StartDownloadResult{OK: true}

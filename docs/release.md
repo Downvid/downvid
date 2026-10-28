@@ -244,11 +244,12 @@ README 顶部目前有 Downloads / Release / Stars / License / Product Hunt。�
 
 ### 更新源不可用
 
-在 GitHub 不可达的网络环境下，更新会失败但**不影响应用其余功能**。用户可：
+更新按 wmlUpdate 的源链自动降级（GitHub 直连 → gh-proxy → jsDelivr / Gitee / 官网的 static
+manifest），全部失败时**不会静默当成「已是最新」**：界面显示失败摘要。用户可：
 - 在「设置 → 代理」配置代理后重试
 - 直接前往 Releases 页面手动下载
 
-代码里不做静默重试与降级路径，避免出现"更新了一半"的状态。
+降级只影响「发现与下载」，安装仍由各平台的原生安装器完成；不会出现「更新了一半」的状态。
 
 ## 依赖清单与发布的关系
 

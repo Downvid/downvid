@@ -10,6 +10,7 @@
 
 ### 变更
 
+- **更新通道迁移到 wmlUpdate**：检查与下载改由 [wmlUpdate](https://github.com/yxxbc/wmlUpdate) 的源链负责（GitHub 直连 → GitHub API 经 gh-proxy → jsDelivr / Gitee / 官网的同一份 `manifest.json`），SHA-256 校验、断点续传与同名版本镜像回退都在库内完成；安装仍走三平台原生安装器。发布流程现在会生成 `website/updates/manifest.json` 并和官网版本号一起推回 main。
 - **移除 GitHub CI 的 `frontend` job**：图标 / 官网 / 文档 / 来源审计 / 边界 / 坐标 / 词条 / 工作流 / 根目录单测 / svelte-check / 前端单测不再由 CI 自动执行。改 UI 或发版前请本地运行 `pnpm lint:*`、`pnpm test`、`pnpm --dir app/frontend check`、`pnpm --dir app/frontend test`；Go 的 `backend` job、集成测试与三平台构建保持不变。
 
 ## [1.7.3] - 2026-10-28

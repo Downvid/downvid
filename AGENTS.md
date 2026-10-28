@@ -148,7 +148,7 @@ bash app/scripts/build.sh            # 单文件产物
 | `settings` | 用户设置（14 个字段，落盘到数据目录的 settings.json） |
 | `shell` | 打开路径 / 在文件夹中显示 / 磁盘剩余空间 |
 | `sidecar` | 把依赖边车嵌进主二进制并在运行时落盘 |
-| `update` | 更新检查、自更新下载/安装、产物识别 |
+| `update` | 更新发现/下载（wmlUpdate）、原生自更新安装、产物识别 |
 
 `app/internal/*` 之间**不得互相 import**（`pnpm lint:boundaries` 规则 G1 校验），
 也不得依赖 `cmd`（G2）。这是架构上最值得守住的性质：每个包都能独立测试、独立替换。
@@ -198,9 +198,10 @@ bash app/scripts/build.sh            # 单文件产物
 
 ### 改发布产物
 
-产物名以 `DownVid-Wails-` 开头，出现在四处，改一处必须改四处：
-`release.yml` 的打包步骤、`app/internal/update/migration.go`、`website/app.js` 的产物模板、
-`scripts/gen-release-notes.mjs`。`pnpm lint:website` 会比对官网那一侧。
+产物名以 `DownVid-Wails-` 开头，出现在五处，改一处必须改五处：
+`release.yml` 的打包步骤、`app/internal/update/migration.go`、`app/internal/update/wml.go` 的
+`wmlAssetRules`、`website/app.js` 的产物模板、`scripts/gen-release-notes.mjs`。
+`scripts/lib/update-manifest.mjs` 还会解析平台/架构段。`pnpm lint:website` 会比对官网那一侧。
 
 发布后必须核对「tag ↔ Release」对得上：
 
@@ -395,21 +396,27 @@ m3u8 仅在该清晰度无直链时保留、都没有分辨率时提供 `bv*+ba/
 | 用户设置 | `userData/settings.json`，入口 `app/internal/settings/settings.go`；前端映射在 `app/frontend/src/lib/settings.ts` |
 | 下载历史 | `app/internal/history` → `~/.downvid/download-history.json`（原子写） |
 | 运行依赖 | `app/internal/deps`（探测结果缓存 60 秒） |
-| 更新 | `app/internal/update`（检查 / 自更新 / 产物识别） |
+| 更新 | `app/internal/update`（wmlUpdate 发现/下载 + 原生安装） |
 
 **所有后端调用必须经 `app/frontend/src/lib/backend.ts`**：浏览器里直接 import `wailsjs` 会白屏，
 换传输层时也只需要改这一处。
 
-### 更新源（`shared/update-sources.ts`）
+### 更新源（wmlUpdate + static manifest）
 
-检查更新按一条有序链路依次尝试 `github → jsdelivr → ghproxy → gitee → website`，任一成功即停止。
+检查与下载交给 **wmlUpdate**（`app/internal/update/wml.go`）；安装仍留在 `install_*.go`。
+原因是 wmlUpdate 的 directory/file/command 策略要求固定安装路径，deferred helper 也只对
+它自己的 CLI 生效——嵌入到 DownVid 时复制出来的是 DownVid 本身，不会执行安装计划。
 
-- 为什么：国内网络下 `api.github.com` 经常连不上，而**「连不上」在更新流程里的表现是
-  「已是最新」**——用户什么提示都看不到，永远停在旧版本上。
-- 分层：`shared/update-sources.ts` 是**纯数据 + 纯函数**；Go 侧 `app/internal/update` 做「按链路发请求
-  + 换下一个源」。
-- 用户设置里可选 `updateSource`（`'auto'` 或钉死某个源），非法值**一律回退 `auto`**。
-- 新增源要同时改 Go 侧链路、`UPDATE_SOURCE_IDS`、中英词条与前端设置项。
+- `auto` = GitHub 直连 → GitHub API 经 gh-proxy → static manifest 镜像（jsDelivr / Gitee / 官网）。
+  用户设置里的 `updateSource` 仍可钉死某个源，非法值**一律回退 `auto`**。
+- 三个 static 镜像读同一份 `website/updates/manifest.json`（`scripts/gen-update-manifest.mjs`
+  生成；`release.yml` 每次发布重写，并与官网版本号在同一个提交里推回 main）。清单里带每个
+  产物的 SHA-256。
+- `asset_mirrors` 按 gh-proxy.com / ghproxy.net / ghfast.top 重试**同一个版本**；镜像只能提供
+  可用性，不能替换字节。
+- wmlUpdate 的 chain 在「有 Release 但没有本平台资产」时不会继续切源；`CheckUpdate` 只在
+  `no_asset` 时退回旧 `lookupLatest`，把版本号与尝试轨迹显示出来。
+- 新增源要同时改 `wmlSource` + `wmlManifestURLs`、`UPDATE_SOURCE_IDS`、中英词条与前端设置项。
 
 ---
 

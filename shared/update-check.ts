@@ -13,6 +13,9 @@ import {
 /**
  * 「按链路依次尝试各更新源」的执行部分。
  *
+ * @deprecated 桌面端的更新检查已改走 `app/internal/update/wml.go`（wmlUpdate）。
+ * 这里保留给纯逻辑单测与 TS ↔ Go 交叉验证；不要在新的生产路径里调用。
+ *
  * 与 `shared/update-sources.ts` 的分工：
  *   - 那边是**纯数据**（有哪些源、URL 怎么拼、响应怎么归一化）
  *   - 这边只多一件事：发请求 + 决定换不换下一个源

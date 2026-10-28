@@ -18,7 +18,7 @@ downvid/
 │       └── cli/             # NDJSON 输出（stdout 只放 JSON，日志走 stderr）
 ├── shared/                  # 前端与脚本共用的纯数据 / 纯函数契约
 │   ├── app.ts               # 仓库坐标与外部链接的唯一来源
-│   ├── update-sources.ts    # 更新源链路与版本比较
+│   ├── update-sources.ts    # 更新源 ID / 标签（实际链路见 app/internal/update/wml.go）
 │   ├── acceleration.ts      # 并发档位、依赖种类、下载源 ID
 │   └── parse-error.ts       # 解析错误分类与 Issue 草稿
 ├── website/                 # 产品落地页（无构建，由 Vercel 的 Git 集成发布）
@@ -52,7 +52,7 @@ downvid/
 | `settings` | 用户设置（落盘 `settings.json`） |
 | `shell` | 打开路径 / 在文件夹中显示 / 磁盘剩余空间 |
 | `sidecar` | 把依赖边车嵌进主二进制并在运行时落盘 |
-| `update` | 更新检查、自更新下载/安装、产物识别 |
+| `update` | 更新发现/下载（wmlUpdate）、原生自更新安装、产物识别 |
 
 包之间**不得互相 import**，也不得依赖 `cmd`（`pnpm lint:boundaries` 校验）。
 
@@ -62,6 +62,7 @@ downvid/
 |------|------|----------|
 | `gen-deps-manifest.mjs` | 抓取上游 tag 与 SHA-256 生成 `assets.gen.go` | `pnpm deps:manifest` / `deps:manifest:check` |
 | `gen-release-notes.mjs` | 生成 Release 正文（下载徽章 + 对照表） | 发布流程内自动 |
+| `gen-update-manifest.mjs` | 生成 wmlUpdate 的 static manifest（`website/updates/manifest.json`） | 发布流程内自动 |
 | `gen-contributors.mjs` | 从 git 历史核对关于页贡献者名单 | `pnpm gen:contributors` |
 | `gen-icon-names.mjs` | 生成图标名清单供 `lint-icons.mjs` 比对 | `pnpm icons:update` |
 | `lint-icons.mjs` | 校验图标名有效（写错会静默渲染成文字） | `pnpm lint:icons`，CI 必跑 |
@@ -86,7 +87,8 @@ downvid/
 1. **新增后端能力**：Go 导出方法 + `app/frontend/src/lib/backend.ts` + `types.ts` 字段名逐字一致
 2. **新增广播事件**：Go emit 点、`backend.ts` 的订阅、订阅方的 unsubscribe
 3. **改设置形状**：`app/internal/settings/settings.go` 是唯一入口，删改字段属于 MAJOR
-4. **改产物名**：四处同步（`release.yml`、`app/internal/update/migration.go`、`website/app.js`、
+4. **改产物名**：五处同步（`release.yml`、`app/internal/update/migration.go`、
+   `app/internal/update/wml.go` 的 `wmlAssetRules`、`website/app.js`、
    `scripts/gen-release-notes.mjs`）
 5. **改官网**：`website/index.html` + `styles.css` + `app.js`，由 Vercel 直接发布，
    改完跑 `pnpm lint:website`

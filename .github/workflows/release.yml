@@ -507,12 +507,22 @@ jobs:
           git checkout -B main origin/main
           # 重新写一次：origin/main 上的 index.html 可能是旧版本
           node scripts/sync-website-version.mjs "$VERSION"
-          git add website/index.html
+          # 生成 wmlUpdate 的 static manifest。它同时是 jsDelivr / Gitee / 官网
+          # 三个更新源的镜像内容；必须和官网版本号在同一个提交里推上去，
+          # 否则「官网说有新版、清单还停在旧版」不会报错，只会让更新源失效。
+          # 用本地 artifacts/ 算 SHA-256，不依赖 GitHub API 的 digest。
+          node scripts/gen-update-manifest.mjs \
+            --version "$VERSION" \
+            --tag "v$VERSION" \
+            --artifacts artifacts \
+            --notes-file /tmp/release-notes.md \
+            --out website/updates/manifest.json
+          git add website/index.html website/updates/manifest.json
           if git diff --cached --quiet; then
-            echo "官网版本号已是最新，无需提交"
+            echo "官网版本号与更新清单已是最新，无需提交"
             exit 0
           fi
-          git commit -m "chore(website): 发布后同步官网版本号至 v$VERSION" -m "由 release.yml 在 Release 创建成功后自动写入，离线兜底值不再是过期的。"
+          git commit -m "chore(website): 发布后同步官网版本号与更新清单至 v$VERSION" -m "由 release.yml 在 Release 创建成功后自动写入，离线兜底值与 wmlUpdate 更新源不再是过期的。"
           git push origin main
 
       # ===== 显式触发官网部署：不指望「Git 集成恰好收到了这次 push」 =====
