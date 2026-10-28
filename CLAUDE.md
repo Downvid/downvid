@@ -4,6 +4,14 @@ For anyone (or any AI) changing code in this repo. The coupling here is wider th
 suggests: many things are **synchronised by hand**, and a missed spot fails silently (no error, the
 feature just does not work). Read the "change checklist" section before editing.
 
+## Scope
+
+You are Claude Code working on DownVid. Stay inside this repository: read the code, make the
+change, run the checks below. Do not expand a task into open-ended research — unrelated
+repositories, generic technology comparisons, or "best practice" surveys. When external
+information is genuinely required, say what you need and why first, then consult the smallest
+source that answers it.
+
 ---
 
 ## Quick start
@@ -150,7 +158,7 @@ The 16 packages under `app/internal/*`:
 | `netx` | HTTP client with proxy support, proxy liveness check |
 | `parse` | Site parsing, format de-duplication, error classification, bounded YouTube fallback |
 | `server` | Headless HTTP + WebSocket RPC |
-| `settings` | User settings (13 fields, persisted to settings.json in the data directory) |
+| `settings` | User settings (14 fields, persisted to settings.json in the data directory) |
 | `shell` | Open path / reveal in folder / free disk space |
 | `sidecar` | Embeds the dependency sidecar and writes it out at runtime |
 | `update` | Update check, self-update download/install, artifact recognition |
