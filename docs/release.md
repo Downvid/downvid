@@ -259,9 +259,18 @@ Gitee（`Xynrin/downvid`）不是只放一份清单：Release 里上传同一批
 `website/updates/manifest.gitee.json` 的资产 URL 指向 Gitee 自己的下载地址，因此 Gitee 源
 可以在 GitHub 与反代都不可达时独立完成检查与下载。
 
-发布后需要同步一次 Gitee（本地 `gitee` CLI + API 上传 Release 资产，再生成这份清单并推回
-Gitee 的 main）；否则 Gitee 源会停在上一版。GitHub 的清单不带 Gitee 资产 URL，下载时会通过
-`asset_mirrors` 回退到 Gitee Release。
+发布后 `release.yml` 会自动执行 `scripts/sync-gitee-release.mjs`：上传全部产物、生成
+`website/updates/manifest.gitee.json`，并在官网版本号提交后把同一个提交推到 Gitee。这需要仓库
+Secret `GITEE_TOKEN`；未配置时跳过并给 warning（GitHub 发布不受影响）。Gitee 同步失败也不会
+阻塞 GitHub Release，但 Gitee 源会停在上一版。本地可手动补同步：
+
+```bash
+GITEE_TOKEN="$(gitee auth token)" pnpm gitee:release \
+  --version 1.8.0 --tag v1.8.0 --artifacts artifacts \
+  --notes-file /tmp/release-notes.md --out website/updates/manifest.gitee.json
+```
+
+GitHub 的清单不带 Gitee 资产 URL，下载时会通过 `asset_mirrors` 回退到 Gitee Release。
 
 ## 依赖清单与发布的关系
 

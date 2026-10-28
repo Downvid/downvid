@@ -480,6 +480,29 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: node scripts/verify-release.mjs --tag "v${{ env.VERSION }}"
 
+      # ===== Gitee 完整镜像：Release 资产 + 自己的清单 =====
+      #
+      # 失败不阻塞发布：Gitee 是镜像，GitHub Release 才是主通道。脚本**全部上传
+      # 成功后才写** /tmp/manifest.gitee.json；后面的提交步骤以该文件是否存在判断
+      # 是否把新清单推上去，避免把指向缺失资产的清单提交到 main。
+      - name: 同步到 Gitee
+        id: gitee
+        if: needs.version.outputs.prerelease != 'true'
+        continue-on-error: true
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          if [ -z "${GITEE_TOKEN:-}" ]; then
+            echo "::warning::未配置 GITEE_TOKEN，跳过 Gitee 镜像"
+            exit 0
+          fi
+          node scripts/sync-gitee-release.mjs \
+            --version "$VERSION" \
+            --tag "v$VERSION" \
+            --artifacts artifacts \
+            --notes-file /tmp/release-notes.md \
+            --out /tmp/manifest.gitee.json
+
       # ===== 官网版本号：只在确认发布成功之后才刷 =====
       #
       # 官网是无构建的静态站，页面上的版本号只能是硬编码的：脚本拉到 releases/latest
@@ -497,6 +520,8 @@ jobs:
 
       - name: 提交回 main
         if: needs.version.outputs.prerelease != 'true'
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -504,12 +529,11 @@ jobs:
           # 而不是 `git push HEAD:main`：打 tag 之后 main 若又往前走了（比如这条提交本身、
           # 或别人的 PR），直接推会被拒，官网版本号就静默停在上一个版本。
           git fetch origin main
-          git checkout -B main origin/main
+          git switch -B main origin/main
           # 重新写一次：origin/main 上的 index.html 可能是旧版本
           node scripts/sync-website-version.mjs "$VERSION"
-          # 生成 wmlUpdate 的 static manifest。它同时是 jsDelivr / Gitee / 官网
-          # 三个更新源的镜像内容；必须和官网版本号在同一个提交里推上去，
-          # 否则「官网说有新版、清单还停在旧版」不会报错，只会让更新源失效。
+          # 官网 / jsDelivr 的清单（资产仍在 GitHub）。Gitee 有自己的清单，
+          # 由上一步生成；只有全部资产上传成功才会写 /tmp/manifest.gitee.json。
           # 用本地 artifacts/ 算 SHA-256，不依赖 GitHub API 的 digest。
           node scripts/gen-update-manifest.mjs \
             --version "$VERSION" \
@@ -518,12 +542,25 @@ jobs:
             --notes-file /tmp/release-notes.md \
             --out website/updates/manifest.json
           git add website/index.html website/updates/manifest.json
+          if [ -f /tmp/manifest.gitee.json ]; then
+            cp /tmp/manifest.gitee.json website/updates/manifest.gitee.json
+            git add website/updates/manifest.gitee.json
+          fi
           if git diff --cached --quiet; then
             echo "官网版本号与更新清单已是最新，无需提交"
             exit 0
           fi
           git commit -m "chore(website): 发布后同步官网版本号与更新清单至 v$VERSION" -m "由 release.yml 在 Release 创建成功后自动写入，离线兜底值与 wmlUpdate 更新源不再是过期的。"
           git push origin main
+          # 把同一个提交推到 Gitee（源码镜像）。Release 资产已在上一步上传；
+          # 推送失败会让 job 变红，但 GitHub Release 与官网已经完成。
+          if [ -n "${GITEE_TOKEN:-}" ]; then
+            auth="$(printf 'Xynrin:%s' "$GITEE_TOKEN" | base64 -w0)"
+            git -c "http.extraHeader=Authorization: Basic $auth" push \
+              "https://gitee.com/Xynrin/downvid.git" main:main
+          else
+            echo "::warning::未配置 GITEE_TOKEN，Gitee 镜像未推送"
+          fi
           # jsDelivr 会缓存 @main 文件；发布后主动清一次，避免国内用户读到上一版清单。
           # 失败只警告：官网是第一顺位，jsDelivr 只是后备。
           curl -fsS --max-time 20 \

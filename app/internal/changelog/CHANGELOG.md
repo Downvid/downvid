@@ -6,7 +6,7 @@
 
 ### 变更
 
-- **Gitee 完整镜像**：Release 资产同步到 Gitee，`website/updates/manifest.gitee.json` 的下载地址指向 Gitee 自己的 Release；GitHub 与反代都不可达时，检查与下载都可以在 Gitee 内完成。GitHub 清单的下载回退也增加了 Gitee Release。
+- **Gitee 完整镜像**：Release 资产同步到 Gitee，`website/updates/manifest.gitee.json` 的下载地址指向 Gitee 自己的 Release；GitHub 与反代都不可达时，检查与下载都可以在 Gitee 内完成。配置 `GITEE_TOKEN` 后发布流程会自动上传资产、生成清单并推送 Gitee。GitHub 清单的下载回退也增加了 Gitee Release。
 
 ## [1.8.0] - 2026-10-28
 

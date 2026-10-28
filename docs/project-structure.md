@@ -63,6 +63,7 @@ downvid/
 | `gen-deps-manifest.mjs` | 抓取上游 tag 与 SHA-256 生成 `assets.gen.go` | `pnpm deps:manifest` / `deps:manifest:check` |
 | `gen-release-notes.mjs` | 生成 Release 正文（下载徽章 + 对照表） | 发布流程内自动 |
 | `gen-update-manifest.mjs` | 生成 wmlUpdate 的 static manifest（`website/updates/manifest.json`） | 发布流程内自动 |
+| `sync-gitee-release.mjs` | 上传 Release 资产到 Gitee 并生成 `manifest.gitee.json` | 发布流程内自动（需 `GITEE_TOKEN`） |
 | `gen-contributors.mjs` | 从 git 历史核对关于页贡献者名单 | `pnpm gen:contributors` |
 | `gen-icon-names.mjs` | 生成图标名清单供 `lint-icons.mjs` 比对 | `pnpm icons:update` |
 | `lint-icons.mjs` | 校验图标名有效（写错会静默渲染成文字） | `pnpm lint:icons`，CI 必跑 |

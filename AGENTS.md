@@ -410,8 +410,10 @@ m3u8 仅在该清晰度无直链时保留、都没有分辨率时提供 `bv*+ba/
 - `auto` = GitHub 直连 → GitHub API 经 gh-proxy → 官网 / jsDelivr 清单（GitHub 资产）→ Gitee
   清单（Gitee 资产）。用户设置里的 `updateSource` 仍可钉死某个源，非法值**一律回退 `auto`**。
 - Gitee 是**完整镜像**：Release 资产上传到 Gitee，`website/updates/manifest.gitee.json` 的
-  资产 URL 指向 Gitee 自己的下载地址，因此检查与下载都可以留在 Gitee。面向 GitHub 的清单
-  保留 GitHub 资产 URL，并用 `asset_mirrors`（含 Gitee Release 地址）做下载回退。
+  资产 URL 指向 Gitee 自己的下载地址，因此检查与下载都可以留在 Gitee。配置 `GITEE_TOKEN`
+  secret 后，`release.yml` 会运行 `scripts/sync-gitee-release.mjs` 并把提交推到 Gitee。
+  面向 GitHub 的清单保留 GitHub 资产 URL，并用 `asset_mirrors`（含 Gitee Release 地址）做
+  下载回退。
 - 三个 static 镜像读同一份 `website/updates/manifest.json`（`scripts/gen-update-manifest.mjs`
   生成；`release.yml` 每次发布重写，并与官网版本号在同一个提交里推回 main）。清单里带每个
   产物的 SHA-256。

@@ -459,7 +459,8 @@ path and its deferred helper only works for its own CLI.
   version). It carries the SHA-256 of every artifact.
 - The Gitee source is a **full mirror**: release assets are uploaded to Gitee and
   `website/updates/manifest.gitee.json` points at them, so check and download can both stay on
-  Gitee.
+  Gitee. `release.yml` runs `scripts/sync-gitee-release.mjs` when the `GITEE_TOKEN` secret is
+  configured and pushes the resulting commit to Gitee.
 - `asset_mirrors` retries the same version through gh-proxy.com / ghproxy.net / ghfast.top plus
   the Gitee release URL; a mirror may provide availability, never different bytes.
 - wmlUpdate's chain does **not** fall through when a release has no matching asset; `CheckUpdate`
