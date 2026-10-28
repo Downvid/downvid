@@ -225,11 +225,20 @@ func verifyDigest(data []byte, digest string) error {
 	return nil
 }
 
-// installDir 返回当前应用所在的目录。
+// installPathFor 返回安装动作要替换的目标。
 //
-// macOS 是 `.app` 包本身（要整个替换），其余平台是可执行文件所在目录。
+// macOS 是整个 `.app`（只换里面的二进制，Info.plist / Resources 还是旧的）；
+// Windows / Linux 是可执行文件本身（安装器替换、或直接覆盖文件）。
 func installPathFor(exePath string) string {
-	if runtime.GOOS == "darwin" {
+	return installPathForOS(runtime.GOOS, exePath)
+}
+
+// installPathForOS 是 installPathFor 的纯函数版本。
+//
+// 把 GOOS 作为参数传进来，测试才能在任意平台上覆盖三条分支——
+// 按 runtime.GOOS 分支的写法会让 Windows / Linux 的目标推导在 CI 上永远测不到。
+func installPathForOS(goos, exePath string) string {
+	if goos == "darwin" {
 		// exe 在 `<name>.app/Contents/MacOS/<name>`，往上三层是 `.app`
 		return filepath.Clean(filepath.Join(exePath, "..", "..", ".."))
 	}
@@ -238,22 +247,43 @@ func installPathFor(exePath string) string {
 
 // CanSelfInstall 报告当前运行方式是否支持自动安装。
 //
-// 两个必须排除的场景（都会让「安装」变成破坏性操作）：
+// 必须排除的场景：
 //   - **开发模式**（`go run` / 未打包）：替换的是 go build 的临时产物，
 //     装完下次跑 `go run` 又变回去，纯属混乱
-//   - **只读位置**：系统级安装（`/Applications` 之外、Program Files）
-//     需要提权，静默失败会让用户以为更新成功
+//   - **只读位置**（macOS / Linux）：我们自己替换文件，没有写权限会静默失败
+//
+// Windows 是例外：替换由 NSIS 安装器完成，它会自己申请管理员权限，
+// 应用不需要对 Program Files 可写。
 func CanSelfInstall(exePath string, writable func(string) bool) (bool, string) {
+	return canSelfInstallOS(runtime.GOOS, exePath, writable)
+}
+
+// canSelfInstallOS 是 CanSelfInstall 的纯函数版本（理由同 installPathForOS）。
+func canSelfInstallOS(goos, exePath string, writable func(string) bool) (bool, string) {
 	if exePath == "" {
 		return false, "拿不到可执行文件路径"
 	}
-	// `go run` 的产物落在临时目录，不是真实安装
-	if strings.Contains(exePath, string(filepath.Separator)+"go-build") ||
+	// `go run` 的产物落在临时目录，不是真实安装。
+	// 统一分隔符后再判断，这样 Windows 的 `\go-build\` 在任何平台上都能识别。
+	normalized := strings.ReplaceAll(exePath, "\\", "/")
+	if strings.Contains(normalized, "/go-build") ||
 		strings.Contains(exePath, "___go_build") {
 		return false, "开发模式下不支持自动更新，请前往发布页下载"
 	}
-	target := installPathFor(exePath)
-	if !writable(target) {
+	// Windows 由安装器提权替换，应用自身不需要写权限。
+	//
+	// 曾经这里和其它平台一样要求「目标可写」：Windows 上目标被当成 exe 文件
+	// 而不是目录，`WriteFile("<exe>\\.downvid-write-test")` 必然失败，于是
+	// **每次**点击「重启并安装」都返回「没有写入权限」，前端只好打开浏览器
+	// 跳到 Releases 页（issue #95 的后续反馈）。
+	if goos == "windows" {
+		return true, ""
+	}
+	// 其余平台由我们替换文件，真正需要写权限的是目标的**父目录**：
+	//   macOS 要把整个 .app 移走再放新的 → /Applications
+	//   Linux 要在可执行文件旁写临时文件再 rename → 可执行文件所在目录
+	target := installPathForOS(goos, exePath)
+	if !writable(filepath.Dir(target)) {
 		return false, "没有写入权限，请手动下载安装包"
 	}
 	return true, ""

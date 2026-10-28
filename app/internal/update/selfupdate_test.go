@@ -135,35 +135,79 @@ func TestValidateDownloadNilAsset(t *testing.T) {
 // 开发模式下不能自动安装：替换的是 go build 的临时产物，
 // 装完下次 `go run` 又变回去，只会让开发者困惑。
 func TestCanSelfInstallRejectsDevMode(t *testing.T) {
-	// 用 FromSlash：分隔符在 Windows 上是 `\`，字面量的 `/go-build` 匹配不到
-	exe := filepath.FromSlash("/tmp/go-build123/b001/exe/downvid")
-	ok, reason := CanSelfInstall(exe, func(string) bool { return true })
-	if ok {
-		t.Error("go run 的产物不该允许自更新")
-	}
-	if reason == "" {
-		t.Error("拒绝时必须给出原因")
+	// 三种写法都要能识别：POSIX、Windows、以及 `___go_build` 形式。
+	// 统一分隔符后判断，Windows 路径在任何平台上都能覆盖到。
+	for _, exe := range []string{
+		"/tmp/go-build123/b001/exe/downvid",
+		`C:\Users\me\AppData\Local\Temp\go-build123\b001\exe\downvid.exe`,
+		"/tmp/___go_build_main_go",
+	} {
+		ok, reason := canSelfInstallOS("linux", exe, func(string) bool { return true })
+		if ok {
+			t.Errorf("%q：go run 的产物不该允许自更新", exe)
+		}
+		if reason == "" {
+			t.Errorf("%q：拒绝时必须给出原因", exe)
+		}
 	}
 }
 
 func TestCanSelfInstallRejectsReadOnly(t *testing.T) {
-	ok, reason := CanSelfInstall("/opt/downvid/downvid", func(string) bool { return false })
-	if ok {
-		t.Error("不可写位置不该允许自更新（会静默失败）")
-	}
-	if reason == "" {
-		t.Error("拒绝时必须给出原因")
+	for _, goos := range []string{"darwin", "linux"} {
+		ok, reason := canSelfInstallOS(goos, "/opt/downvid/downvid", func(string) bool { return false })
+		if ok {
+			t.Errorf("%s：不可写位置不该允许自更新（会静默失败）", goos)
+		}
+		if reason == "" {
+			t.Errorf("%s：拒绝时必须给出原因", goos)
+		}
 	}
 }
 
-func TestCanSelfInstallAcceptsNormalInstall(t *testing.T) {
-	exe := "/Users/x/Applications/DownVid.app/Contents/MacOS/downvid"
-	if runtime.GOOS != "darwin" {
-		exe = "/opt/homebrew/bin/downvid"
-	}
-	ok, reason := CanSelfInstall(exe, func(string) bool { return true })
+// Windows 的自更新由 NSIS 安装器完成，安装器自己会申请管理员权限，
+// 应用不需要对 Program Files 可写。
+//
+// 这条用例守的是 issue #95 的后续反馈：此前 Windows 被当成「目标不可写」，
+// 每次点「重启并安装」都直接返回失败，前端只好打开浏览器跳到 Releases 页。
+func TestCanSelfInstallAllowsWindowsInstaller(t *testing.T) {
+	exe := `C:\Program Files\DownVid\downvid.exe`
+	ok, reason := canSelfInstallOS("windows", exe, func(string) bool {
+		t.Fatal("Windows 不应检查应用自身是否有写权限")
+		return false
+	})
 	if !ok {
-		t.Errorf("正常的用户目录安装应允许自更新，实际拒绝：%s", reason)
+		t.Fatalf("Windows 安装器会提权，应允许自更新：%s", reason)
+	}
+}
+
+// 需要写权限的是**目标的父目录**，不是目标本身：
+//
+//	macOS 要把整个 .app 移走再放新的 → /Applications
+//	Linux 要在可执行文件旁写临时文件再 rename → 所在目录
+func TestCanSelfInstallChecksParentDirectory(t *testing.T) {
+	cases := []struct {
+		goos string
+		exe  string
+		// 期望被检查的目录（故意不用 installPathForOS 推导，
+		// 否则路径推导本身写错时这条用例也会跟着错）
+		want string
+	}{
+		{"darwin", "/Applications/DownVid.app/Contents/MacOS/downvid", "/Applications"},
+		{"linux", "/opt/downvid/downvid", "/opt/downvid"},
+	}
+	for _, c := range cases {
+		var got string
+		ok, reason := canSelfInstallOS(c.goos, c.exe, func(dir string) bool {
+			got = dir
+			return true
+		})
+		if !ok {
+			t.Errorf("%s：正常安装应允许自更新，实际拒绝：%s", c.goos, reason)
+		}
+		want := filepath.Clean(filepath.FromSlash(c.want))
+		if got != want {
+			t.Errorf("%s：应检查父目录 %q，实际 %q", c.goos, want, got)
+		}
 	}
 }
 
@@ -171,17 +215,21 @@ func TestCanSelfInstallAcceptsNormalInstall(t *testing.T) {
 //
 // 只替换 MacOS/downvid 的话，Info.plist / Resources 还是旧的，
 // 表现为「版本号变了但功能没变」，很难排查。
-func TestInstallPathForMacTargetsAppBundle(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("只在 macOS 上验证 .app 路径推导")
+func TestInstallPathForOS(t *testing.T) {
+	mac := installPathForOS("darwin", "/Applications/DownVid.app/Contents/MacOS/downvid")
+	wantMac := filepath.Clean(filepath.FromSlash("/Applications/DownVid.app"))
+	if mac != wantMac {
+		t.Errorf("macOS 的目标应是 .app 包本身，实际 %q", mac)
 	}
-	exe := "/Applications/DownVid.app/Contents/MacOS/downvid"
-	got := installPathFor(exe)
-	if !strings.HasSuffix(got, ".app") {
-		t.Errorf("macOS 的目标应是 .app 包本身，实际 %q", got)
-	}
-	if got != "/Applications/DownVid.app" {
-		t.Errorf("路径推导错误：%q", got)
+
+	// 其余平台的目标是可执行文件本身（安装器替换 / 直接覆盖）。
+	for _, c := range []struct{ goos, exe string }{
+		{"linux", "/opt/downvid/downvid"},
+		{"windows", `C:\Program Files\DownVid\downvid.exe`},
+	} {
+		if got := installPathForOS(c.goos, c.exe); got != c.exe {
+			t.Errorf("%s 的目标应是可执行文件本身，实际 %q", c.goos, got)
+		}
 	}
 }
 

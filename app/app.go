@@ -509,9 +509,18 @@ func (a *App) InstallUpdate() StartDownloadResult {
 	if err != nil {
 		return StartDownloadResult{OK: false, Error: "拿不到可执行文件路径"}
 	}
-	ok, reason := update.CanSelfInstall(exe, func(p string) bool {
-		// 只要能写目标目录，就说明这个安装位置可以由我们替换
-		return os.WriteFile(filepath.Join(p, ".downvid-write-test"), nil, 0o644) == nil
+	ok, reason := update.CanSelfInstall(exe, func(dir string) bool {
+		// 在**目标目录**里实际写一个临时文件再删掉：能写才说明这个位置
+		// 可以由我们替换。用 CreateTemp + Remove 而不是固定文件名，
+		// 避免残留（macOS 上曾经把 `.downvid-write-test` 留在 .app 里）。
+		f, err := os.CreateTemp(dir, ".downvid-write-*")
+		if err != nil {
+			return false
+		}
+		name := f.Name()
+		_ = f.Close()
+		_ = os.Remove(name)
+		return true
 	})
 	if !ok {
 		return StartDownloadResult{OK: false, Error: reason}
