@@ -26,7 +26,6 @@
 
 import crypto from 'node:crypto'
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 
 import { buildManifest, classifyAsset } from './lib/update-manifest.mjs'
@@ -50,11 +49,8 @@ function hasFlag(name) {
 }
 
 function readToken() {
-  if (process.env.CNB_TOKEN) return process.env.CNB_TOKEN.trim()
-  // 本地便利：CI 没有这个文件，必须显式注入 CNB_TOKEN。
-  const local = path.join(os.homedir(), '.config', 'downvid', 'cnb-token')
-  if (fs.existsSync(local)) return fs.readFileSync(local, 'utf8').trim()
-  return ''
+  // CI 与本地 skill 都通过环境变量注入；本地 skill 的 tokens.env 是唯一存放处。
+  return (process.env.CNB_TOKEN || '').trim()
 }
 
 function sha256File(file) {
@@ -174,7 +170,7 @@ async function main() {
     throw new Error('需要 --version、--artifacts 和 --tag（或由 version 推导）')
   }
   if (!dryRun && !token) {
-    throw new Error('需要 CNB_TOKEN（本地可读 ~/.config/downvid/cnb-token）')
+    throw new Error('需要 CNB_TOKEN（本地用 ~/.claude/skills/reop-all-sync/tokens.env）')
   }
 
   const assets = readArtifacts(artifactsDir)

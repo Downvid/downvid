@@ -268,14 +268,16 @@ Gitee（`Xynrin/downvid`）与 CNB（`yxxbc/downvid`）都是完整镜像：各�
   客户端读公开的 Release 下载 URL。
 - 同步失败时对应镜像会停在上一版，但另外两条源不受影响。
 
-本地补同步：
+本地补同步（token 统一放在本地 skill 的 `tokens.env`）：
 
 ```bash
-GITEE_TOKEN="$(gitee auth token)" pnpm gitee:release \
+set -a; source ~/.claude/skills/reop-all-sync/tokens.env; set +a
+
+pnpm gitee:release \
   --version 1.8.0 --tag v1.8.0 --artifacts artifacts \
   --notes-file /tmp/release-notes.md --out website/updates/manifest.gitee.json
 
-CNB_TOKEN="$(cat ~/.config/downvid/cnb-token)" pnpm cnb:release \
+pnpm cnb:release \
   --version 1.8.0 --tag v1.8.0 --artifacts artifacts \
   --notes-file /tmp/release-notes.md --out /tmp/manifest.cnb.json
 ```
