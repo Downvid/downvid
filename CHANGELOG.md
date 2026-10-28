@@ -2,6 +2,14 @@
 
 本文件记录 DownVid 的所有版本更新。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased]
+
+### 修复
+
+- **发布后提交回 main 失败**：`git switch -B` 不是合法参数（应为 `-C`），导致 v1.9.0 的官网版本号/Gitee 清单没有自动提交；已修正。
+- **Gitee Release 偶发创建失败**：201 空响应或空描述会让脚本拿不到 Release ID；现在创建后轮询并给默认描述。
+- **源码镜像 workflow 首次推送被拒**：Gitee 任务改为完整历史（shallow clone 无法快进）。
+
 ## [1.9.0] - 2026-10-28
 
 ### 变更
