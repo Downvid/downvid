@@ -551,7 +551,7 @@ jobs:
           # 而不是 `git push HEAD:main`：打 tag 之后 main 若又往前走了（比如这条提交本身、
           # 或别人的 PR），直接推会被拒，官网版本号就静默停在上一个版本。
           git fetch origin main
-          git switch -B main origin/main
+          git switch -C main origin/main
           # 重新写一次：origin/main 上的 index.html 可能是旧版本
           node scripts/sync-website-version.mjs "$VERSION"
           git add website/index.html
