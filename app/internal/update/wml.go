@@ -58,7 +58,7 @@ const (
 var wmlManifestURLs = []string{
 	"https://downvid-coral.vercel.app/updates/manifest.json",
 	"https://cdn.jsdelivr.net/gh/Downvid/downvid@main/website/updates/manifest.json",
-	"https://gitee.com/Downvid/downvid/raw/main/website/updates/manifest.json",
+	"https://gitee.com/Xynrin/downvid/raw/main/website/updates/manifest.json",
 }
 
 // wmlAssetMirrors 是产物下载的镜像模板，顺序与旧链路一致。

@@ -92,6 +92,10 @@ func TestWMLManifestOrder(t *testing.T) {
 			t.Errorf("manifest urls[%d] = %q, want host %s", i, wmlManifestURLs[i], host)
 		}
 	}
+	// Gitee 的镜像仓库在 Xynrin 名下（Downvid 组织只存在于 GitHub）。
+	if !strings.Contains(wmlManifestURLs[2], "/Xynrin/downvid/") {
+		t.Errorf("gitee manifest = %q, want /Xynrin/downvid/", wmlManifestURLs[2])
+	}
 }
 
 // TestWMLAssetRulesOrder 钉住平台资产的选择顺序。
