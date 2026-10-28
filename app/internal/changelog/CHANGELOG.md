@@ -2,6 +2,14 @@
 
 本文件记录 DownVid 的所有版本更新。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [1.7.3] - 2026-10-28
+
+### 修复
+
+- **Windows 点「重启并安装」只会打开浏览器**（#95 后续反馈）：权限检查把可执行文件本身当成了目录，`WriteFile("<exe>\\.downvid-write-test")` 必然失败，于是每次都被判成「没有写入权限」。Windows 的替换由 NSIS 安装器提权完成，应用不需要对 Program Files 可写；现在直接放行，并交给独立批处理在应用退出后静默安装、装完重新启动。
+- **1.7.2 的修复只消掉了报错，文件夹仍然没打开**：`explorer.exe` 的命令行是私有解析，`/select,` 遇到含空格或逗号的路径会被理解成别的路径。Windows 改用 Shell API（`SHOpenFolderAndSelectItems`），不再经过命令行、也不依赖退出码；打开文件 / 目录改用 `ShellExecute`。
+- **macOS 的写权限探测会往 `.app` 里留下 `.downvid-write-test`**：改为在目标父目录创建临时文件后立即删除。
+
 ## [1.7.2] - 2026-10-28
 
 ### 修复
