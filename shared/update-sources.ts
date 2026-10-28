@@ -1,32 +1,20 @@
 import { APP, GITHUB_API, REPO_SLUG, WEBSITE_URL } from './app'
 
 /**
- * 更新源（以及任何需要读 GitHub 的地方）的唯一来源。
+ * 更新源的可选 ID 与展示文案（前端设置页的契约）。
  *
- * ## 为什么需要它
+ * 实际网络请求由 `app/internal/update/wml.go` 的 wmlUpdate 配置执行：
  *
- * 应用要检查新版本时必须访问 GitHub。国内网络下 `api.github.com` 与
- * `github.com` 经常连不上，而**「连不上」在更新流程里的表现是「已是最新」**
- * ——用户什么提示都看不到，就永远停在旧版本上。这是本项目最难自愈的一类故障：
- * 修好的代码发不出去，因为发出去的通道本身就是坏的。
+ *   1. `github`  —— 官方 API / Release（海外用户的正常路径）
+ *   2. `ghproxy` —— GitHub API 经 gh-proxy 透传
+ *   3. `static`  —— jsDelivr / Gitee / 官网读取同一份
+ *                  `website/updates/manifest.json`
  *
- * 所以每次检查都按一条**有序链路**依次尝试，任一成功即停止：
+ * `auto` 是以上三级的组合；用户仍可钉死单个源。这里保留 ID 列表与标签，
+ * 是因为设置页、i18n 与 `UPDATE_SOURCE_IDS` 的双向校验都依赖它。
+ * 新增源时必须同时改 `wmlSource` + `wmlManifestURLs`、这里、两份词条与设置 UI。
  *
- *   1. `github`   —— 官方 API / Release（海外用户的正常路径）
- *   2. `jsdelivr` —— jsDelivr 的 GitHub 镜像，纯 CDN，不限流
- *   3. `ghproxy`  —— gh-proxy 系列公共反代
- *   4. `gitee`    —— 国内镜像（需维护者在 Gitee 同步发布）
- *   5. `website`  —— 产品官网，最后兜底（只给「去下载」的链接，不给版本号）
- *
- * ## 约定
- *
- * - **这是一个纯数据 + 纯函数模块**：不读 `localStorage`、不读 `process.env`、
- *   不发起请求。调用方（主进程 `electron/updater.ts`、容器服务
- *   `docker/server/index.ts`、渲染进程）各自把设置传进来。这样它能在
- *   vitest（`environment: 'node'`）里直接测，也能被 Docker 服务复用。
- * - 新增源必须同时更新 `UPDATE_SOURCE_IDS` 与两份 i18n 词条，
- *   `tests/update-sources.test.ts` 与 `lint:i18n` 会分别拦住漏改。
- * - 顺序即优先级；`'auto'` 表示使用这条完整链路。
+ * 纯数据 + 纯函数：不读 `localStorage`、不读 `process.env`、不发起请求。
  */
 
 export type UpdateSourceId = 'auto' | 'github' | 'jsdelivr' | 'ghproxy' | 'gitee' | 'website'

@@ -67,10 +67,32 @@ const repo = sharedApp.match(/repo:\s*'([^']+)'/)?.[1]
 if (!owner || !repo) problems.push('shared/app.ts 未能解析出 owner/repo')
 
 // ===== 1. 无构建 / 多文件约定 =====
+// `updates/` 是唯一的目录例外：wmlUpdate 的 static manifest 必须和官网
+// 一起发布（jsDelivr / Gitee / 官网三个更新源读的是同一份文件）。
+// 它不参与页面构建，但必须被 Vercel 原样托管，所以不能挪出 website/。
 const ALLOWED_FILES = ['index.html', 'styles.css', 'app.js', 'README.md']
-for (const file of fs.readdirSync(SITE_DIR)) {
-  if (!ALLOWED_FILES.includes(file)) {
-    problems.push(`website/ 下出现了 ${file}——官网只允许 index.html / styles.css / app.js，多出来的文件不会被构建流程处理`)
+const ALLOWED_DIRS = ['updates']
+for (const entry of fs.readdirSync(SITE_DIR, { withFileTypes: true })) {
+  if (entry.isDirectory() && ALLOWED_DIRS.includes(entry.name)) continue
+  if (!ALLOWED_FILES.includes(entry.name)) {
+    problems.push(`website/ 下出现了 ${entry.name}——官网只允许 index.html / styles.css / app.js / updates/，多出来的文件不会被构建流程处理`)
+  }
+}
+// 更新清单被删/损坏时，三个 static 更新源会一起失效，而且页面本身看不出异常。
+const manifestPath = path.join(SITE_DIR, 'updates', 'manifest.json')
+if (!fs.existsSync(manifestPath)) {
+  problems.push('website/updates/manifest.json 不存在：wmlUpdate 的 static 更新源会全部失效')
+} else {
+  try {
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+    if (manifest.app_id !== 'com.downvid.downvid') {
+      problems.push(`website/updates/manifest.json 的 app_id 是 ${manifest.app_id}，应与 wmlUpdate 的配置一致`)
+    }
+    if (!Array.isArray(manifest.assets) || manifest.assets.length === 0) {
+      problems.push('website/updates/manifest.json 没有 assets')
+    }
+  } catch (err) {
+    problems.push(`website/updates/manifest.json 不是合法 JSON：${err.message}`)
   }
 }
 for (const m of html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["']/g)) {

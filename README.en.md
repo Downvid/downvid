@@ -166,6 +166,7 @@ bash app/scripts/build.sh
 - **Core Engine**: [Go](https://go.dev/) (16 zero-coupled internal packages)
 - **Frontend**: [Svelte 5](https://svelte.dev/) + Vite + Tailwind CSS v4
 - **Engines**: [yt-dlp](https://github.com/yt-dlp/yt-dlp) & [FFmpeg](https://ffmpeg.org/)
+- **Updater**: [wmlUpdate](https://github.com/yxxbc/wmlUpdate) (source failover, resumable download, SHA-256 verification)
 - **Testing**: [Vitest](https://vitest.dev/)
 
 ## License

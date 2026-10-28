@@ -179,6 +179,7 @@ bash app/scripts/build.sh
 | [Svelte 5](https://svelte.dev/) | 前端框架（Runes 响应式系统） |
 | [yt-dlp](https://github.com/yt-dlp/yt-dlp) | 视频与音频解析引擎 |
 | [FFmpeg](https://ffmpeg.org/) | 音视频合并与转码 |
+| [wmlUpdate](https://github.com/yxxbc/wmlUpdate) | 更新发现、源链降级与下载校验 |
 | [Vitest](https://vitest.dev/) | 纯逻辑单元测试 |
 
 ### 架构概览

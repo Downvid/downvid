@@ -1,5 +1,9 @@
 // Package update 实现「按链路依次尝试更新源」。
 //
+// 桌面端的正常更新路径已改为 `wml.go`（wmlUpdate）。本文件保留的链路只在
+// `CheckUpdate` 遇到 `no_asset` 时用于显示版本与尝试轨迹，以及给诊断与
+// TS ↔ Go 交叉验证使用；不要在新的生产路径里调用它。
+//
 // 本包是 shared/update-sources.ts（纯数据）与 shared/update-check.ts（执行）的 Go 移植。
 // 两者合并成一个包，因为 Go 里把「纯数据」与「发请求」拆两个包只会增加 import 噪音。
 //

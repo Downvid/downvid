@@ -10,8 +10,8 @@
   },
   "totals": {
     "upstreamSignificantLines": 2707,
-    "retainedVerbatimLines": 142,
-    "retainedPct": 5.2,
+    "retainedVerbatimLines": 143,
+    "retainedPct": 5.3,
     "registryFiles": 18
   },
   "files": {
@@ -34,7 +34,7 @@
       "significantLines": 0,
       "upstreamLines": 0,
       "upstreamPct": 0,
-      "retainedElsewhere": 2.1,
+      "retainedElsewhere": 2.2,
       "homes": [
         "app/frontend/src/lib/backend.ts(9)",
         "tests/website-version.test.ts(4)",

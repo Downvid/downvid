@@ -50,6 +50,7 @@
     "test:issue:triage": "node scripts/test-issue-triage.mjs",
     "verify:release": "node scripts/verify-release.mjs",
     "website:version": "node scripts/sync-website-version.mjs",
+    "gen:update-manifest": "node scripts/gen-update-manifest.mjs",
     "lint:workflows": "node scripts/lint-workflows.mjs",
     "check:frontend": "pnpm --dir app/frontend check",
     "lint:i18n:app": "node scripts/lint-frontend-i18n.mjs",

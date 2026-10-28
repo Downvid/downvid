@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "app_id": "com.downvid.downvid",
+  "channel": "stable",
+  "version": "1.7.3",
+  "published_at": "2026-10-28T05:07:57Z",
+  "notes": "<!-- 此正文由 scripts/gen-release-notes.mjs 生成，请勿手动编辑 -->\n<div align=\"center\">\n\n### ⬇️ 点击直接下载 / Direct Downloads\n\n[![macOS](https://img.shields.io/static/v1?style=for-the-badge&label=macOS&labelColor=black&color=000000&logo=apple&message=%E4%B8%8B%E8%BD%BD%20DMG%20%E5%AE%89%E8%A3%85%E5%99%A8)](https://github.com/Downvid/downvid/releases/download/v1.7.3/DownVid-Wails-mac-universal-1.7.3.dmg)\n[![Windows](https://img.shields.io/static/v1?style=for-the-badge&label=Windows&labelColor=black&color=0078D6&logo=windows&message=%E4%B8%8B%E8%BD%BD%20EXE%20%E5%AE%89%E8%A3%85%E5%90%91%E5%AF%BC)](https://github.com/Downvid/downvid/releases/download/v1.7.3/DownVid-Wails-windows-x64-1.7.3-installer.exe)\n[![Linux](https://img.shields.io/static/v1?style=for-the-badge&label=Linux&labelColor=black&color=FFB300&logo=linux&message=%E4%B8%8B%E8%BD%BD%20DEB%20%E5%AE%89%E8%A3%85%E5%8C%85)](https://github.com/Downvid/downvid/releases/download/v1.7.3/DownVid-Wails-linux-x64-1.7.3.deb)\n\n<sub>选择对应系统的主推版本直接下载 · 更多格式参见下方对照表</sub><br>\n<sub>Select your platform to download · See table below for portable & update packages</sub>\n\n</div>\n\n---\n\n## 📦 下载对照表 / Download Matrix\n\n| 平台 / Platform | 架构 / Arch | 类型 / Type | 安装包 / Package | 说明 / Description |\n|:---|:---|:---|:---|:---|\n| macOS | Universal (Apple / Intel) | 安装器 / Installer | [DownVid-Wails-mac-universal-1.7.3.dmg](https://github.com/Downvid/downvid/releases/download/v1.7.3/DownVid-Wails-mac-universal-1.7.3.dmg) | 推荐，挂载后拖入「应用程序」 / Recommended DMG installer |\n| macOS | Universal (Apple / Intel) | 更新便携 / Update | [DownVid-Wails-mac-universal-1.7.3.zip](https://github.com/Downvid/downvid/releases/download/v1.7.3/DownVid-Wails-mac-universal-1.7.3.zip) | 解压即用，应用内自更新使用 / Portable & auto-update zip |\n| Windows | x64 | 安装器 / Installer | [DownVid-Wails-windows-x64-1.7.3-installer.exe](https://github.com/Downvid/downvid/releases/download/v1.7.3/DownVid-Wails-windows-x64-1.7.3-installer.exe) | 推荐安装向导，创建快捷方式与静默更新 / Recommended NSIS installer |\n| Windows | x64 | 便携版 / Portable | [DownVid-Wails-windows-x64-1.7.3.zip](https://github.com/Downvid/downvid/releases/download/v1.7.3/DownVid-Wails-windows-x64-1.7.3.zip) | 绿色免安装版，解压即用 / Portable standalone zip |\n| Linux | x64 | 安装包 / Deb Package | [DownVid-Wails-linux-x64-1.7.3.deb](https://github.com/Downvid/downvid/releases/download/v1.7.3/DownVid-Wails-linux-x64-1.7.3.deb) | Debian / Ubuntu 推荐安装包 / Recommended deb package |\n| Linux | x64 | 便携包 / Portable | [DownVid-Wails-linux-x64-1.7.3.tar.gz](https://github.com/Downvid/downvid/releases/download/v1.7.3/DownVid-Wails-linux-x64-1.7.3.tar.gz) | 解压后赋予执行权限即可运行 / Portable tar.gz archive |\n\n> 运行依赖 **yt-dlp / ffmpeg 不随安装包分发**：启动后会自动识别机器上已安装的版本并复用，识别不到时在「设置 → 运行依赖」里一键下载即可。<br>\n> **Dependencies are not bundled**: Installed tools on your machine will be detected automatically; one-click download is available in Settings → Dependencies.\n\n---\n\n### ⚠️ 各平台说明 / Platform Notes\n\n| 🇨🇳 中文说明 | 🇺🇸 English Notes |\n|:---|:---|\n| **macOS**：推荐下载 `.dmg` 安装。应用未购买商业证书签名，首次打开若提示未受信任，请在「系统设置 → 隐私与安全性」中点击「仍要打开」。 | **macOS**: Recommended `.dmg`. Build is unsigned; if prompted about an untrusted developer, allow it in System Settings → Privacy & Security. |\n| **Windows**：推荐下载 `-installer.exe`，安装后自动创建快捷方式并支持应用内静默更新；亦可下载 `.zip` 免安装版。 | **Windows**: Recommended `-installer.exe` NSIS installer with shortcuts and silent in-app update; portable `.zip` is also available. |\n| **Linux**：Debian / Ubuntu 推荐安装 `.deb`；其他发行版可下载 `.tar.gz` 便携包，解压后执行 `chmod +x downvid && ./downvid`。 | **Linux**: `.deb` recommended for Debian/Ubuntu; other distros can extract `.tar.gz` and run `chmod +x downvid && ./downvid`. |\n| **运行依赖**：yt-dlp 与 ffmpeg **不随安装包分发**。软件会自动检测系统已有环境，若缺失可在「设置 → 运行依赖」中一键下载。 | **Dependencies**: yt-dlp & ffmpeg are not bundled. Existing system installations are reused; missing tools can be downloaded in Settings → Dependencies. |\n| **自动更新**：软件内置更新机制，可在「关于」页面检查更新并自动应用，无需手动重装。 | **Auto Update**: Built-in updater allows seamless updates without manual re-installation. |\n\n---\n\n## 📝 更新内容 / Changelog\n\n### 修复\n\n- **Windows 点「重启并安装」只会打开浏览器**（#95 后续反馈）：权限检查把可执行文件本身当成了目录，`WriteFile(\"<exe>\\\\.downvid-write-test\")` 必然失败，于是每次都被判成「没有写入权限」。Windows 的替换由 NSIS 安装器提权完成，应用不需要对 Program Files 可写；现在直接放行，并交给独立批处理在应用退出后静默安装、装完重新启动。\n- **1.7.2 的修复只消掉了报错，文件夹仍然没打开**：`explorer.exe` 的命令行是私有解析，`/select,` 遇到含空格或逗号的路径会被理解成别的路径。Windows 改用 Shell API（`SHOpenFolderAndSelectItems`），不再经过命令行、也不依赖退出码；打开文件 / 目录改用 `ShellExecute`。\n- **macOS 的写权限探测会往 `.app` 里留下 `.downvid-write-test`**：改为在目标父目录创建临时文件后立即删除。\n\n---\n\n<sub>完整历史见 [CHANGELOG.md](https://github.com/Downvid/downvid/blob/main/CHANGELOG.md) · 遇到问题请先看 [故障排除 / Troubleshooting](https://github.com/Downvid/downvid/blob/main/docs/troubleshooting.md)</sub>",
+  "assets": [
+    {
+      "name": "DownVid-Wails-linux-x64-1.7.3.deb",
+      "os": "linux",
+      "arch": "amd64",
+      "url": "https://github.com/Downvid/downvid/releases/download/v1.7.3/DownVid-Wails-linux-x64-1.7.3.deb",
+      "sha256": "47f347295a7752604369e953edd17b537fe071a31f8b5e0430fc1fb55cd7da51",
+      "size": 5636566
+    },
+    {
+      "name": "DownVid-Wails-linux-x64-1.7.3.tar.gz",
+      "os": "linux",
+      "arch": "amd64",
+      "url": "https://github.com/Downvid/downvid/releases/download/v1.7.3/DownVid-Wails-linux-x64-1.7.3.tar.gz",
+      "sha256": "a0c41403acf511781c6f461afc03fe0395c860e08b242f72fd92d9ca3ee4bde4",
+      "size": 7860067,
+      "format": "tar.gz"
+    },
+    {
+      "name": "DownVid-Wails-mac-universal-1.7.3.dmg",
+      "os": "darwin",
+      "arch": "universal",
+      "url": "https://github.com/Downvid/downvid/releases/download/v1.7.3/DownVid-Wails-mac-universal-1.7.3.dmg",
+      "sha256": "b10bd029703ef7a8bcaf082c96b2ae0225ffc80f9eea01038b22f621b538d605",
+      "size": 20910850,
+      "format": "dmg"
+    },
+    {
+      "name": "DownVid-Wails-mac-universal-1.7.3.zip",
+      "os": "darwin",
+      "arch": "universal",
+      "url": "https://github.com/Downvid/downvid/releases/download/v1.7.3/DownVid-Wails-mac-universal-1.7.3.zip",
+      "sha256": "35883d125da63a562d106dd08b73961970b5951fab6ea41ac4a09d011f42f89f",
+      "size": 20954606,
+      "format": "zip"
+    },
+    {
+      "name": "DownVid-Wails-windows-x64-1.7.3-installer.exe",
+      "os": "windows",
+      "arch": "amd64",
+      "url": "https://github.com/Downvid/downvid/releases/download/v1.7.3/DownVid-Wails-windows-x64-1.7.3-installer.exe",
+      "sha256": "48a539bb56200b989ed98e9730858f0cf5a60ecafdef9b9529a386dec07a77c5",
+      "size": 10209493,
+      "format": "exe"
+    },
+    {
+      "name": "DownVid-Wails-windows-x64-1.7.3.zip",
+      "os": "windows",
+      "arch": "amd64",
+      "url": "https://github.com/Downvid/downvid/releases/download/v1.7.3/DownVid-Wails-windows-x64-1.7.3.zip",
+      "sha256": "2a09ee6efa264a1b706c81480a847a9d5e5955e1062ac9c4adda4cc756d05bd3",
+      "size": 8464787,
+      "format": "zip"
+    }
+  ]
+}
