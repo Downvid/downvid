@@ -33,6 +33,24 @@ var ErrNotFound = errors.New("路径不存在")
 // ErrEmpty 表示路径为空。
 var ErrEmpty = errors.New("路径为空")
 
+// launch 启动一条系统命令。
+//
+// Windows 上有个必须绕开的坑：`explorer.exe` 即使窗口已经正常打开，退出码也常是 1
+// （请求被交给已运行的 explorer 实例时）。用 `cmd.Run()` 会把成功当成失败——
+// 「在目录中显示」于是每次都提示「打开失败：exit status 1」（issue #95）。
+// 所以 Windows 上只确认进程能启动，既不等它退出，也不看退出码；
+// 其余平台仍然保留退出码检查（open / xdg-open 失败时应该报出来）。
+func launch(cmd *exec.Cmd) error {
+	hideWindow(cmd)
+	if runtime.GOOS == "windows" {
+		if err := cmd.Start(); err != nil {
+			return err
+		}
+		return cmd.Process.Release()
+	}
+	return cmd.Run()
+}
+
 // OpenPath 用系统默认程序打开文件或目录。
 //
 // 打开目录时用文件管理器；打开文件时用关联的默认应用。
@@ -57,8 +75,7 @@ func OpenPath(path string) error {
 	default:
 		cmd = exec.Command("xdg-open", path)
 	}
-	hideWindow(cmd)
-	if err := cmd.Run(); err != nil {
+	if err := launch(cmd); err != nil {
 		return fmt.Errorf("打开失败：%w", err)
 	}
 	return nil
@@ -93,8 +110,7 @@ func ShowInFolder(path string) error {
 		// 与其猜，不如稳定地打开所在目录——文件就在里面，用户能找到。
 		cmd = exec.Command("xdg-open", filepath.Dir(path))
 	}
-	hideWindow(cmd)
-	if err := cmd.Run(); err != nil {
+	if err := launch(cmd); err != nil {
 		return fmt.Errorf("打开目录失败：%w", err)
 	}
 	return nil
