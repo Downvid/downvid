@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -481,6 +482,13 @@ type LookupOptions struct {
 	// TimeoutMs 是单源超时。默认 8 秒：比一个 TTFB 宽松，又不至于让链路整体拖太久
 	TimeoutMs int
 	Headers   map[string]string
+	// RequireAssets 表示只有带产物清单（AssetDetails）的结果才算成功。
+	//
+	// 自更新下载需要 URL 与校验值，而 jsDelivr / 官网只报版本号。不加这个
+	// 约束时链路会在 jsDelivr 就停下：界面显示「有新版本」，点下载却因为
+	// 没有安装包而退回浏览器。GitHub 被限流、但 gh-proxy 可用时，这个
+	// 区别决定更新能不能完成。
+	RequireAssets bool
 	// OnAttempt 在每个源失败时回调（主进程用它写日志）
 	OnAttempt func(Attempt)
 }
@@ -505,6 +513,10 @@ func LookupLatestRelease(opts LookupOptions) LookupResult {
 
 	attempts := []Attempt{}
 	candidates := LatestCandidates(opts.Source, opts.Repo, opts.Endpoint)
+
+	// RequireAssets 时，只给版本号的源不能算终点：先记下来，继续找
+	// 能给产物清单的源。全都给不出时再退回它，让调用方给出「手动下载」提示。
+	var versionOnly *Release
 
 	headers := map[string]string{"Accept": "application/json, text/plain;q=0.9"}
 	for k, v := range opts.Headers {
@@ -564,6 +576,27 @@ func LookupLatestRelease(opts LookupOptions) LookupResult {
 			continue
 		}
 
+		// 经 gh-proxy 拿到的 JSON 里，产物 URL 仍是 github.com 直链。
+		// 下载也必须走同一条反代，否则会出现「检查成功、下载失败」。
+		if c.Source == SourceGHPROXY {
+			for i := range release.AssetDetails {
+				release.AssetDetails[i].URL = MirrorURL(opts.Endpoint.GHPROXYAPI, release.AssetDetails[i].URL)
+			}
+		}
+
+		if opts.RequireAssets && len(release.AssetDetails) == 0 {
+			if versionOnly == nil {
+				versionOnly = &release
+			}
+			a := Attempt{Source: c.Source, URL: c.URL, OK: true,
+				Detail: "只有版本号，没有产物清单，继续找可下载的源"}
+			attempts = append(attempts, a)
+			if opts.OnAttempt != nil {
+				opts.OnAttempt(a)
+			}
+			continue
+		}
+
 		a := Attempt{Source: c.Source, URL: c.URL, OK: true}
 		attempts = append(attempts, a)
 		if opts.OnAttempt != nil {
@@ -572,7 +605,82 @@ func LookupLatestRelease(opts LookupOptions) LookupResult {
 		return LookupResult{Release: &release, Attempts: attempts}
 	}
 
+	if versionOnly != nil {
+		return LookupResult{Release: versionOnly, Attempts: attempts}
+	}
 	return LookupResult{Release: nil, Attempts: attempts}
+}
+
+// MirrorURL 把 GitHub Release 直链改写成反代地址。
+//
+// 只改真正托管在 github.com 的 URL：Gitee、自建对象存储、测试服务器，
+// 以及**已经反代过**的地址都必须原样使用（二次拼接会得到不可访问的 URL）。
+func MirrorURL(proxyBase, rawURL string) string {
+	if rawURL == "" || proxyBase == "" || !isGitHubURL(rawURL) {
+		return rawURL
+	}
+	return strings.TrimSuffix(proxyBase, "/") + "/" + rawURL
+}
+
+// githubMirrors 是 GitHub Release 直链的公共反代（顺序即优先级）。
+//
+// 与 backend/internal/fetch 的镜像思路一致，但不共享代码：那是另一个模块，
+// 且这里只处理 Release 直链。
+var githubMirrors = []string{
+	"https://gh-proxy.com",
+	"https://ghproxy.net",
+	"https://ghfast.top",
+}
+
+// DownloadURLs 返回一个产物的下载候选：优先用「已经验证可用的反代」，
+// 再退回 GitHub 直链与其它反代。
+//
+// 经 gh-proxy 检查到的 Release，其产物 URL 已被改写成反代地址；这里识别出
+// 内层的 GitHub 直链，才能在该反代挂掉时继续换下一个，而不是只试一次。
+func DownloadURLs(rawURL string) []string {
+	if rawURL == "" {
+		return nil
+	}
+	if isGitHubURL(rawURL) {
+		return githubDownloadURLs(rawURL, "")
+	}
+	for _, base := range githubMirrors {
+		prefix := strings.TrimSuffix(base, "/") + "/"
+		if strings.HasPrefix(rawURL, prefix) {
+			if inner := strings.TrimPrefix(rawURL, prefix); isGitHubURL(inner) {
+				return githubDownloadURLs(inner, rawURL)
+			}
+		}
+	}
+	// 非 GitHub 托管（Gitee / 自建存储）：原样使用
+	return []string{rawURL}
+}
+
+func githubDownloadURLs(githubURL, first string) []string {
+	out := make([]string, 0, len(githubMirrors)+1)
+	if first != "" {
+		out = append(out, first)
+	}
+	out = append(out, githubURL)
+	for _, base := range githubMirrors {
+		u := strings.TrimSuffix(base, "/") + "/" + githubURL
+		if u != first {
+			out = append(out, u)
+		}
+	}
+	return out
+}
+
+// isGitHubURL 判断 URL 是否真正托管在 github.com。
+//
+// 不能用 `strings.Contains(rawURL, "github.com")`：反代地址形如
+// `https://gh-proxy.com/https://github.com/...`，子串判断会再次拼接。
+func isGitHubURL(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	return strings.EqualFold(u.Host, "github.com")
 }
 
 // SummarizeFailures 把整条链路的失败轨迹压成一句用户能看懂的话。
