@@ -1,0 +1,86 @@
+name: Sync mirrors
+
+# 每次 push main / 推 tag 时，把源码同步到 Gitee 与 CNB。
+#
+# - Gitee：完整历史镜像（正常 fast-forward push）。
+# - CNB：仓库里有 Git LFS 历史（旧 Electron 产物），本地/CI 没有全部 LFS 对象，
+#   所以用当前 tree 的**快照提交** force push；清单与 Release 资产由 release.yml
+#   单独维护，不受这里影响。
+#
+# Release 资产/清单的同步在 release.yml 里（Gitee + CNB 两个 step）。
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-mirrors
+  cancel-in-progress: false
+
+jobs:
+  gitee:
+    if: github.repository == 'Downvid/downvid'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - name: Push to Gitee
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GITEE_TOKEN:-}" ]; then
+            echo "::warning::未配置 GITEE_TOKEN，跳过 Gitee 源码镜像"
+            exit 0
+          fi
+          auth="$(printf 'Xynrin:%s' "$GITEE_TOKEN" | base64 -w0)"
+          git -c "http.extraHeader=Authorization: Basic $auth" push \
+            "https://gitee.com/Xynrin/downvid.git" \
+            "HEAD:refs/heads/main"
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            git -c "http.extraHeader=Authorization: Basic $auth" push \
+              "https://gitee.com/Xynrin/downvid.git" \
+              "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          fi
+
+  cnb:
+    if: github.repository == 'Downvid/downvid'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+      - name: Push snapshot to CNB
+        env:
+          CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CNB_TOKEN:-}" ]; then
+            echo "::warning::未配置 CNB_TOKEN，跳过 CNB 源码镜像"
+            exit 0
+          fi
+
+          author_name="$(git log -1 --format=%an)"
+          author_email="$(git log -1 --format=%ae)"
+          snapshot="$(mktemp -d)"
+          git archive HEAD | tar -x -C "$snapshot"
+          cd "$snapshot"
+          git init -b main -q
+          git config user.name "$author_name"
+          git config user.email "$author_email"
+          # 快照里只有 LFS 指针，不需要（也没有）LFS 对象；用 cat 跳过 filter。
+          git -c filter.lfs.clean=cat -c filter.lfs.smudge=cat -c filter.lfs.required=false add -A
+          git -c filter.lfs.clean=cat -c filter.lfs.smudge=cat -c filter.lfs.required=false \
+            commit -q -m "chore(mirror): sync main @ ${GITHUB_SHA}"
+
+          auth="$(printf 'cnb:%s' "$CNB_TOKEN" | base64 -w0)"
+          git -c "http.extraHeader=Authorization: Basic $auth" push --force \
+            "https://cnb.cool/yxxbc/downvid.git" main:main

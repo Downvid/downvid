@@ -11,19 +11,14 @@ package update
 // `install.type = external` 让它把校验过的安装包路径交回来，安装仍走
 // `install_*.go`（那是三平台真机验证过的路径）。
 //
-// ## 为什么不直接把源链搬进 wmlUpdate
+// ## 三条更新源
 //
-// 它可以表达 github / static / chain，但 jsDelivr 的 data API、Gitee 的
-// Release API 与官网 version.txt 的形状都不同；如果各自写一个 provider，
-// 等于把 shared/update-sources.ts 的逻辑复制一份到第三方库里。这里改成
-// 发版时生成同一份 static manifest（website/updates/manifest.json），
-// jsDelivr / Gitee / 官网只是它的三个镜像 —— 源的类型少了一种，语义却更清楚。
+// auto = GitHub → Gitee → CNB。Gitee / CNB 都是**完整镜像**：各自的 manifest
+// 指向自己 Release 的资产，所以任一条都能独立完成检查与下载。旧的
+// jsDelivr / gh-proxy / 官网链路已经移除，减少需要同步的中间层。
 //
-// ## 关于 ghproxy
-//
-// `api_base` 是「GitHub API 基址」，gh-proxy 支持把完整 URL 拼在域名后面，
-// 所以 `https://gh-proxy.com/https://api.github.com` 能当 API 镜像用。
-// 产物下载则由 `asset_mirrors` 负责，且必须与选中版本的 SHA-256 一致。
+// Gitee 的清单放在仓库 raw（`website/updates/manifest.gitee.json`）；
+// CNB 的 raw API 需要登录，清单作为固定 `update` Release 的公开资产提供。
 
 import (
 	"context"
@@ -43,43 +38,20 @@ const (
 
 	wmlOwner = "Downvid"
 	wmlRepo  = "downvid"
-
-	// gh-proxy 的 API 透传地址；产物仍走 asset_mirrors。
-	wmlGHProxyAPI = "https://gh-proxy.com/https://api.github.com"
 )
 
-// wmlManifestURLs 是指向 GitHub 产物的 static manifest 镜像。
+// 三镜像的清单地址。每个镜像的 manifest 都指向**自己的**资产：
 //
-// 顺序即优先级：**官网第一**，因为 release.yml 在发布后显式触发并回读 Vercel，
-// 它一定是最新的；jsDelivr 第二（@main 有缓存，发布流程会主动 purge，但仍可能
-// 落后）。wmlUpdate 的 static 源只会在「前一个 URL 请求失败」时切下一个，
-// 不会因为内容过期而切 —— 所以最新的源必须排在前面。
+//	GitHub  —— API（不需要清单）
+//	Gitee   —— Xynrin/downvid 仓库 raw 里的 manifest.gitee.json
+//	CNB     —— yxxbc/downvid 的固定 update Release 资产 manifest.cnb.json
 //
-// Gitee 不在这份列表里：它有自己的 manifest（资产 URL 指向 Gitee Release），
-// 见 wmlGiteeManifestURL。让每个镜像的 manifest 指向自己的资产，才不会出现
-// 「清单从 Gitee 拿到、下载却还要回 GitHub」的半吊子降级。
-var wmlManifestURLs = []string{
-	"https://downvid-coral.vercel.app/updates/manifest.json",
-	"https://cdn.jsdelivr.net/gh/Downvid/downvid@main/website/updates/manifest.json",
-}
-
-// Gitee 镜像：源码与 Release 资产都在 Xynrin/downvid（Downvid 组织只在 GitHub）。
+// CNB 的 raw API 需要登录，所以清单放在 Release 资产里；这个 URL 是公开的，
+// 客户端不需要任何 token。
 const (
 	wmlGiteeManifestURL = "https://gitee.com/Xynrin/downvid/raw/main/website/updates/manifest.gitee.json"
-	wmlGiteeAssetMirror = "https://gitee.com/Xynrin/downvid/releases/download/{tag}/{asset}"
+	wmlCNBManifestURL   = "https://cnb.cool/yxxbc/downvid/-/releases/download/update/manifest.cnb.json"
 )
-
-// wmlAssetMirrors 是 GitHub 产物下载的镜像模板（顺序即优先级）。
-//
-// 前三个是 GitHub Release 的反代；最后一个是 Gitee Release 的同名资产。
-// `{url}` 只能用于 GitHub 托管地址，所以 Gitee 模板用 `{tag}` + `{asset}`
-// 重新拼 URL，而不是把 Gitee 地址再套一层反代。
-var wmlAssetMirrors = []string{
-	"https://gh-proxy.com/{url}",
-	"https://ghproxy.net/{url}",
-	"https://ghfast.top/{url}",
-	wmlGiteeAssetMirror,
-}
 
 // WMLProgress 是一次下载进度。
 type WMLProgress struct {
@@ -148,76 +120,47 @@ func WMLConfig(opts WMLOptions) *wmlupdate.Config {
 
 // wmlSource 把用户选的更新源映射成 wmlUpdate 的 source。
 //
-// `auto` 的顺序是 GitHub 直连 → GitHub API 经 gh-proxy → static manifest
-// 的三个镜像。它与旧链路「github → jsdelivr → ghproxy → gitee → website」
-// 的服务商相同，只是把后三者合并成了同一份 manifest。
+// `auto` 只有三条：GitHub → Gitee → CNB。后两者都是完整镜像，
+// 清单里的资产 URL 指向各自的 Release，所以任何一条都能独立完成检查 + 下载。
 func wmlSource(source string, manifestURLs []string) wmlupdate.SourceConfig {
-	override := manifestURLs
-	staticURLs := manifestURLs
-	if len(staticURLs) == 0 {
-		staticURLs = wmlManifestURLs
+	giteeURL := wmlGiteeManifestURL
+	cnbURL := wmlCNBManifestURL
+	if len(manifestURLs) > 0 {
+		giteeURL = manifestURLs[0]
+		cnbURL = manifestURLs[len(manifestURLs)-1]
 	}
 	switch NormalizeSource(source) {
 	case SourceGitHub:
-		return wmlGitHubSource("")
-	case SourceGHPROXY:
-		return wmlGitHubSource(wmlGHProxyAPI)
-	case SourceWebsite:
-		return wmlStaticSource(staticURLs[0])
-	case SourceJSDelivr:
-		if len(staticURLs) > 1 {
-			return wmlStaticSource(staticURLs[1])
-		}
-		return wmlStaticSource(staticURLs[0])
+		return wmlGitHubSource()
 	case SourceGitee:
-		return wmlGiteeSource(override)
+		return wmlStaticSource(giteeURL)
+	case SourceCNB:
+		return wmlStaticSource(cnbURL)
 	default:
 		return wmlupdate.SourceConfig{
 			Type: "chain",
 			Sources: []wmlupdate.SourceConfig{
-				wmlGitHubSource(""),
-				wmlGitHubSource(wmlGHProxyAPI),
-				wmlStaticSource(staticURLs...),
-				wmlGiteeSource(override),
+				wmlGitHubSource(),
+				wmlStaticSource(giteeURL),
+				wmlStaticSource(cnbURL),
 			},
 		}
 	}
 }
 
-func wmlGitHubSource(apiBase string) wmlupdate.SourceConfig {
-	sc := wmlupdate.SourceConfig{
-		Type:         wmlupdate.SourceGitHub,
-		Owner:        wmlOwner,
-		Repo:         wmlRepo,
-		TagPrefix:    "v",
-		AssetMirrors: append([]string(nil), wmlAssetMirrors...),
-	}
-	if apiBase != "" {
-		sc.APIBase = apiBase
-	}
-	return sc
-}
-
-func wmlStaticSource(urls ...string) wmlupdate.SourceConfig {
+func wmlGitHubSource() wmlupdate.SourceConfig {
 	return wmlupdate.SourceConfig{
-		Type:         wmlupdate.SourceStatic,
-		ManifestURLs: append([]string(nil), urls...),
-		AssetMirrors: append([]string(nil), wmlAssetMirrors...),
+		Type:      wmlupdate.SourceGitHub,
+		Owner:     wmlOwner,
+		Repo:      wmlRepo,
+		TagPrefix: "v",
 	}
 }
 
-// wmlGiteeSource 使用 Gitee 自己的 manifest，资产 URL 也指向 Gitee Release。
-//
-// **不能**给它套 wmlAssetMirrors：那些模板会把 Gitee 资产地址再拼到 gh-proxy
-// 后面，产生无效 URL。Gitee 源就是「清单 + 资产都在 Gitee」的完整镜像。
-func wmlGiteeSource(manifestURLs []string) wmlupdate.SourceConfig {
-	urls := manifestURLs
-	if len(urls) == 0 {
-		urls = []string{wmlGiteeManifestURL}
-	}
+func wmlStaticSource(url string) wmlupdate.SourceConfig {
 	return wmlupdate.SourceConfig{
 		Type:         wmlupdate.SourceStatic,
-		ManifestURLs: append([]string(nil), urls...),
+		ManifestURLs: []string{url},
 	}
 }
 

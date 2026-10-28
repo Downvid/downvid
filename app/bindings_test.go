@@ -643,7 +643,7 @@ func TestCheckUpdateReportsArchitecture(t *testing.T) {
 	app := NewApp()
 	app.dataDir = t.TempDir()
 	// 用一个必然失败的源避免测试依赖网络；重点是有没有这两个键
-	out := app.CheckUpdate("website")
+	out := app.CheckUpdate("gitee")
 
 	if _, ok := out["architecture"]; !ok {
 		t.Error("CheckUpdate 必须返回 architecture（前端据此判断该读哪套通道）")

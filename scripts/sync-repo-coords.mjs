@@ -81,7 +81,6 @@ const TARGETS = [
 
   // --- 测试里的快照（改了会红，必须同步）---
   { file: 'tests/about-contributors.test.ts', kind: 'text', required: false },
-  { file: 'tests/update-sources.test.ts', kind: 'text', required: false },
   { file: 'tests/website-download.test.ts', kind: 'text', required: false },
 
   // --- 文档（只提示）---

@@ -1,12 +1,9 @@
 #!/usr/bin/env node
 /**
- * 生成 wmlUpdate 的 static manifest（website/updates/manifest.json）。
+ * 生成 wmlUpdate 的 static manifest（默认 website/updates/manifest.gitee.json）。
  *
- * 这份文件同时是 jsDelivr / Gitee / 官网三个更新源的镜像内容：
- *
- *   https://cdn.jsdelivr.net/gh/Downvid/downvid@main/website/updates/manifest.json
- *   https://gitee.com/Downvid/downvid/raw/main/website/updates/manifest.json
- *   https://downvid-coral.vercel.app/updates/manifest.json
+ * Gitee 的清单提交到仓库；CNB 的清单作为固定 update Release 的资产上传。
+ * 两边的资产 URL 都指向各自的 Release（用 --release-base 指定）。
  *
  * 发布流程调用它，提交回 main；官网部署后三个 URL 都指向同一份数据。
  *
@@ -36,7 +33,7 @@ import { buildManifest, classifyAsset, normalizeVersion } from './lib/update-man
 const ROOT = path.resolve(import.meta.dirname, '..')
 const APP_ID = 'com.downvid.downvid'
 const DEFAULT_REPO = 'Downvid/downvid'
-const DEFAULT_OUT = path.join(ROOT, 'website', 'updates', 'manifest.json')
+const DEFAULT_OUT = path.join(ROOT, 'website', 'updates', 'manifest.gitee.json')
 
 function arg(name, fallback = '') {
   const i = process.argv.indexOf(`--${name}`)

@@ -38,14 +38,20 @@ function listFiles(root) {
 
 const all = listFiles(artifactsDir).map((f) => path.basename(f))
 
-/** 产物在仓库里的下载地址 */
-function downloadUrl(filename) {
-  return `https://github.com/${OWNER}/${REPO}/releases/download/v${version}/${encodeURIComponent(filename)}`
+/** 产物在三个镜像里的下载地址（资产名相同，Release 由发布流程同步）。 */
+function downloadUrls(filename) {
+  const name = encodeURIComponent(filename)
+  const tag = `v${version}`
+  return {
+    github: `https://github.com/${OWNER}/${REPO}/releases/download/${tag}/${name}`,
+    gitee: `https://gitee.com/Xynrin/downvid/releases/download/${tag}/${name}`,
+    cnb: `https://cnb.cool/yxxbc/downvid/-/releases/download/${tag}/${name}`,
+  }
 }
 
 function find(pattern) {
   const file = all.find((f) => pattern.test(f))
-  return file ? { file, url: downloadUrl(file) } : null
+  return file ? { file, ...downloadUrls(file) } : null
 }
 
 /** shields.io 徽章，点击即下载 */
@@ -77,16 +83,17 @@ const primaryWin = winExe || winZip
 const primaryLinux = linuxDeb || linuxTar
 
 const primaryBadges = [
-  primaryMac ? badge('macOS', macDmg ? '下载 DMG 安装器' : '下载通用版 (Zip)', '000000', primaryMac.url, 'apple') : null,
-  primaryWin ? badge('Windows', winExe ? '下载 EXE 安装向导' : '下载 x64 绿色版', '0078D6', primaryWin.url, 'windows') : null,
-  primaryLinux ? badge('Linux', linuxDeb ? '下载 DEB 安装包' : '下载 x64 便携包', 'FFB300', primaryLinux.url, 'linux') : null,
+  primaryMac ? badge('macOS', macDmg ? '下载 DMG 安装器' : '下载通用版 (Zip)', '000000', primaryMac.github, 'apple') : null,
+  primaryWin ? badge('Windows', winExe ? '下载 EXE 安装向导' : '下载 x64 绿色版', '0078D6', primaryWin.github, 'windows') : null,
+  primaryLinux ? badge('Linux', linuxDeb ? '下载 DEB 安装包' : '下载 x64 便携包', 'FFB300', primaryLinux.github, 'linux') : null,
 ].filter(Boolean)
 
 // ===== 双语下载对照表 =====
 const rows = []
 const pushRow = (platform, arch, type, entry, descZh, descEn) => {
   if (entry) {
-    rows.push(`| ${platform} | ${arch} | ${type} | [${entry.file}](${entry.url}) | ${descZh} / ${descEn} |`)
+    const mirrors = `[GitHub](${entry.github}) · [Gitee](${entry.gitee}) · [CNB](${entry.cnb})`
+    rows.push(`| ${platform} | ${arch} | ${type} | ${entry.file} | ${mirrors} | ${descZh} / ${descEn} |`)
   }
 }
 
@@ -143,9 +150,12 @@ const notesTable = `| 🇨🇳 中文说明 | 🇺🇸 English Notes |
 | **自动更新**：软件内置更新机制，可在「关于」页面检查更新并自动应用，无需手动重装。 | **Auto Update**: Built-in updater allows seamless updates without manual re-installation. |`
 
 const downloadTable = rows.length > 0
-  ? `| 平台 / Platform | 架构 / Arch | 类型 / Type | 安装包 / Package | 说明 / Description |
-|:---|:---|:---|:---|:---|
-${rows.join('\n')}`
+  ? `| 平台 / Platform | 架构 / Arch | 类型 / Type | 安装包 / Package | 下载 / Download | 说明 / Description |
+|:---|:---|:---|:---|:---|:---|
+${rows.join('\n')}
+
+> 三个镜像（GitHub / Gitee / CNB）由发布流程同步；某个镜像暂时不可用时换另一个即可。<br>
+> All three mirrors are synced by the release workflow; use another if one is temporarily unavailable.`
   : `_产物生成中或未检测到可用安装包 / Generating artifacts or no packages found_`
 
 const body = `<!-- 此正文由 scripts/gen-release-notes.mjs 生成，请勿手动编辑 -->

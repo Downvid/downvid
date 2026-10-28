@@ -503,6 +503,28 @@ jobs:
             --notes-file /tmp/release-notes.md \
             --out /tmp/manifest.gitee.json
 
+      # ===== CNB 完整镜像：Release 资产 + 固定的 update 清单 =====
+      #
+      # CNB 的 raw API 需要登录，所以清单作为 update Release 的资产上传；
+      # 客户端读的是公开的 release download URL。同步失败同样不阻塞发布。
+      - name: 同步到 CNB
+        id: cnb
+        if: needs.version.outputs.prerelease != 'true'
+        continue-on-error: true
+        env:
+          CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
+        run: |
+          if [ -z "${CNB_TOKEN:-}" ]; then
+            echo "::warning::未配置 CNB_TOKEN，跳过 CNB 镜像"
+            exit 0
+          fi
+          node scripts/sync-cnb-release.mjs \
+            --version "$VERSION" \
+            --tag "v$VERSION" \
+            --artifacts artifacts \
+            --notes-file /tmp/release-notes.md \
+            --out /tmp/manifest.cnb.json
+
       # ===== 官网版本号：只在确认发布成功之后才刷 =====
       #
       # 官网是无构建的静态站，页面上的版本号只能是硬编码的：脚本拉到 releases/latest
@@ -532,25 +554,18 @@ jobs:
           git switch -B main origin/main
           # 重新写一次：origin/main 上的 index.html 可能是旧版本
           node scripts/sync-website-version.mjs "$VERSION"
-          # 官网 / jsDelivr 的清单（资产仍在 GitHub）。Gitee 有自己的清单，
-          # 由上一步生成；只有全部资产上传成功才会写 /tmp/manifest.gitee.json。
-          # 用本地 artifacts/ 算 SHA-256，不依赖 GitHub API 的 digest。
-          node scripts/gen-update-manifest.mjs \
-            --version "$VERSION" \
-            --tag "v$VERSION" \
-            --artifacts artifacts \
-            --notes-file /tmp/release-notes.md \
-            --out website/updates/manifest.json
-          git add website/index.html website/updates/manifest.json
+          git add website/index.html
+          # Gitee 清单由同步步骤生成；只有全部资产上传成功才会写
+          # /tmp/manifest.gitee.json，失败时保留旧清单不提交。
           if [ -f /tmp/manifest.gitee.json ]; then
             cp /tmp/manifest.gitee.json website/updates/manifest.gitee.json
             git add website/updates/manifest.gitee.json
           fi
           if git diff --cached --quiet; then
-            echo "官网版本号与更新清单已是最新，无需提交"
+            echo "官网版本号与 Gitee 清单已是最新，无需提交"
             exit 0
           fi
-          git commit -m "chore(website): 发布后同步官网版本号与更新清单至 v$VERSION" -m "由 release.yml 在 Release 创建成功后自动写入，离线兜底值与 wmlUpdate 更新源不再是过期的。"
+          git commit -m "chore(website): 发布后同步官网版本号与 Gitee 清单至 v$VERSION" -m "由 release.yml 在 Release 创建成功后自动写入。"
           git push origin main
           # 把同一个提交推到 Gitee（源码镜像）。Release 资产已在上一步上传；
           # 推送失败会让 job 变红，但 GitHub Release 与官网已经完成。
@@ -561,11 +576,6 @@ jobs:
           else
             echo "::warning::未配置 GITEE_TOKEN，Gitee 镜像未推送"
           fi
-          # jsDelivr 会缓存 @main 文件；发布后主动清一次，避免国内用户读到上一版清单。
-          # 失败只警告：官网是第一顺位，jsDelivr 只是后备。
-          curl -fsS --max-time 20 \
-            "https://purge.jsdelivr.net/gh/Downvid/downvid@main/website/updates/manifest.json" >/dev/null \
-            || echo "::warning::jsDelivr 清理失败，static 镜像可能仍返回上一版"
 
       # ===== 显式触发官网部署：不指望「Git 集成恰好收到了这次 push」 =====
       #

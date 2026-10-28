@@ -6,7 +6,10 @@
 
 ### 变更
 
-- **Gitee 完整镜像**：Release 资产同步到 Gitee，`website/updates/manifest.gitee.json` 的下载地址指向 Gitee 自己的 Release；GitHub 与反代都不可达时，检查与下载都可以在 Gitee 内完成。配置 `GITEE_TOKEN` 后发布流程会自动上传资产、生成清单并推送 Gitee。GitHub 清单的下载回退也增加了 Gitee Release。
+- **更新源收口为 GitHub / Gitee / CNB**：移除 jsdelivr / gh-proxy / 官网清单与旧降级链路；`auto` 依次尝试三个**完整镜像**，每个镜像的清单与资产都在自己的站点。
+- **Gitee 完整镜像**：Release 资产同步到 Gitee，`website/updates/manifest.gitee.json` 的下载地址指向 Gitee 自己的 Release；配置 `GITEE_TOKEN` 后发布流程自动上传资产、生成清单并推送 Gitee。
+- **CNB 完整镜像**：Release 资产同步到 CNB，固定 `update` Release 的 `manifest.cnb.json` 作为稳定清单；配置 `CNB_TOKEN` 后发布流程自动同步。
+- **源码镜像自动同步**：每次 push `main` / tag，`.github/workflows/sync-mirrors.yml` 同步 Gitee 完整历史与 CNB 当前 tree 快照（完整历史含 CI 没有的旧 LFS 对象）。
 
 ## [1.8.0] - 2026-10-28
 

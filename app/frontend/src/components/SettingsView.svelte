@@ -35,10 +35,8 @@
   const sourceOptions = [
     { value: 'auto', key: 'settings.sourceAuto' },
     { value: 'github', key: 'settings.sourceGithub' },
-    { value: 'jsdelivr', key: 'settings.sourceJsdelivr' },
-    { value: 'ghproxy', key: 'settings.sourceGhproxy' },
     { value: 'gitee', key: 'settings.sourceGitee' },
-    { value: 'website', key: 'settings.sourceWebsite' },
+    { value: 'cnb', key: 'settings.sourceCnb' },
   ] as const
 
   // 语言名用各自语言书写（中文叫「中文」、英文叫「English」），不翻译

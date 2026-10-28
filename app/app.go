@@ -24,9 +24,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"io"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -41,7 +39,6 @@ import (
 	"github.com/Downvid/downvid/app/internal/download"
 	"github.com/Downvid/downvid/app/internal/history"
 	"github.com/Downvid/downvid/app/internal/image"
-	"github.com/Downvid/downvid/app/internal/netx"
 	"github.com/Downvid/downvid/app/internal/parse"
 	"github.com/Downvid/downvid/app/internal/settings"
 	"github.com/Downvid/downvid/app/internal/shell"
@@ -331,53 +328,6 @@ func (a *App) ShouldOfferIssue(kind string) bool {
 
 // ===== 更新检查（真实网络）=====
 
-// lookupLatest 沿降级链查最新版本。
-//
-// requireAssets=true 表示「这次结果要用来下载」，只接受带产物清单的源：
-// jsDelivr / 官网只能给版本号，若在它们那里停下，界面会显示有新版本、
-// 点下载却退回浏览器。GitHub 被限流而 gh-proxy 可用时，这一点决定更新能否完成。
-func (a *App) lookupLatest(source string, requireAssets bool) update.LookupResult {
-	if source == "" {
-		st := a.GetSettings()
-		source = st.UpdateSource
-	}
-
-	httpClient := update.DefaultHTTPClient
-	if c, err := netx.Client(a.currentProxy(), 8*time.Second); err == nil && c != nil {
-		httpClient = func(ctx context.Context, url string, headers map[string]string) (update.HTTPResponse, error) {
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-			if err != nil {
-				return update.HTTPResponse{}, err
-			}
-			for k, v := range headers {
-				req.Header.Set(k, v)
-			}
-			resp, err := c.Do(req)
-			if err != nil {
-				return update.HTTPResponse{}, err
-			}
-			defer resp.Body.Close()
-			body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
-			if err != nil {
-				return update.HTTPResponse{}, err
-			}
-			return update.HTTPResponse{OK: resp.StatusCode >= 200 && resp.StatusCode < 300, Status: resp.StatusCode, Body: body}, nil
-		}
-	}
-
-	return update.LookupLatestRelease(update.LookupOptions{
-		Source:    update.NormalizeSource(source),
-		Client:    httpClient,
-		Repo:      update.Repo{Owner: "Downvid", Repo: "downvid"},
-		TimeoutMs: 8000,
-		Headers: map[string]string{
-			// GitHub API 缺 UA 会直接 403
-			"User-Agent": "DownVid/" + effectiveVersion(),
-		},
-		RequireAssets: requireAssets,
-	})
-}
-
 // updateSourceID 解析用户选的更新源；空值读设置，非法值回退 auto。
 func (a *App) updateSourceID(source string) update.SourceID {
 	if source == "" {
@@ -442,28 +392,19 @@ func (a *App) CheckUpdate(source string) map[string]any {
 		return out
 	}
 
-	if code := update.WMLErrorCode(err); code == "no_asset" || code == "integrity" {
-		legacy := a.lookupLatest(string(norm), false)
-		if legacy.Release != nil {
-			out["release"] = legacy.Release
-			out["hasUpdate"] = hasNewerRelease(legacy.Release.Version)
-			out["attempts"] = legacy.Attempts
-			out["summary"] = update.SummarizeFailures(legacy.Attempts)
-			out["migration"] = update.EvaluateMigration(update.CurrentArchitecture, legacy.Release)
-			return out
-		}
+	if code := update.WMLErrorCode(err); code != "" {
+		out["release"] = nil
+		out["hasUpdate"] = false
+		out["attempts"] = []map[string]any{{
+			"source":  string(norm),
+			"ok":      false,
+			"failure": code,
+			"detail":  err.Error(),
+		}}
+		out["summary"] = err.Error()
+		out["migration"] = update.MigrationHint{Reason: "检查更新失败，无法判断新架构版本"}
+		return out
 	}
-
-	out["release"] = nil
-	out["hasUpdate"] = false
-	out["attempts"] = []map[string]any{{
-		"source":  string(norm),
-		"ok":      false,
-		"failure": update.WMLErrorCode(err),
-		"detail":  err.Error(),
-	}}
-	out["summary"] = err.Error()
-	out["migration"] = update.MigrationHint{Reason: "检查更新失败，无法判断新架构版本"}
 	return out
 }
 

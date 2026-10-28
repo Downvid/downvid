@@ -52,6 +52,7 @@
     "website:version": "node scripts/sync-website-version.mjs",
     "gen:update-manifest": "node scripts/gen-update-manifest.mjs",
     "gitee:release": "node scripts/sync-gitee-release.mjs",
+    "cnb:release": "node scripts/sync-cnb-release.mjs",
     "lint:workflows": "node scripts/lint-workflows.mjs",
     "check:frontend": "pnpm --dir app/frontend check",
     "lint:i18n:app": "node scripts/lint-frontend-i18n.mjs",

@@ -50,9 +50,9 @@ pnpm sync:changelog           # 内嵌的 CHANGELOG 副本必须与根部一致
 
 ### 2. 升版本号
 
-只改 `package.json` 的 `version`。wmlUpdate 的更新通道读两处：GitHub Releases，
-以及 `website/updates/manifest.json`（GitHub 受限时降级用）。后者由 `release.yml`
-从本次产物自动生成，**不要手工编辑**；它会和官网版本号在同一个提交里推回 main。
+只改 `package.json` 的 `version`。更新通道有三条：GitHub Releases、Gitee 清单
+（`website/updates/manifest.gitee.json`）、CNB 固定 `update` Release 的清单。后两者由
+`release.yml` 从本次产物自动生成/上传，**不要手工编辑**。
 
 ### 3. 写 CHANGELOG
 
@@ -246,31 +246,39 @@ README 顶部目前有 Downloads / Release / Stars / License / Product Hunt。�
 
 ### 更新源不可用
 
-更新按 wmlUpdate 的源链自动降级（GitHub 直连 → gh-proxy → 官网 / jsDelivr → Gitee），全部失败时
-**不会静默当成「已是最新」**：界面显示失败摘要。用户可：
+更新按 wmlUpdate 的源链自动降级：**GitHub → Gitee → CNB**。全部失败时**不会静默当成
+「已是最新」**：界面显示失败摘要。用户可：
 - 在「设置 → 代理」配置代理后重试
 - 直接前往 Releases 页面手动下载
 
 降级只影响「发现与下载」，安装仍由各平台的原生安装器完成；不会出现「更新了一半」的状态。
 
-### Gitee 完整镜像
+### 镜像同步
 
-Gitee（`Xynrin/downvid`）不是只放一份清单：Release 里上传同一批产物，
-`website/updates/manifest.gitee.json` 的资产 URL 指向 Gitee 自己的下载地址，因此 Gitee 源
-可以在 GitHub 与反代都不可达时独立完成检查与下载。
+Gitee（`Xynrin/downvid`）与 CNB（`yxxbc/downvid`）都是完整镜像：各自的 Release 里是同一批
+产物，清单里的资产 URL 指向各自的下载地址。
 
-发布后 `release.yml` 会自动执行 `scripts/sync-gitee-release.mjs`：上传全部产物、生成
-`website/updates/manifest.gitee.json`，并在官网版本号提交后把同一个提交推到 Gitee。这需要仓库
-Secret `GITEE_TOKEN`；未配置时跳过并给 warning（GitHub 发布不受影响）。Gitee 同步失败也不会
-阻塞 GitHub Release，但 Gitee 源会停在上一版。本地可手动补同步：
+- **源码**：`.github/workflows/sync-mirrors.yml` 在每次 push `main` / tag 时同步。Gitee 推完整
+  历史；CNB 的完整历史含 CI 没有的旧 LFS 对象，所以推当前 tree 的快照（force push）。
+- **发布资产/清单**：`release.yml` 在 Release 创建后运行 `scripts/sync-gitee-release.mjs` 与
+  `scripts/sync-cnb-release.mjs`，各自 `continue-on-error`。需要 Secrets `GITEE_TOKEN` /
+  `CNB_TOKEN`；未配置时跳过并给 warning，不阻塞 GitHub Release。
+- Gitee 清单：`website/updates/manifest.gitee.json`，和官网版本号在同一个提交里推回 main。
+- CNB 清单：固定 `update` Release 的 `manifest.cnb.json` 资产。CNB 的 raw API 需要登录，所以
+  客户端读公开的 Release 下载 URL。
+- 同步失败时对应镜像会停在上一版，但另外两条源不受影响。
+
+本地补同步：
 
 ```bash
 GITEE_TOKEN="$(gitee auth token)" pnpm gitee:release \
   --version 1.8.0 --tag v1.8.0 --artifacts artifacts \
   --notes-file /tmp/release-notes.md --out website/updates/manifest.gitee.json
-```
 
-GitHub 的清单不带 Gitee 资产 URL，下载时会通过 `asset_mirrors` 回退到 Gitee Release。
+CNB_TOKEN="$(cat ~/.config/downvid/cnb-token)" pnpm cnb:release \
+  --version 1.8.0 --tag v1.8.0 --artifacts artifacts \
+  --notes-file /tmp/release-notes.md --out /tmp/manifest.cnb.json
+```
 
 ## 依赖清单与发布的关系
 

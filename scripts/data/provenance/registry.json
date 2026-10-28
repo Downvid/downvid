@@ -10,9 +10,9 @@
   },
   "totals": {
     "upstreamSignificantLines": 2707,
-    "retainedVerbatimLines": 143,
-    "retainedPct": 5.3,
-    "registryFiles": 18
+    "retainedVerbatimLines": 140,
+    "retainedPct": 5.2,
+    "registryFiles": 17
   },
   "files": {
     "electron/electron-env.d.ts": {
@@ -34,7 +34,7 @@
       "significantLines": 0,
       "upstreamLines": 0,
       "upstreamPct": 0,
-      "retainedElsewhere": 2.2,
+      "retainedElsewhere": 2,
       "homes": [
         "app/frontend/src/lib/backend.ts(9)",
         "tests/website-version.test.ts(4)",
@@ -87,17 +87,6 @@
       "homes": [
         "app/frontend/src/app.css(12)",
         "docs/benchmark.html(1)"
-      ]
-    },
-    "src/components/AboutView.vue": {
-      "origin": "upstream-relocated",
-      "upstreamPath": "src/components/AboutView.vue",
-      "significantLines": 0,
-      "upstreamLines": 0,
-      "upstreamPct": 0,
-      "retainedElsewhere": 0.8,
-      "homes": [
-        "shared/update-check.ts(1)"
       ]
     },
     "src/components/DownloadView.vue": {

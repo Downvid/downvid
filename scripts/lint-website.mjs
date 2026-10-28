@@ -79,20 +79,20 @@ for (const entry of fs.readdirSync(SITE_DIR, { withFileTypes: true })) {
   }
 }
 // 更新清单被删/损坏时，三个 static 更新源会一起失效，而且页面本身看不出异常。
-const manifestPath = path.join(SITE_DIR, 'updates', 'manifest.json')
+const manifestPath = path.join(SITE_DIR, 'updates', 'manifest.gitee.json')
 if (!fs.existsSync(manifestPath)) {
-  problems.push('website/updates/manifest.json 不存在：wmlUpdate 的 static 更新源会全部失效')
+  problems.push('website/updates/manifest.gitee.json 不存在：Gitee 更新源会失效')
 } else {
   try {
     const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
     if (manifest.app_id !== 'com.downvid.downvid') {
-      problems.push(`website/updates/manifest.json 的 app_id 是 ${manifest.app_id}，应与 wmlUpdate 的配置一致`)
+      problems.push(`website/updates/manifest.gitee.json 的 app_id 是 ${manifest.app_id}，应与 wmlUpdate 的配置一致`)
     }
     if (!Array.isArray(manifest.assets) || manifest.assets.length === 0) {
-      problems.push('website/updates/manifest.json 没有 assets')
+      problems.push('website/updates/manifest.gitee.json 没有 assets')
     }
   } catch (err) {
-    problems.push(`website/updates/manifest.json 不是合法 JSON：${err.message}`)
+    problems.push(`website/updates/manifest.gitee.json 不是合法 JSON：${err.message}`)
   }
 }
 for (const m of html.matchAll(/<script\b[^>]*\bsrc=["']([^"']+)["']/g)) {

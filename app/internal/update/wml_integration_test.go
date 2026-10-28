@@ -67,7 +67,7 @@ func TestCheckAndDownloadAgainstStaticManifest(t *testing.T) {
 	baseURL = srv.URL
 
 	opts := WMLOptions{
-		Source:         "website",
+		Source:         "gitee",
 		CurrentVersion: "1.7.3",
 		StateDir:       t.TempDir(),
 		manifestURLs:   []string{srv.URL + "/manifest.json"},

@@ -401,27 +401,24 @@ m3u8 仅在该清晰度无直链时保留、都没有分辨率时提供 `bv*+ba/
 **所有后端调用必须经 `app/frontend/src/lib/backend.ts`**：浏览器里直接 import `wailsjs` 会白屏，
 换传输层时也只需要改这一处。
 
-### 更新源（wmlUpdate + static manifest）
+### 更新源（wmlUpdate）
 
 检查与下载交给 **wmlUpdate**（`app/internal/update/wml.go`）；安装仍留在 `install_*.go`。
 原因是 wmlUpdate 的 directory/file/command 策略要求固定安装路径，deferred helper 也只对
 它自己的 CLI 生效——嵌入到 DownVid 时复制出来的是 DownVid 本身，不会执行安装计划。
 
-- `auto` = GitHub 直连 → GitHub API 经 gh-proxy → 官网 / jsDelivr 清单（GitHub 资产）→ Gitee
-  清单（Gitee 资产）。用户设置里的 `updateSource` 仍可钉死某个源，非法值**一律回退 `auto`**。
-- Gitee 是**完整镜像**：Release 资产上传到 Gitee，`website/updates/manifest.gitee.json` 的
-  资产 URL 指向 Gitee 自己的下载地址，因此检查与下载都可以留在 Gitee。配置 `GITEE_TOKEN`
-  secret 后，`release.yml` 会运行 `scripts/sync-gitee-release.mjs` 并把提交推到 Gitee。
-  面向 GitHub 的清单保留 GitHub 资产 URL，并用 `asset_mirrors`（含 Gitee Release 地址）做
-  下载回退。
-- 三个 static 镜像读同一份 `website/updates/manifest.json`（`scripts/gen-update-manifest.mjs`
-  生成；`release.yml` 每次发布重写，并与官网版本号在同一个提交里推回 main）。清单里带每个
-  产物的 SHA-256。
-- `asset_mirrors` 按 gh-proxy.com / ghproxy.net / ghfast.top 重试**同一个版本**；镜像只能提供
-  可用性，不能替换字节。
-- wmlUpdate 的 chain 在「有 Release 但没有本平台资产」时不会继续切源；`CheckUpdate` 只在
-  `no_asset` 时退回旧 `lookupLatest`，把版本号与尝试轨迹显示出来。
-- 新增源要同时改 `wmlSource` + `wmlManifestURLs`、`UPDATE_SOURCE_IDS`、中英词条与前端设置项。
+- `auto` = **GitHub → Gitee → CNB**。Gitee / CNB 都是完整镜像，清单与资产都在各自站点，
+  任一条都能独立完成检查与下载。
+- Gitee：`Xynrin/downvid`；`website/updates/manifest.gitee.json` 提交在仓库里，
+  `scripts/sync-gitee-release.mjs` 上传对应资产。
+- CNB：`yxxbc/downvid`；`scripts/sync-cnb-release.mjs` 上传版本资产，并把
+  manifest.cnb.json 写到固定的 `update` Release。CNB 的 raw API 需要登录，所以客户端读
+  公开的 Release 资产 URL。
+- `release.yml` 运行两个同步脚本（各自 `continue-on-error`，Secret `GITEE_TOKEN` /
+  `CNB_TOKEN`）。`.github/workflows/sync-mirrors.yml` 在每次 push main / tag 时同步源码：
+  Gitee 完整历史；CNB 当前 tree 快照（完整历史含 CI 没有的旧 LFS 对象）。
+- 旧的 `jsdelivr / ghproxy / website` 源已移除；`NormalizeSource` 把旧设置值回退 `auto`。
+- 新增源要同时改 `wmlSource`、`UPDATE_SOURCE_IDS`、中英词条与前端设置项。
 
 ---
 
