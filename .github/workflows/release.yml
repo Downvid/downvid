@@ -550,7 +550,20 @@ jobs:
       - name: 校验发布完整性
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: node scripts/verify-release.mjs --tag "v${{ env.VERSION }}"
+        # 产物缺失时**只警告不失败**：Release 已经创建，把流水线判红没有意义，
+        # 反而掩盖了「已经发出去、只是缺一个平台」这个更重要的事实。
+        # 缺失情况已经在「检查产物完整性」步骤里记进 job 摘要，
+        # 也写进了 Release 正文最上方。
+        #
+        # 三个平台**全部**缺失时，前面的「检查产物完整性」已经 exit 1，
+        # 走不到这里，所以不会出现「什么都没发却算成功」。
+        run: |
+          if [ -n "${{ steps.platforms.outputs.missing }}" ]; then
+            node scripts/verify-release.mjs --tag "v${{ env.VERSION }}" --allow-missing
+            echo "::warning::发布不完整，缺少：${{ steps.platforms.outputs.missing }}"
+          else
+            node scripts/verify-release.mjs --tag "v${{ env.VERSION }}"
+          fi
 
       # ===== Gitee 完整镜像：Release 资产 + 自己的清单 =====
       #
