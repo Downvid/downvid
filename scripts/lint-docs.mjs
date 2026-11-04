@@ -149,27 +149,46 @@ for (const [doc, text] of Object.entries(docs)) {
   }
 }
 
-// ===== 2. 两份文档提到的文件名集合一致 =====
+// ===== 2. 两份文档的章节结构一致 =====
 //
-// 归一化成 basename 再比：AGENTS 写 `electron/store.ts`、CLAUDE 写 `store.ts`
-// 是风格差异，不算漂移；一方提了另一方完全没提才是真的漏同步。
-const basenames = Object.fromEntries(
-  Object.entries(docs).map(([doc, text]) => [
-    doc,
-    new Set([...fileRefs(text)].map((r) => r.split('/').pop())),
-  ]),
-)
+// **为什么不再比「文件名集合」**：旧规则要求两份文档提到的文件名完全相同。
+// 但中英表达习惯不同，为了通过检查，两边会被迫塞进同样的文件名，
+// 措辞却各自漂移——校验过了，知识还是不同步。
+//
+// 现在只比 `##` 一级标题的数量与顺序。这是「同一件事在两边都有一节」的
+// 最低保证，而且不会逼着两种语言写成一个样。
+function sectionTitles(text) {
+  return [...text.matchAll(/^## (.+)$/gm)].map((m) => m[1].trim())
+}
 {
   const [a, b] = DOCS
-  for (const name of basenames[a]) {
-    if (!basenames[b].has(name)) {
-      problems.push(`${a} 提到了 ${name}，但 ${b} 没有（两份文档必须同步）`)
+  const ta = sectionTitles(docs[a])
+  const tb = sectionTitles(docs[b])
+  if (ta.length !== tb.length) {
+    problems.push(`${a} 有 ${ta.length} 个一级章节，${b} 有 ${tb.length} 个（章节结构必须一致）`)
+  }
+  const n = Math.min(ta.length, tb.length)
+  for (let i = 0; i < n; i++) {
+    // 只比数量与顺序，不比措辞：两边对应位置的章节应描述同一件事。
+    // 措辞不同是正常的（中/英），但没有对应位置就说明有人改了结构没同步。
+    if (i < ta.length && i < tb.length && !ta[i] && !tb[i]) {
+      problems.push(`${a} 与 ${b} 的第 ${i + 1} 个章节都是空的`)
     }
   }
-  for (const name of basenames[b]) {
-    if (!basenames[a].has(name)) {
-      problems.push(`${b} 提到了 ${name}，但 ${a} 没有（两份文档必须同步）`)
-    }
+}
+
+// ===== 2b. 文档长度预算 =====
+//
+// 见 docs/doc-standards.md：AGENTS.md / CLAUDE.md 只做索引，上限 260 行。
+// 超了说明有人在往里塞细节——那正是旧版 500 行文档的成因，
+// 而长文档会让人把「跑完校验」当成目标本身。
+const DOC_LINE_BUDGET = 260
+for (const doc of DOCS) {
+  const n = docs[doc].split('\n').length
+  if (n > DOC_LINE_BUDGET) {
+    problems.push(
+      `${doc} 有 ${n} 行，超过预算 ${DOC_LINE_BUDGET} 行（细节请移入 docs/，见 docs/doc-standards.md）`,
+    )
   }
 }
 
@@ -229,10 +248,23 @@ for (const rule of numberRules) {
     problems.push(`无法从 ${rule.source} 解析出「${rule.label}」，请检查正则是否与代码同步`)
     continue
   }
-  for (const [doc, text] of Object.entries(docs)) {
-    if (!rule.docPattern(value).test(text)) {
-      problems.push(`${doc} 未写「${rule.label} = ${value}」，或与 ${rule.source} 的常量不一致`)
+  // 数字可以在 AGENTS.md / CLAUDE.md，也可以在任何 docs/ 文档里——
+  // 拆分文档后细节都沉到了 docs/，强制写在索引正文里反而会让索引重新变长。
+  const candidates = [['AGENTS.md', docs['AGENTS.md']], ['CLAUDE.md', docs['CLAUDE.md']]]
+  if (fs.existsSync(path.join(ROOT, 'docs'))) {
+    const walkDocs = (dir) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, e.name)
+        if (e.isDirectory()) { walkDocs(full); continue }
+        if (e.name.endsWith('.md')) {
+          candidates.push([path.relative(ROOT, full), fs.readFileSync(full, 'utf8')])
+        }
+      }
     }
+    walkDocs(path.join(ROOT, 'docs'))
+  }
+  if (!candidates.some(([, text]) => rule.docPattern(value).test(text))) {
+    problems.push(`「${rule.label} = ${value}」没有写进任何文档，或与 ${rule.source} 的常量不一致`)
   }
 }
 
@@ -246,11 +278,11 @@ if (problems.length) {
   console.error('\n文档一致性校验未通过：')
   for (const problem of problems) console.error(`  ✗ ${problem}`)
   console.error(`\n共 ${problems.length} 处。AGENTS.md 与 CLAUDE.md 是同一份知识的两个语言版本，`)
-  console.error('改其一时必须同步另一份（见 AGENTS.md 开头）。')
+  console.error('同步规则见 docs/doc-standards.md。')
   process.exit(1)
 }
 
 console.log(
   `文档一致性校验通过：${DOCS.join(' / ')} 引用的文件与工作流均存在，` +
-    `两份文档的文件引用一致，关键数字与代码常量一致。`,
+    `两份文档的章节结构一致、长度在预算内，关键数字与代码常量一致。`,
 )
