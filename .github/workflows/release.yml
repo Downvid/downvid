@@ -441,7 +441,19 @@ jobs:
     needs: [version, build-wails]
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: needs.version.outputs.version != ''
+    # **不要因为单个平台失败就不发版**。
+    #
+    # 2026-11-04 真实发生过：GitHub 的 macOS runner 池耗尽，所有 macos-latest
+    # job 排队 15 分钟后被 cancelled（runner_name 为空、steps 为空，一步没跑）。
+    # 三个构建里 Windows / Linux 都成功，但因为 release 依赖整体矩阵，
+    # 结果一个完整发布的产物都没有落地。
+    #
+    # 现在的规则：只要至少有一个平台的构建成功就创建 Release。
+    # 缺失平台会在 Release 正文与 job 摘要里**明确写出**，不静默吞掉。
+    # 注意 `needs.build-wails.result` 在矩阵下是**汇总值**：任一平台失败
+    # 就是 failure。所以这里不用它做门槛，改为「总是进入，由后续步骤
+    # 按实际下载到的产物决定」——没有产物时那一步会明确失败。
+    if: always() && needs.version.outputs.version != ''
     env:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
@@ -452,6 +464,30 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+
+      # 检查三个平台是否齐全。GitHub 侧 runner 不可用时**不要静默发一个
+      # 缺平台但看起来正常的版本**——把缺失写进 job 摘要与 Release 正文。
+      - name: 检查产物完整性
+        id: platforms
+        run: |
+          # 一个产物都没有＝所有平台都失败，此时不该发版
+          if ! ls artifacts/* >/dev/null 2>&1; then
+            echo "::error::没有任何构建产物，放弃发布"
+            exit 1
+          fi
+          missing=()
+          for p in mac-universal windows-x64 linux-x64; do
+            if ! ls artifacts/*"$p"* >/dev/null 2>&1; then
+              missing+=("$p")
+            fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::warning::产物缺失：${missing[*]}（通常是 GitHub 侧 runner 不可用）"
+            echo "missing=${missing[*]}" >> "$GITHUB_OUTPUT"
+          else
+            echo "missing=" >> "$GITHUB_OUTPUT"
+          fi
+          ls -la artifacts/ | head -20
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -465,6 +501,18 @@ jobs:
         id: changelog
         run: |
           node scripts/gen-release-notes.mjs artifacts "$VERSION" CHANGELOG.md > /tmp/release-notes.md
+          # 产物缺失时必须**写在正文最上面**，否则用户会以为这是一个正常发布、
+          # 只是自己没找到对应的包。
+          if [ -n "${{ steps.platforms.outputs.missing }}" ]; then
+            {
+              echo "> [!WARNING]"
+              echo "> 本次发布缺少以下平台的产物：**${{ steps.platforms.outputs.missing }}**"
+              echo "> 构建在 CI 侧未完成（通常是 runner 不可用）。补齐后会重新发布。"
+              echo ""
+            } > /tmp/missing-notice.md
+            cat /tmp/missing-notice.md /tmp/release-notes.md > /tmp/rn.md
+            mv /tmp/rn.md /tmp/release-notes.md
+          fi
           {
             echo "notes<<RELEASE_NOTES_EOF"
             cat /tmp/release-notes.md

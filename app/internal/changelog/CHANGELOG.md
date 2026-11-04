@@ -28,6 +28,13 @@
   现在给 `osascript` 加了 60 秒超时（有 `timeout` 用 `timeout`，否则后台 + 轮询 + `kill -9`），
   超时后继续打包，只是 DMG 没有背景图；`hdiutil attach` 也加了 `-noverify`。
 
+- **单个平台失败不再阻塞整个发布**：`release` job 原先依赖完整的构建矩阵，
+  任意平台失败就不创建 Release。2026-11-04 GitHub 的 macOS runner 池耗尽
+  （所有 `macos-latest` job 排队 15 分钟后被 cancelled，`runner_name` 为空、
+  `steps` 为空，一步未跑），Windows / Linux 都已构建成功，却一个产物也没发出。
+  现在只要至少有一个平台的产物就创建 Release；缺失平台会以警告形式
+  **写在 Release 正文最上方**，不当成正常发布。三个平台全失败时仍然放弃发布。
+
 ### 变更
 
 - **运行依赖清单跟进上游**：yt-dlp `2026.10.26.220202` → `2026.10.29.232701`（`pnpm deps:manifest`）。
