@@ -301,7 +301,8 @@ jobs:
           hdiutil create -volname "DownVid" -srcfolder "$DMG_TMP" -ov -format UDRW "$RW" >/dev/null
           MOUNT="$ROOT/mnt"
           mkdir -p "$MOUNT"
-          hdiutil attach "$RW" -mountpoint "$MOUNT" -nobrowse -quiet
+          # attach 同样可能挂住（等待磁盘镜像校验提示），加最长等待时间
+          hdiutil attach "$RW" -mountpoint "$MOUNT" -nobrowse -quiet -noverify
 
           # Finder 布局：背景图 + 左右两个图标位。CI 上 Finder 偶尔不可用，
           # 失败不让整条流水线红——DMG 依然可用，只是没有背景。
@@ -328,7 +329,30 @@ jobs:
             '  end tell' \
             'end tell' \
             > "$ROOT/layout.applescript"
-          osascript "$ROOT/layout.applescript" || echo "::warning::Finder 布局失败，DMG 将没有背景图"
+          # **必须给 osascript 加超时**：CI runner 没有可用的 Finder，
+          # osascript 会一直阻塞等 AppleEvent 回应，不会报错也不会返回。
+          # 曾经因此在 macOS 打包步骤挂满 15 分钟、整个发布被取消
+          # （Build 已经成功，卡的是这一步）。
+          # 这里 60 秒拿不到结果就放弃布局——DMG 依然可用，只是没有背景图。
+          if command -v timeout >/dev/null 2>&1; then
+            timeout 60 osascript "$ROOT/layout.applescript" \
+              || echo "::warning::Finder 布局超时或失败，DMG 将没有背景图"
+          else
+            # macOS runner 默认没有 GNU timeout，用后台 + 轮询兜底
+            osascript "$ROOT/layout.applescript" &
+            AS_PID=$!
+            waited=0
+            while kill -0 "$AS_PID" 2>/dev/null && [ "$waited" -lt 60 ]; do
+              sleep 2
+              waited=$((waited + 2))
+            done
+            if kill -0 "$AS_PID" 2>/dev/null; then
+              kill -9 "$AS_PID" 2>/dev/null || true
+              echo "::warning::Finder 布局超时，已终止；DMG 将没有背景图"
+            else
+              wait "$AS_PID" 2>/dev/null || echo "::warning::Finder 布局失败，DMG 将没有背景图"
+            fi
+          fi
 
           sync
           hdiutil detach "$MOUNT" -quiet || hdiutil detach "$MOUNT" -force -quiet

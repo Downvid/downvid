@@ -20,6 +20,14 @@
 - **Gitee Release 偶发创建失败**：201 空响应或空描述会让脚本拿不到 Release ID；现在创建后轮询并给默认描述。
 - **源码镜像 workflow 首次推送被拒**：Gitee 任务改为完整历史（shallow clone 无法快进）。
 
+### 修复（发布流程）
+
+- **macOS 打包卡死**：`Package macOS` 里的 `osascript` 在无 Finder 的 CI runner 上
+  会一直阻塞等待 AppleEvent 回应，既不报错也不返回，导致 v1.9.1 的发布在
+  这一步挂满 15 分钟后被取消（`Build (Wails)` 本身已成功）。
+  现在给 `osascript` 加了 60 秒超时（有 `timeout` 用 `timeout`，否则后台 + 轮询 + `kill -9`），
+  超时后继续打包，只是 DMG 没有背景图；`hdiutil attach` 也加了 `-noverify`。
+
 ### 变更
 
 - **运行依赖清单跟进上游**：yt-dlp `2026.10.26.220202` → `2026.10.29.232701`（`pnpm deps:manifest`）。
