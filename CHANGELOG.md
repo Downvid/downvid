@@ -2,13 +2,33 @@
 
 本文件记录 DownVid 的所有版本更新。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
-## [Unreleased]
+## [1.9.1] - 2026-11-05
 
 ### 修复
 
+- **组件里 27 处写死的颜色改为语义 token**：`EffortSlider`（档位配色 / Apex 特效）、
+  `ToastStack`（成功与错误图标）、`ConfirmDialog`、`AboutView` 全部改用 `app.css` 里的
+  token，深色主题下现在会跟着变。新增 `--level-0..3` / `--level-apex` / `--on-solid`
+  两组 token，深浅各一套。
+- **`--primary` 从未定义**：`var(--primary, #2563eb)` 的退化值一直在生效，
+  滑杆档位 1 的配色从未跟随主题。改用 `--level-1`。
+- **`--warn` / `--ink-faint` 从未定义**：`var(--warn)` 是裸引用、没有 fallback，
+  导致 `.chip--warn` / `.dot--warn` 的边框与颜色被浏览器整条丢弃。
+- **`--color-gray-200` 不存在**（Tailwind v3 / shadcn 残留）：全局 `border-color`
+  退化成 `currentcolor`，边框实际跟着文字色走。改用 `--rule`。
 - **发布后提交回 main 失败**：`git switch -B` 不是合法参数（应为 `-C`），导致 v1.9.0 的官网版本号/Gitee 清单没有自动提交；已修正。
 - **Gitee Release 偶发创建失败**：201 空响应或空描述会让脚本拿不到 Release ID；现在创建后轮询并给默认描述。
 - **源码镜像 workflow 首次推送被拒**：Gitee 任务改为完整历史（shallow clone 无法快进）。
+
+### 变更
+
+- **运行依赖清单跟进上游**：yt-dlp `2026.10.26.220202` → `2026.10.29.232701`（`pnpm deps:manifest`）。
+
+### 新增
+
+- **配色回归测试**：`app/frontend/src/no-hardcoded-colors.test.ts` 钉住三条规则——
+  组件样式不得出现 hex、组件引用的 CSS 变量必须已定义、`app.css` 自身引用的变量
+  必须已定义。三条都做过变异验证。
 
 ## [1.9.0] - 2026-10-28
 

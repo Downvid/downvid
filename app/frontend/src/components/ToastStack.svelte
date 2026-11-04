@@ -58,11 +58,13 @@
     color: var(--accent);
     flex: none;
   }
+  /* 原先写死浅绿/浅橙，深色主题下与 toast 底色对比不足。
+     改走语义 token，两套主题各自给值。 */
   .toast--success :global(.msi) {
-    color: #b8d3a6;
+    color: var(--success);
   }
   .toast--error :global(.msi) {
-    color: #ffb199;
+    color: var(--danger);
   }
   .toast-text {
     line-height: 1.5;

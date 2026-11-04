@@ -276,7 +276,7 @@
     padding: 8px 12px 10px;
     user-select: none;
     border-radius: var(--radius-panel, 12px);
-    background: var(--paper-raised, #ffffff);
+    background: var(--paper-raised);
     border: 1px solid var(--rule, rgba(0, 0, 0, 0.08));
     width: 100%;
     max-width: 520px;
@@ -303,7 +303,7 @@
     font-size: 12px;
     line-height: 16px;
     font-weight: 500;
-    color: var(--color-on-surface-variant, #666);
+    color: var(--color-on-surface-variant);
     letter-spacing: 0.02em;
   }
   .effort-value-wrap {
@@ -337,16 +337,16 @@
 
   /* 档位专属色彩体系与文字动效 */
   .effort.level-0 .effort-value {
-    color: #059669;
+    color: var(--level-0);
   }
   .effort.level-1 .effort-value {
-    color: var(--primary, #2563eb);
+    color: var(--level-1);
   }
   .effort.level-2 .effort-value {
-    color: #d97706;
+    color: var(--level-2);
   }
   .effort.level-3 .effort-value {
-    color: #7c5ce6;
+    color: var(--level-3);
   }
 
   @keyframes effortSwapIn {
@@ -381,7 +381,7 @@
     gap: 8px;
     font-size: 10.5px;
     line-height: 14px;
-    color: var(--color-on-surface-variant, #888);
+    color: var(--color-on-surface-variant);
     margin-top: 1px;
     padding: 0 2px;
   }
@@ -408,7 +408,7 @@
     transition: background 0.2s ease;
   }
   .effort-track:focus-visible::before {
-    box-shadow: 0 0 0 2px var(--primary, #3b82f6);
+    box-shadow: 0 0 0 2px var(--level-1);
   }
 
   /* 填充条（按档位渲染渐变光效） */
@@ -493,7 +493,7 @@
     box-shadow: 0 0 4px rgba(255, 255, 255, 0.6);
   }
   .effort-tick.is-active {
-    background: #ffffff;
+    background: var(--on-solid);
     transform: translateX(-50%) scale(1.3);
     box-shadow: 0 0 6px rgba(255, 255, 255, 0.9);
   }
@@ -506,7 +506,7 @@
     height: 28px;
     margin-top: -14px;
     border-radius: 6px;
-    background: var(--paper-raised, #ffffff);
+    background: var(--paper-raised);
     box-shadow:
       0 1px 3px rgba(20, 20, 19, 0.25),
       0 0 0 1px rgba(20, 20, 19, 0.08);
@@ -524,7 +524,7 @@
     width: 4px;
     height: 10px;
     border-radius: 2px;
-    background: var(--color-on-surface-variant, #ccc);
+    background: var(--color-on-surface-variant);
     transition: background 0.22s ease;
   }
 
@@ -534,7 +534,7 @@
       0 0 8px rgba(16, 185, 129, 0.4);
   }
   .effort.level-0 .knob-core {
-    background: #10b981;
+    background: var(--level-0);
   }
 
   .effort.level-1 .effort-knob {
@@ -543,7 +543,7 @@
       0 0 10px rgba(37, 99, 235, 0.45);
   }
   .effort.level-1 .knob-core {
-    background: #2563eb;
+    background: var(--level-1);
   }
 
   .effort.level-2 .effort-knob {
@@ -552,7 +552,7 @@
       0 0 12px rgba(234, 88, 12, 0.5);
   }
   .effort.level-2 .knob-core {
-    background: #ea580c;
+    background: var(--level-2);
   }
 
   .effort-track[data-dragging] .effort-knob,
@@ -589,36 +589,36 @@
     opacity: 0;
   }
   :global(.effort-cell) {
-    background: #8b7ad0;
+    background: var(--level-apex);
     border-radius: 1px;
     animation: effortFlash 2.6s infinite ease-in-out;
   }
   @keyframes effortFlash {
     0%, 14% {
-      background: #8b7ad0;
+      background: var(--level-apex);
     }
     20%, 34% {
-      background: #d9d2f5;
+      background: var(--level-apex-flash);
     }
     100% {
-      background: #8b7ad0;
+      background: var(--level-apex);
     }
   }
   .effort.is-apex .effort-knob {
-    background: color-mix(in srgb, #8b7ad0 22%, #ffffff);
+    background: color-mix(in srgb, var(--level-apex) 22%, var(--paper-raised));
     box-shadow:
-      0 0 12px color-mix(in srgb, #8b7ad0 80%, transparent),
-      0 0 0 1px color-mix(in srgb, #8b7ad0 40%, transparent);
+      0 0 12px color-mix(in srgb, var(--level-apex) 80%, transparent),
+      0 0 0 1px color-mix(in srgb, var(--level-apex) 40%, transparent);
   }
   .effort.is-apex .knob-core {
-    background: #7c5ce6;
+    background: var(--level-3);
   }
 
   .effort-desc {
     margin: 4px 2px 0;
     font-size: 11px;
     line-height: 1.5;
-    color: var(--color-on-surface-variant, #777);
+    color: var(--color-on-surface-variant);
     min-height: 1.5em;
   }
 </style>

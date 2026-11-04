@@ -1039,7 +1039,8 @@
     max-width: 100%;
     border-radius: 8px;
     border: 1px solid var(--rule);
-    background: #fff;
+    /* 故意用纯白：二维码需要足够对比度，不能跟随深色主题 */
+    background: var(--on-solid);
   }
   .support-card-icon {
     display: grid;

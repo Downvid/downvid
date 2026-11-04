@@ -111,7 +111,7 @@
   .btn-danger {
     background: var(--danger);
     border-color: var(--danger);
-    color: #fff;
+    color: var(--on-solid);
   }
   .btn-danger:hover:not(:disabled) {
     background: color-mix(in oklab, var(--danger) 86%, black);

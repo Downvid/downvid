@@ -110,7 +110,10 @@
   ::before,
   ::backdrop,
   ::file-selector-button {
-    border-color: var(--color-gray-200, currentcolor);
+    /* Tailwind v4 没有 --color-gray-200（那是 v3 / shadcn 脚手架的残留）。
+       原来的 fallback 是 currentcolor，实际效果是「边框跟着文字色走」，
+       这不是设计意图。改用本项目的分隔线 token。 */
+    border-color: var(--rule);
   }
   button:not(:disabled),
   [role='button']:not(:disabled) {
@@ -144,6 +147,27 @@
   --teal: var(--color-secondary);
   --danger: var(--color-error);
   --success: #4d6b43;
+
+  /* 档位色：EffortSlider 的四档强调色。
+     原先散落在组件里写死，且用了从未定义过的 `--primary`，
+     导致 var(--primary, #2563eb) 的退化值一直在生效。
+     这里收成 token，深浅两套各自定义。 */
+  --level-0: #059669;
+  --level-1: #2563eb;
+  --level-2: #d97706;
+  --level-3: #7c5ce6;
+  --level-apex: #8b7ad0;
+  --level-apex-flash: #d9d2f5;
+
+  /* 固定白：只用于「压在彩色/深色底上的图标与文字」，
+     不随主题反转（深色主题下这些面依然是深色） */
+  --on-solid: #ffffff;
+
+  /* 这两个 token 一直被引用却从未定义——
+     var(--warn) / var(--ink-faint) 都是裸引用、没有 fallback，
+     于是取值无效、属性被浏览器整条丢弃。补上真正的定义。 */
+  --warn: #a8641d;
+  --ink-faint: rgba(20, 20, 19, 0.22);
 
   /* 圆角档位：默认 = 演示当前尺度；圆润沿用 website/index.html 的 24 / 16 / 12 */
   --radius-card: 14px;
@@ -267,6 +291,19 @@
   --teal: var(--color-secondary);
   --danger: var(--color-error);
   --success: #9ac58a;
+
+  /* 档位色在深色下提亮一档：同样的蓝/绿压在 #171310 上会发闷 */
+  --level-0: #34d399;
+  --level-1: #60a5fa;
+  --level-2: #fbbf24;
+  --level-3: #a78bfa;
+  --level-apex: #a896e8;
+  --level-apex-flash: #e4dcf9;
+
+  --on-solid: #ffffff;
+
+  --warn: #e0a458;
+  --ink-faint: rgba(242, 233, 221, 0.26);
 
   --shadow-sheet:
     0 1px 0 rgba(0, 0, 0, 0.5),
