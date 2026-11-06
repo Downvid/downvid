@@ -44,6 +44,20 @@
     { login: 'Glaroday', role: 'CONTRIBUTOR' },
   ] as const
 
+  /**
+   * 赞助商 / 商业支持者名单。
+   *
+   * **为空时整块不渲染**：赞助位应当在有人赞助之后才出现，不能先摆一个空壳。
+   * 加人时在这里追加一条即可，卡片与跳转都是数据驱动：
+   *
+   *   { name: '示例公司', url: 'https://example.com', note: '2026 年度赞助' }
+   *
+   * - `url` 必须是 http(s)，点击一律交给系统浏览器（与「链接」区一致）
+   * - `logo` 可选：远程图片直接给 https 地址，本地图片放进 `assets/` 再 import
+   */
+  type Sponsor = { name: string; url: string; note?: string; logo?: string }
+  const SPONSORS: ReadonlyArray<Sponsor> = []
+
   /** 语言 / 框架用官方品牌图标，yt-dlp 不是语言，用下载图标区分。 */
   const techStack: ReadonlyArray<{ name: string; icon?: string; material?: string }> = [
     { name: 'Go', icon: goIcon },
@@ -474,6 +488,44 @@
       </div>
     </div>
   </section>
+
+  {#if SPONSORS.length > 0}
+    <section class="sponsors-section">
+      <div class="section-head">
+        <span class="section-label">{t('about.sponsors')}</span>
+        <span class="section-rule"></span>
+      </div>
+      <div class="sponsors-grid">
+        {#each SPONSORS as sponsor (sponsor.url)}
+          <a
+            class="sponsor-card"
+            href={sponsor.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onclick={(event) => {
+              event.preventDefault()
+              openExternal(sponsor.url)
+            }}
+          >
+            <span class="sponsor-logo">
+              {#if sponsor.logo}
+                <img src={sponsor.logo} alt="" />
+              {:else}
+                <span class="sponsor-monogram">{sponsor.name.slice(0, 1).toUpperCase()}</span>
+              {/if}
+            </span>
+            <span class="sponsor-body">
+              <span class="sponsor-name">{sponsor.name}</span>
+              {#if sponsor.note}
+                <span class="sponsor-note">{sponsor.note}</span>
+              {/if}
+            </span>
+            <span class="sponsor-arrow"><Icon name="north_east" size={13} /></span>
+          </a>
+        {/each}
+      </div>
+    </section>
+  {/if}
 
   <section class="sheet support" id="support">
     <div class="support-head">
@@ -954,6 +1006,93 @@
     letter-spacing: 0.04em;
   }
 
+  /* ---------- 赞助商 ---------- */
+  .sponsors-section {
+    margin-top: 24px;
+  }
+  .sponsors-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 10px;
+  }
+  .sponsor-card {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-control);
+    background: var(--paper-raised);
+    text-decoration: none;
+    transition:
+      border-color var(--dur-base) var(--ease-out),
+      background-color var(--dur-base) var(--ease-out);
+  }
+  .sponsor-card:hover {
+    border-color: color-mix(in oklab, var(--accent-deep) 42%, transparent);
+    background: color-mix(in oklab, var(--accent-wash) 40%, var(--paper-raised));
+  }
+  .sponsor-logo {
+    display: grid;
+    place-items: center;
+    width: 32px;
+    height: 32px;
+    flex: none;
+    overflow: hidden;
+    border: 1px solid var(--rule);
+    border-radius: var(--radius-small);
+    background: var(--paper);
+    color: var(--accent-deep);
+  }
+  .sponsor-logo img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+  .sponsor-monogram {
+    font-family: var(--font-display);
+    font-size: 14px;
+    font-weight: 600;
+  }
+  .sponsor-body {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+  .sponsor-name {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--ink);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .sponsor-note {
+    font-size: 9.5px;
+    line-height: 1.5;
+    color: var(--color-on-surface-variant);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .sponsor-arrow {
+    display: grid;
+    place-items: center;
+    margin-left: auto;
+    color: var(--color-on-surface-variant);
+    opacity: 0.55;
+    transition:
+      opacity var(--dur-base) var(--ease-out),
+      color var(--dur-base) var(--ease-out);
+  }
+  .sponsor-card:hover .sponsor-arrow {
+    opacity: 1;
+    color: var(--accent-deep);
+  }
+
   /* ---------- 底部信息 ---------- */
   /* ---------- 支持作者 ---------- */
   .support {
@@ -1141,6 +1280,9 @@
   }
   @media (max-width: 620px) {
     .links-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .sponsors-grid {
       grid-template-columns: minmax(0, 1fr);
     }
     .meta-row {
