@@ -82,6 +82,7 @@ import {
   type AppSettings,
 } from './settings'
 import { fetchAnnouncement, loadLocalAnnouncement, type AnnouncementDoc } from './announcement'
+import { fetchSponsors, type Sponsor } from './sponsors'
 import type {
   DepItem,
   Dialog,
@@ -242,6 +243,16 @@ class AppStore {
   /** 公告的加载状态：远端取到 vs 用了本地兜底 */
   announcementSource = $state<'idle' | 'loading' | 'remote' | 'local'>('idle')
 
+  // ===== 赞助商 =====
+  /**
+   * 赞助商名单，**在线读取**（仓库根部的 `sponsors.json`，镜像链降级）。
+   *
+   * 为空就不渲染「关于」页的那一块：没赞助时不该摆一个空壳占位。
+   * 拉取失败（返回 null）时保留上一次的名单，不让网络抖动把赞助商抹掉。
+   */
+  sponsors = $state<Sponsor[]>([])
+  private sponsorsLoading = false
+
   // ===== Toast =====
   toasts = $state<ToastItem[]>([])
 
@@ -304,6 +315,7 @@ class AppStore {
     this.buildDate = bd || BUILD_DATE
     this.platform = await backendPlatform()
     void this.loadChangelog()
+    void this.loadSponsors()
 
     // 默认下载目录：后端返回空时（浏览器预览）留空
     if (!this.settings.downloadDir) {
@@ -425,6 +437,8 @@ class AppStore {
 
   setTab(tab: Tab): void {
     this.tab = tab
+    // 每次打开「关于」页都重拉一次赞助商名单：名单改在仓库里就能生效，不用等发版
+    if (tab === 'about') void this.loadSponsors()
   }
 
   // ============================================================
@@ -1519,6 +1533,24 @@ class AppStore {
     this.announcementRead = true
     this.dialog = 'announcement'
     void this.refreshAnnouncement()
+  }
+
+  /**
+   * 从远端刷新赞助商名单（镜像链降级，见 `lib/sponsors.ts`）。
+   *
+   * 失败不弹错、不清空：名单只是内容，取不到就继续显示上一次那份。
+   */
+  async loadSponsors(): Promise<void> {
+    if (this.sponsorsLoading) return
+    this.sponsorsLoading = true
+    try {
+      const list = await fetchSponsors()
+      if (list) this.sponsors = list
+    } catch {
+      // 保留旧名单
+    } finally {
+      this.sponsorsLoading = false
+    }
   }
 
   /**

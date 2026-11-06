@@ -45,18 +45,12 @@
   ] as const
 
   /**
-   * 赞助商 / 商业支持者名单。
+   * 赞助商名单来自**在线**的 `sponsors.json`（启动与每次打开关于页时拉取）。
    *
-   * **为空时整块不渲染**：赞助位应当在有人赞助之后才出现，不能先摆一个空壳。
-   * 加人时在这里追加一条即可，卡片与跳转都是数据驱动：
-   *
-   *   { name: '示例公司', url: 'https://example.com', note: '2026 年度赞助' }
-   *
-   * - `url` 必须是 http(s)，点击一律交给系统浏览器（与「链接」区一致）
-   * - `logo` 可选：远程图片直接给 https 地址，本地图片放进 `assets/` 再 import
+   * 为空时整块不渲染：没赞助时不该摆一个空壳。加人只需要改仓库根部的
+   * JSON，不用发版（镜像链与校验见 `lib/sponsors.ts`）。
    */
-  type Sponsor = { name: string; url: string; note?: string; logo?: string }
-  const SPONSORS: ReadonlyArray<Sponsor> = []
+  const sponsors = $derived(app.sponsors)
 
   /** 语言 / 框架用官方品牌图标，yt-dlp 不是语言，用下载图标区分。 */
   const techStack: ReadonlyArray<{ name: string; icon?: string; material?: string }> = [
@@ -489,14 +483,14 @@
     </div>
   </section>
 
-  {#if SPONSORS.length > 0}
+  {#if sponsors.length > 0}
     <section class="sponsors-section">
       <div class="section-head">
         <span class="section-label">{t('about.sponsors')}</span>
         <span class="section-rule"></span>
       </div>
       <div class="sponsors-grid">
-        {#each SPONSORS as sponsor (sponsor.url)}
+        {#each sponsors as sponsor (sponsor.url)}
           <a
             class="sponsor-card"
             href={sponsor.url}

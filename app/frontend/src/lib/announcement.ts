@@ -19,8 +19,8 @@
  */
 import authorZh from '../announcements/author.zh.md?raw'
 import authorEn from '../announcements/author.en.md?raw'
-import { REPO_URL } from './constants'
 import type { Locale } from './i18n.svelte'
+import { mirrorUrls } from './remote'
 
 export interface AnnouncementBlock {
   type: 'p' | 'h2' | 'li'
@@ -97,44 +97,15 @@ export function loadLocalAnnouncement(locale: Locale): AnnouncementDoc {
   return parseAnnouncement(LOCAL_SOURCES[locale] ?? LOCAL_SOURCES['zh-CN'])
 }
 
-const REPO_PATH = REPO_URL.replace(/^https:\/\/github\.com\//, '').replace(/\/$/, '')
-
 /**
- * 三级镜像链。
+ * 公告的三级镜像链（GitHub raw → jsDelivr → 公共反代）。
  *
- * ## 为什么需要镜像
- *
- * 国内直连 raw.githubusercontent.com 经常超时或 404。只有这一条路的话，
- * 用户会**永远**看不到作者写了什么 —— 与「更新通道坏掉」是同一类问题：
- * 修好的内容走的就是那条坏掉的通道。
- *
- * ## `ghproxy.com` 已失效（2026-10 实测）
- *
- * 它现在对任何路径都返回 **301 跳转到自己的首页**，而 `fetch` 默认跟随跳转、
- * `response.ok`（200）成立 —— 于是代码会把首页 HTML 当成公告正文解析，
- * 得到一个「标题是一堆标签」的垃圾文档。
- *
- * 换成实测可用的三个（2026-10-18 逐个 curl 验证过）：
- *
- *	gh-proxy.com   200 + 正确内容
- *	ghfast.top     200 + 正确内容
- *	ghproxy.net    200 + 正确内容（返回 `---` frontmatter，确认是原文）
- *
- * 但**不能只靠换域名**解决：公共代理随时会像 ghproxy.com 一样失效，
- * 而失效方式恰好是「200 + 错误内容」。所以下面 `looksLikeMarkdown` 才是
- * 真正的防线 —— 内容不像公告就跳过这一跳。
+ * 镜像为什么这么多、为什么不能只靠 GitHub raw：见 `remote.ts`。
+ * 这里只负责把「语言」拼成仓库里的路径。
  */
 export function mirrorSources(locale: Locale): string[] {
   const lang = locale === 'zh-CN' ? 'zh' : 'en'
-  const path = 'announcements/author.' + lang + '.md'
-  const raw = 'https://raw.githubusercontent.com/' + REPO_PATH + '/main/' + path
-  return [
-    raw,
-    'https://cdn.jsdelivr.net/gh/' + REPO_PATH + '@main/' + path,
-    'https://gh-proxy.com/' + raw,
-    'https://ghfast.top/' + raw,
-    'https://ghproxy.net/' + raw,
-  ]
+  return mirrorUrls('announcements/author.' + lang + '.md')
 }
 
 /**
