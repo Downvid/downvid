@@ -26,6 +26,26 @@ import (
 	"time"
 )
 
+// newYtdlpCmd 构造 yt-dlp 子进程，并把平台相关的启动属性一次设好。
+//
+// Windows 上**必须** hideWindow：宿主是 GUI 进程，spawn 控制台程序时系统会
+// 给它新建一个控制台窗口，标题就是 exe 的完整路径
+// （`C:\Users\<用户>\.downvid\runtime\bin\yt-dlp.exe`）。不隐藏的话每点一次
+// 下载就弹一个空黑框，用户还会以为自己该去运行那个 exe（issue #100）。
+//
+// 隐藏的是控制台本身：yt-dlp 拉起的 ffmpeg / aria2c 继承同一个隐藏控制台，
+// 因此它们也不会再各自弹窗。反过来若用 CREATE_NO_WINDOW，孙子进程没有可继承
+// 的控制台，每个都可能自己再新建一个。
+func newYtdlpCmd(ctx context.Context, opts RunOptions, argv []string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, opts.YtdlpPath, argv...)
+	cmd.Dir = opts.OutputDir
+	// 成为新进程组的组长：暂停时对 -pid 发信号才能收掉整棵树。
+	// Windows 上这是空操作、不碰 SysProcAttr，所以不会冲掉下面的 HideWindow。
+	SetProcessGroup(cmd, "")
+	hideWindow(cmd)
+	return cmd
+}
+
 // RunOptions 是一次下载的执行参数。
 type RunOptions struct {
 	// YtdlpPath 是 yt-dlp 可执行文件路径
@@ -116,10 +136,7 @@ func (r *Runner) Run(taskID string, opts RunOptions) (RunResult, error) {
 	argv = append(argv, opts.CookieArgs...)
 	argv = append(argv, opts.URL)
 
-	cmd := exec.CommandContext(ctx, opts.YtdlpPath, argv...)
-	cmd.Dir = opts.OutputDir
-	// 成为新进程组的组长：暂停时对 -pid 发信号才能收掉整棵树
-	SetProcessGroup(cmd, "")
+	cmd := newYtdlpCmd(ctx, opts, argv)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
