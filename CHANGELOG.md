@@ -2,7 +2,7 @@
 
 本文件记录 DownVid 的所有版本更新。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
-## [Unreleased]
+## [1.10.0] - 2026-11-06
 
 ### 新增
 
@@ -19,6 +19,10 @@
   系统会新建一个控制台窗口，标题就是 `...\runtime\bin\yt-dlp.exe` 的完整路径，用户还会
   以为自己该去手动运行它（#100）。下载用的 yt-dlp 子进程现在设 `HideWindow`，与探测、
   解析、边车一致；yt-dlp 拉起的 ffmpeg / aria2c 继承同一个隐藏控制台，也不会再各弹一个。
+
+### 变更
+
+- **运行依赖清单跟进上游**：yt-dlp `2026.10.29.232701` → `2026.11.04.232659`（`pnpm deps:manifest`）。
 
 ## [1.9.1] - 2026-11-05
 

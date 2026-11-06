@@ -8,7 +8,7 @@ package manifest
 import rt "github.com/yxxbc/downvid/backend/internal/runtime"
 
 // YtDlpTag yt-dlp nightly 构建的固定 tag（日期版本号）
-const YtDlpTag = "2026.10.29.232701"
+const YtDlpTag = "2026.11.04.232659"
 
 // FFmpegTag ffmpeg-static 的固定 tag
 const FFmpegTag = "b6.1.1"
@@ -29,27 +29,27 @@ const (
 // 为空的 Bundled 表示该平台两包相同（Windows），无需回退。
 var ytdlpAssets = map[string]ytdlpAsset{
 	"darwin/arm64": {
-		Name: "yt-dlp", SHA256: "966308057aa5f79ed09fead7609e46c8cf8fd89b23aeb2ef96989c6695a14724",
-		Bundled: "yt-dlp_macos", BundledSHA256: "85a829ac48b6c4fd9b7fa6638ccd2cc235878d582177e6ce103af21d540353d6",
+		Name: "yt-dlp", SHA256: "21f87ead735de22248806d9a55202eefbff98da25ed3a054ee03ae55878920ac",
+		Bundled: "yt-dlp_macos", BundledSHA256: "986ed6a7b6d88c8772338da35dd8798a83a503a555370adfa4ff3f542e4daaff",
 		ZipApp: true,
 	},
 	"darwin/x64": {
-		Name: "yt-dlp", SHA256: "966308057aa5f79ed09fead7609e46c8cf8fd89b23aeb2ef96989c6695a14724",
-		Bundled: "yt-dlp_macos", BundledSHA256: "85a829ac48b6c4fd9b7fa6638ccd2cc235878d582177e6ce103af21d540353d6",
+		Name: "yt-dlp", SHA256: "21f87ead735de22248806d9a55202eefbff98da25ed3a054ee03ae55878920ac",
+		Bundled: "yt-dlp_macos", BundledSHA256: "986ed6a7b6d88c8772338da35dd8798a83a503a555370adfa4ff3f542e4daaff",
 		ZipApp: true,
 	},
 	"linux/x64": {
-		Name: "yt-dlp", SHA256: "966308057aa5f79ed09fead7609e46c8cf8fd89b23aeb2ef96989c6695a14724",
-		Bundled: "yt-dlp_linux", BundledSHA256: "d18dd9fb5671cec896b0bbbeabdfb2f9a5c043235e57296c29dc8747cede0e61",
+		Name: "yt-dlp", SHA256: "21f87ead735de22248806d9a55202eefbff98da25ed3a054ee03ae55878920ac",
+		Bundled: "yt-dlp_linux", BundledSHA256: "16e96c02ffefd0bd1fe8ae6cc943b16c96e575c29eed7038d15213034437bc34",
 		ZipApp: true,
 	},
 	"linux/arm64": {
-		Name: "yt-dlp", SHA256: "966308057aa5f79ed09fead7609e46c8cf8fd89b23aeb2ef96989c6695a14724",
-		Bundled: "yt-dlp_linux_aarch64", BundledSHA256: "0b17feabda3f385c26f453f90ba2cdb5a85bb13b5a35662906ae0afd363484ef",
+		Name: "yt-dlp", SHA256: "21f87ead735de22248806d9a55202eefbff98da25ed3a054ee03ae55878920ac",
+		Bundled: "yt-dlp_linux_aarch64", BundledSHA256: "2bb887bf70ddef81b3f1c2cf7fd200fe1a91aeecaedca74f2d64b219ebca0212",
 		ZipApp: true,
 	},
 	"win32/x64": {
-		Name: "yt-dlp.exe", SHA256: "738eb6db13e9f7887924c6857306999ff674ee4fa74cb38879ed8dacc1c137b6",
+		Name: "yt-dlp.exe", SHA256: "85c8d440422108bee7ecd11e584d56cc04fb3bd1a0b3200bdc8a66d5c5a985fc",
 		Bundled: "", BundledSHA256: "",
 		ZipApp: false,
 	},
