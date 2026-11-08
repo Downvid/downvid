@@ -1,6 +1,8 @@
 # Changelog
 
-本文件记录 DownVid 的所有版本更新。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+本文件记录 DownVid 的所有版本更新。
+自1.10.1后 日志内容面向用户为大白话+中文
+格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
 ## [Unreleased]
 
