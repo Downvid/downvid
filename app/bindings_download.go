@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Downvid/downvid/app/internal/appdir"
 	"github.com/Downvid/downvid/app/internal/changelog"
 	"github.com/Downvid/downvid/app/internal/clipboard"
 	"github.com/Downvid/downvid/app/internal/cookie"
@@ -680,11 +681,7 @@ func (a *App) emitProgress(p DownloadProgress) {
 // 三端统一固定在用户主目录下的 ~/.downvid/runtime/bin，防止不同系统环境数据目录差异导致下载或探测失败。
 // 旧目录（userData/runtime/bin）里的依赖会被**逐项**搬过来（见 migrateTree）。
 func resolveManagedDir(dataDir string) string {
-	fixed := filepath.Join(downvidHome(), "runtime", "bin")
-	if dataDir != "" {
-		migrateTree(filepath.Join(dataDir, "runtime", "bin"), fixed)
-	}
-	return fixed
+	return appdir.ManagedBinDir(dataDir)
 }
 
 // managedBinDir 是 DownVid 自己下载的依赖目录。

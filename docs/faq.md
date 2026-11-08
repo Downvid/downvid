@@ -231,7 +231,7 @@ rm -rf ~/.config/DownVid
 ### DownVid 用了什么技术栈？
 
 - **Wails v2** — 桌面外壳：调用系统原生 Webview，单文件产物
-- **Go** — 核心（16 个零耦合 internal 包）与依赖边车
+- **Go** — 核心（17 个零耦合 internal 包）与依赖边车
 - **Svelte 5** — 前端框架（Runes 响应式）
 - **TypeScript** — 类型安全的 JavaScript
 - **Tailwind CSS v4** — CSS-first 的原子化样式

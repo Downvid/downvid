@@ -64,7 +64,7 @@ pnpm lint:docs                       # 本文件 ↔ CLAUDE.md ↔ 代码
 
 | 路径 | 内容 |
 | --- | --- |
-| `app/internal/*` | Go 核心，16 个包，**互相零依赖** |
+| `app/internal/*` | Go 核心，17 个包，**互相零依赖** |
 | `app/*.go` | Wails 壳：只做搬运，不含业务规则 |
 | `app/frontend/` | Svelte 5 前端，打进二进制 |
 | `backend/` | 依赖边车（探测 + 下载 yt-dlp/ffmpeg/aria2） |

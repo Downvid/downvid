@@ -72,7 +72,7 @@ needs an input that can fail.
 
 | Path | Contents |
 | --- | --- |
-| `app/internal/*` | Go core, 16 packages, **zero dependencies on each other** |
+| `app/internal/*` | Go core, 17 packages, **zero dependencies on each other** |
 | `app/*.go` | Wails shell: moves data only, no business rules |
 | `app/frontend/` | Svelte 5 frontend, embedded into the binary |
 | `backend/` | Dependency sidecar (detects + downloads yt-dlp/ffmpeg/aria2) |

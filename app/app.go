@@ -567,58 +567,6 @@ func (a *App) emit(event string, data any) {
 	wruntime.EventsEmit(a.ctx, event, data)
 }
 
-// ===== 数据目录推导 =====
-
-// resolveDataDir 复刻 Electron `app.getPath('userData')` 的位置。
-//
-// **必须与旧版本一致**，否则用户升级后历史、Cookie、托管的 yt-dlp 全部「消失」。
-// Electron 在三个平台上的取值：
-//
-//	macOS   ~/Library/Application Support/<name>
-//	Windows %APPDATA%\<name>
-//	Linux   $XDG_CONFIG_HOME/<name> 或 ~/.config/<name>
-//
-// `<name>` 是 package.json 的 name（`downvid`），不是显示名 `DownVid`——
-// 大小写错了同样会让数据「消失」，而这在任何测试里都看不出来。
-func resolveDataDir() string {
-	const appName = "downvid"
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = "."
-	}
-
-	switch runtime.GOOS {
-	case "darwin":
-		return filepath.Join(home, "Library", "Application Support", appName)
-	case "windows":
-		if appData := os.Getenv("APPDATA"); appData != "" {
-			return filepath.Join(appData, appName)
-		}
-		return filepath.Join(home, "AppData", "Roaming", appName)
-	default:
-		if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-			return filepath.Join(xdg, appName)
-		}
-		return filepath.Join(home, ".config", appName)
-	}
-}
-
-// resolveDownloadsDir 返回默认下载目录。
-//
-// 沿用旧版行为：设置里没指定时用系统「下载」目录。
-func resolveDownloadsDir() string {
-	if home, err := os.UserHomeDir(); err == nil {
-		downloads := filepath.Join(home, "Downloads")
-		if st, err := os.Stat(downloads); err == nil && st.IsDir() {
-			return downloads
-		}
-	}
-	// 没有标准下载目录时退到当前目录下的 downloads（容器/极简环境常见）
-	wd, _ := os.Getwd()
-	return filepath.Join(wd, "downloads")
-}
-
 // backupPathOf 从 CorruptError 里取备份路径。
 func backupPathOf(err error) string {
 	var ce *history.CorruptError

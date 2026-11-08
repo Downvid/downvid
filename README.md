@@ -167,6 +167,7 @@ bash app/scripts/build.sh
 ```
 
 更多平台构建命令、依赖说明及排错步骤请查看 [从源码构建指南](./docs/build-from-source.md)。
+命令行下载器 `downvid` 的构建、安装与用法见 [CLI 指南](./docs/cli.md)。
 
 ## 技术栈与架构
 
@@ -175,7 +176,7 @@ bash app/scripts/build.sh
 | 技术 | 用途 |
 | --- | --- |
 | [Wails v2](https://wails.io/) | 轻量桌面应用框架，调用原生系统 Webview |
-| [Go](https://go.dev/) | 核心后端（16 个零耦合 internal 包）与依赖管理边车 |
+| [Go](https://go.dev/) | 核心后端（17 个零耦合 internal 包）与依赖管理边车 |
 | [Svelte 5](https://svelte.dev/) | 前端框架（Runes 响应式系统） |
 | [yt-dlp](https://github.com/yt-dlp/yt-dlp) | 视频与音频解析引擎 |
 | [FFmpeg](https://ffmpeg.org/) | 音视频合并与转码 |
@@ -198,7 +199,7 @@ flowchart LR
 
 | 目录 | 作用 |
 | --- | --- |
-| `app/internal/` | Go 核心，16 个包互相零依赖（解析、下载、历史、设置、自更新等） |
+| `app/internal/` | Go 核心，17 个包互相零依赖（解析、下载、历史、设置、自更新等） |
 | `app/frontend/` | Svelte 5 前端工程，编译后经 `go:embed` 内嵌进二进制 |
 | `app/scripts/` | 桌面端构建入口脚本（`build.sh` 等） |
 | `backend/` | Go 依赖边车，探测并安装运行依赖至 `~/.downvid/runtime/bin` |

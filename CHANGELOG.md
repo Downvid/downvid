@@ -2,6 +2,17 @@
 
 本文件记录 DownVid 的所有版本更新。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [Unreleased]
+
+### 新增
+
+- **命令行下载器 `downvid`**：`downvid <链接>` 直接下载，支持 `-q` 清晰度、
+  `-f` 格式/选择器、`-a` 音频、`--list-formats`、`--json`；复用桌面版的
+  设置、`~/.downvid/runtime/bin` 依赖和下载历史。`downvid deps status|install`
+  可在新机器上装 yt-dlp / ffmpeg / ffprobe / aria2。
+- **CLI 构建与安装**：`app/scripts/build-cli.sh` 可交叉编译 macOS（含 universal）、
+  Windows、Linux，边车内嵌；安装步骤见 [`docs/cli.md`](docs/cli.md)。
+
 ## [1.10.1] - 2026-11-09
 
 ### 变更

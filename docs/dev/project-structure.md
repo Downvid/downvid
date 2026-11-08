@@ -4,11 +4,12 @@
 
 | 路径 | 内容 | 输出 |
 |------|------|------|
-| `app/internal/*` | **Go 核心，16 个包，互相零依赖** | — |
+| `app/internal/*` | **Go 核心，17 个包，互相零依赖** | — |
 | `app/main.go` / `app/app.go` / `app/bindings_*.go` | Wails 壳：只做「搬运」，不含业务规则 | `app/build/bin/` |
 | `app/frontend/` | Svelte 5 + Vite 渲染进程 | 打进二进制（`go:embed`） |
 | `app/scripts/build.sh` | **构建入口**：先编依赖边车 → 再带 `-tags withsidecar` 构建 | 单文件约 18 MB |
 | `app/cmd/downvid-server` | 无头模式入口（HTTP + WebSocket RPC，`app/internal/server`） | 独立二进制（尚未接前端） |
+| `app/cmd/downvid` | 命令行下载器（复用设置、历史与 `~/.downvid` 运行依赖） | `go build ./cmd/downvid` |
 | `backend/` | Go 依赖边车（探测 + 下载 yt-dlp/ffmpeg/aria2） | 嵌进主二进制 |
 | `shared/` | 前端与脚本共用的契约：仓库坐标、更新源、加速配置、解析错误分类 | — |
 | `scripts/` | 校验 / 生成 / 发布脚本（零依赖，只用 Node 标准库） | — |
@@ -16,10 +17,11 @@
 | `website/` | 产品落地页（无构建，Vercel 发布） | — |
 | `docs/` | 安装、构建、发布、维护文档 | — |
 
-`app/internal/*` 的 16 个包：
+`app/internal/*` 的 17 个包：
 
 | 包 | 职责 |
 |---|---|
+| `appdir` | 路径规则：`~/.downvid`、userData、历史与托管依赖目录（桌面壳与 CLI 共用） |
 | `changelog` | 解析仓库 `CHANGELOG.md` 的副本（`//go:embed` 不能跨目录，靠 `pnpm sync:changelog` 同步） |
 | `clipboard` | 读系统剪贴板（WebView 的 `navigator.clipboard` 会弹权限框） |
 | `cookie` | Cookie 策略、浏览器 Cookie 提取与快照 |

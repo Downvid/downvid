@@ -1,5 +1,7 @@
 # Wails 构建产物
 build/bin/
+# CLI 构建产物（build-cli.sh）
+build/cli/
 frontend/dist/
 frontend/node_modules/
 frontend/wailsjs/

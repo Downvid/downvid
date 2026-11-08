@@ -160,10 +160,16 @@ bash app/scripts/build.sh
 (cd app && wails dev)
 ```
 
+## CLI
+
+A headless `downvid <url>` command reuses the desktop settings and runtime
+dependencies. See the [CLI guide](./docs/cli.md) (Chinese) for build and
+install steps on macOS, Windows and Linux.
+
 ## Tech stack and architecture
 
 - **Framework**: [Wails v2](https://wails.io/)
-- **Core Engine**: [Go](https://go.dev/) (16 zero-coupled internal packages)
+- **Core Engine**: [Go](https://go.dev/) (17 zero-coupled internal packages)
 - **Frontend**: [Svelte 5](https://svelte.dev/) + Vite + Tailwind CSS v4
 - **Engines**: [yt-dlp](https://github.com/yt-dlp/yt-dlp) & [FFmpeg](https://ffmpeg.org/)
 - **Updater**: [wmlUpdate](https://github.com/yxxbc/wmlUpdate) (source failover, resumable download, SHA-256 verification)

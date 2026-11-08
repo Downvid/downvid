@@ -3,10 +3,11 @@
 ```
 downvid/
 ├── app/                     # 桌面应用：Go + Wails + Svelte 5
-│   ├── internal/            # 16 个零耦合业务包（各自独立可测）
+│   ├── internal/            # 17 个零耦合业务包（各自独立可测）
 │   ├── frontend/            # Svelte 5 + Vite 渲染进程（独立包，单独装依赖）
 │   ├── scripts/build.sh     # 构建入口（先编依赖边车，再带 withsidecar 构建）
 │   ├── cmd/downvid-server/  # 无头模式入口（HTTP + WebSocket RPC）
+│   ├── cmd/downvid/         # 命令行下载器（复用设置与 ~/.downvid 依赖）
 │   └── main.go / app.go     # Wails 壳与绑定入口
 ├── backend/                 # Go 依赖边车（探测 + 下载 yt-dlp / ffmpeg / aria2c）
 │   ├── cmd/downvid-deps/    # 入口：detect / fetch 两个子命令
@@ -33,10 +34,11 @@ downvid/
 > 想看**代码怎么串起来**（模块地图、一次下载的生命周期、绑定契约、调试手段）请读
 > [开发者指南](./development.md)；本文只回答「东西放在哪」。
 
-## app/internal 的 16 个包
+## app/internal 的 17 个包
 
 | 包 | 职责 |
 |---|---|
+| `appdir` | 路径规则：`~/.downvid`、userData、历史与托管依赖目录 |
 | `changelog` | 解析 CHANGELOG 副本（`//go:embed` 不能跨目录） |
 | `clipboard` | 读系统剪贴板 |
 | `cookie` | Cookie 策略、浏览器 Cookie 提取与快照 |
