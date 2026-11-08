@@ -632,6 +632,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # 上一步「刷新官网版本号」已经在游离 HEAD 的工作区里改过 index.html。
+          # 直接 switch 会被 git 拒绝（local changes would be overwritten），
+          # v1.10.0 就是这样在最后一步失败的。先还原，切到 main 后再重新写一次。
+          git restore website/index.html
           # checkout 默认停在 tag 对应的游离 HEAD 上。这里显式挪到 origin/main 顶端再写，
           # 而不是 `git push HEAD:main`：打 tag 之后 main 若又往前走了（比如这条提交本身、
           # 或别人的 PR），直接推会被拒，官网版本号就静默停在上一个版本。
