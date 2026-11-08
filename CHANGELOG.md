@@ -2,6 +2,19 @@
 
 本文件记录 DownVid 的所有版本更新。格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [1.10.1] - 2026-11-09
+
+### 变更
+
+- **依赖更新**：前端与构建工具跟进补丁版本——Svelte 5.57.3、bits-ui 2.20.6、
+  Tailwind CSS 4.3.5、Vite 8.3.6（根目录）/ 7.3.7（前端）、Vitest 5.1.0、
+  svelte-check 4.7.8、marked 18.1.3、puppeteer-core 25.16.0、ws 8.22.1、
+  postcss 8.5.32、@types/node 26.6.6、vite-plugin-electron 1.2.0。
+- **Go 依赖**：Wails 2.16 的间接依赖跟进补丁版本——go-webview2 1.0.23、
+  go-winloader、echo 4.13.4、go-colorable 0.1.16、go-isatty 0.0.24。
+- **运行依赖清单**：已核对上游，yt-dlp `2026.11.04.232659`、ffmpeg `b6.1.1`、
+  aria2 `1.37.0` 均为当前最新，本次没有变化。
+
 ## [1.10.0] - 2026-11-06
 
 ### 新增
