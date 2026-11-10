@@ -35,13 +35,14 @@
   交给一个网络响应。这里只产出按钮与文本节点，无法注入标签。
   snippet 必须放在模板里（不能写在 <script> 内）。
 -->
-{#snippet richText(block: { text: string; spans?: { text: string; href?: string }[] })}
-  {#each block.spans ?? [{ text: block.text }] as span}
-    {#if span.href}
-      <button type="button" class="inline-link" onclick={() => openExternal(span.href!)}>{span.text}</button>
-    {:else}{span.text}{/if}
-  {/each}
-{/snippet}
+<!--
+  行内片段渲染。
+
+  **整段必须写在同一个行内流里**：以前每个片段之间留了换行缩进，
+  Svelte 会把它变成文本节点，而 .dialog-body 是 flex 容器，于是链接被
+  挤到自己那一行——表现就是截图里「[插件开发指南]」和后面的 URL 断开。
+  所以这里用 {#each} 紧贴书写，不留空白。
+-->{#snippet richText(block: { text: string; spans?: { text: string; href?: string }[] })}{#each block.spans ?? [{ text: block.text }] as span}{#if span.href}<button type="button" class="inline-link" onclick={() => openExternal(span.href!)}>{span.text}</button>{:else}{span.text}{/if}{/each}{/snippet}
 
 <div
   class="overlay"

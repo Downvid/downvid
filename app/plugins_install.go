@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -50,8 +51,9 @@ func (a *App) InstallPlugin(id string) error {
 
 	a.emitPluginProgress(PluginProgress{ID: id, Stage: "downloading"})
 	if _, err := gh.Install(ctx, entry.Repo, dir); err != nil {
-		a.emitPluginProgress(PluginProgress{ID: id, Stage: "error", Message: err.Error()})
-		return fmt.Errorf("安装 %s 失败：%w", entry.Name, err)
+		why := humanInstallError(err)
+		a.emitPluginProgress(PluginProgress{ID: id, Stage: "error", Message: why})
+		return errors.New(why)
 	}
 
 	// 装完必须重扫：宿主把插件列表缓存在内存里，不重扫界面看不到
@@ -77,7 +79,44 @@ func (a *App) InstallPlugin(id string) error {
 // 不做「差量更新」：插件是几十 KB 的 JS，重装比对比版本、挑文件简单得多，
 // 而且能顺带修好「本地文件被改坏」的情况。
 func (a *App) UpdatePlugin(id string) error {
+	// 更新 = 先删旧目录再装。
+	//
+	// 不能直接复用 InstallPlugin：宿主的 Install 在目标 id 已存在时返回
+	// ErrInstalled（"a plugin with this id is already installed"），
+	// 于是「点更新」永远失败，而且用户看到的是这句英文原文。
+	//
+	// 删的是 plugins/<id>，**不动 plugin-data/<id>**：那是插件自己的数据
+	// （登录态等），更新不该把它清掉。
+	if !pluginhost.ValidPluginID(id) {
+		return fmt.Errorf("插件 id 不合法：%q", id)
+	}
+	dir := a.pluginHostDir()
+	if err := os.RemoveAll(filepath.Join(dir, id)); err != nil {
+		return fmt.Errorf("清理旧版本失败：%w", err)
+	}
 	return a.InstallPlugin(id)
+}
+
+// humanInstallError 把宿主库的英文错误翻成用户能懂的话。
+//
+// 实测用户看到的是「示例解析器 needs this app 1.11.0 or later」——
+// 一句英文、还夹着插件名，看不出该做什么。这类错误**都是可预期的**
+// （版本不够、已装、网络），值得逐条给中文说明；其余保持原文并加前缀，
+// 免得把真正的意外吞成一句含糊的话。
+func humanInstallError(err error) string {
+	if err == nil {
+		return ""
+	}
+	var newer *plugin.NeedsNewerApp
+	if errors.As(err, &newer) {
+		return fmt.Sprintf("「%s」需要 %s 或更新的 DownVid（当前 %s），请先升级应用",
+			newer.Plugin, newer.Version, effectiveVersion())
+	}
+	if errors.Is(err, plugin.ErrInstalled) {
+		// 正常路径不该出现（更新会先删旧目录），出现说明状态不一致
+		return "该插件已安装。若要更新请点「更新」；若确认已损坏，请先卸载再装"
+	}
+	return "安装失败：" + err.Error()
 }
 
 // lookupPluginEntry 从索引里找一条。
