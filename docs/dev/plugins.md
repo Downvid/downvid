@@ -117,10 +117,33 @@ export function resolve(url) {
 
 ## 五、索引与审核
 
-### 提交
+### 提交：打一个 topic 就够了
 
-插件在**你自己的仓库**里托管，无需把代码交给本项目。提交收录的方式：发起 Issue，
-附上仓库地址与一句话说明。
+插件在**你自己的仓库**里托管，无需把代码交给本项目。收录是**自动**的：
+
+1. 在仓库的 `plugin.json` 里声明 `"playback": "downvid-parser"`
+2. 给仓库打上 `downvid-plugin` topic
+3. 等索引仓库的定时任务跑（每天一次），或用 `workflow_dispatch` 手动触发
+
+做不了这步的（不想打 topic、或想改显示名/站点列表）可以发 Issue 手工收录。
+
+索引仓库：[Downvid/plugins](https://github.com/Downvid/plugins)，
+收录脚本在 `scripts/update-plugin-index.mjs`。
+
+#### 自动收录只做机器可判的部分
+
+| 检查 | 不通过时 |
+| --- | --- |
+| `plugin.json` 是合法 JSON | 跳过，日志写原因 |
+| `playback` 为 `downvid-parser` | 同上 |
+| `id` 匹配 `^[a-z0-9][a-z0-9-]{1,40}$` | 同上（它会拼进文件路径） |
+| 有非空 `name` | 同上（否则界面显示空白） |
+| `id` 不在 `removed.json` 里 | 跳过并记录——下架过的不会因为重新打 topic 就回来 |
+
+`permissions.network` 含 `*` 时只提醒、不拒绝（那是合法配置，但值得人看一眼）。
+
+**机器判不了的是真正的恶意行为**（外传 Cookie、劫持结果等）。所以
+`removed.json` 是手写的：一旦某个插件被人工下架，自动收录永远不会把它加回来。
 
 ### 审核范围
 

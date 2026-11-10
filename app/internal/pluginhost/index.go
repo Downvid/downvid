@@ -26,7 +26,11 @@ import (
 //
 // 用 raw.githubusercontent 而不是 api.github.com：后者对匿名请求限流很紧
 // （60 次/小时/出口 IP），而这里只需要一个静态文件。
-const IndexURL = "https://raw.githubusercontent.com/Downvid/plugins/main/index.json"
+//
+// 分支是 **master**：仓库创建时没有指定默认分支，GitHub 沿用了 git init 的
+// master。写错分支名不会报错，只会 404 —— 表现是「插件列表永远为空」，
+// 而索引其实好好的。
+const IndexURL = "https://raw.githubusercontent.com/Downvid/plugins/master/index.json"
 
 // indexVersion 是本包认识的索引格式版本。
 //

@@ -36,6 +36,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e:real": "node scripts/test-e2e-real.mjs",
+    "test:plugin-index": "node scripts/test-plugin-index.mjs",
+    "plugins:index": "node scripts/update-plugin-index.mjs",
     "lint:boundaries": "node scripts/lint-boundaries.mjs",
     "sync:repo": "node scripts/sync-repo-coords.mjs --check",
     "sync:toolchain": "node scripts/sync-toolchain-versions.mjs",

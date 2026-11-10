@@ -98,7 +98,17 @@ jobs:
         working-directory: app
         run: go test -shuffle=on -count=1 ./...
 
+      # 自动收录会直接写索引仓库的 index.json，把不合格插件写进去等于
+      # 让用户装上坏插件，而这一步没有人工介入。所以拒绝条件必须进 CI。
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: 插件索引脚本回归
+        run: node scripts/test-plugin-index.mjs
+
       # 边车必须能编出全部 5 个平台：任一编不过，对应平台的用户就装不上
+
       - name: 交叉编译全部平台
         working-directory: backend
         shell: bash
