@@ -7,13 +7,15 @@
   const video = $derived(app.video)
   const existing = $derived(app.alreadyDownloaded)
 
+  // 纯音频 / 歌曲不发「视频」页：那条链接本来就没有画面，
+  // 留一个 count=0 的标签只会让人点进去看到空列表。
   const modes = $derived(
     video
       ? [
           { id: 'video' as const, label: t('mode.video'), icon: 'movie', count: video.formats.length },
           { id: 'audio' as const, label: t('mode.audio'), icon: 'music_note', count: video.audios.length },
-          { id: 'subtitle' as const, label: t('mode.subtitle'), icon: 'subtitles', count: video.subtitles.length },
-        ]
+          { id: 'subtitle' as const, label: t('mode.subtitle'), icon: 'subtitles', count: video.subtitles.length + video.automaticCaptions.length },
+        ].filter((m) => m.id !== 'video' || m.count > 0)
       : [],
   )
 
@@ -37,7 +39,7 @@
           <span class="platform-pill">{video.platformName}</span>
           <span class="num result-host">{video.host}</span>
         </div>
-        <h2 class="result-title">{video.title}</h2>
+        <h2 class="result-title">{app.displayTitle}</h2>
         <p class="result-sub">
           <span>{video.uploader}</span>
           <span class="sep">·</span>
@@ -195,6 +197,40 @@
           </p>
         {:else}
           <p class="format-empty">{t('subtitle.empty')}</p>
+        {/if}
+
+        <!--
+          自动字幕单独一块：它是机器转录，可能不准，且几乎每个 YouTube 视频
+          都有几十种机器翻译。与人工字幕混排会把校对过的那几条挤到看不见。
+        -->
+        {#if video.automaticCaptions.length > 0}
+          <p class="sub-label sub-label--section">{t('subtitle.autoSection')}</p>
+          <div class="format-grid format-grid--three">
+            {#each video.automaticCaptions as subtitle (subtitle.id)}
+              <label class="format-card format-card--check" class:is-selected={app.subtitles.includes(subtitle.lang)}>
+                <span class="format-card-head">
+                  <span class="checkbox" class:checkbox--on={app.subtitles.includes(subtitle.lang)}>
+                    <Icon name="check" size={12} />
+                  </span>
+                  <span class="format-quality">{subtitle.name}</span>
+                </span>
+                <span class="format-card-meta">
+                  <span class="format-tag num">{subtitle.ext}</span>
+                  <span class="format-tag">{t('subtitle.auto')}</span>
+                </span>
+                <input
+                  type="checkbox"
+                  class="sr-only"
+                  checked={app.subtitles.includes(subtitle.lang)}
+                  onchange={() => app.toggleSubtitle(subtitle.lang)}
+                />
+              </label>
+            {/each}
+          </div>
+          <p class="format-note">
+            <Icon name="info" size={13} />
+            <span>{t('subtitle.autoNote')}</span>
+          </p>
         {/if}
       {/if}
     </div>

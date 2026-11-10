@@ -71,6 +71,19 @@ export interface BackendVideoInfo {
   }>
   audioTracks?: Array<{ id: string; name: string; language: string; formatId: string; isM3u8?: boolean }>
   subtitles?: Array<{ language: string; name: string; url: string }>
+  /**
+   * 自动生成的字幕（机器转录）。
+   *
+   * 与 subtitles 分开：自动字幕可能有错，且几乎每个 YouTube 视频都有几十种
+   * 机器翻译。混在一起会把人工校对过的字幕挤到看不见。
+   */
+  automaticCaptions?: Array<{ language: string; name: string; url: string }>
+  /**
+   * 非空且 isMusic=true 表示这条链接是歌曲而不是视频。
+   *
+   * 界面据此把「选画质」换成「选音质」，并把标题显示成「歌手 - 曲名」。
+   */
+  music?: { isMusic: boolean; track?: string; artist?: string; album?: string; year?: number }
   isYoutube: boolean
   parseNotice: string
   cacheFile?: string
@@ -270,6 +283,16 @@ export function toVideoInfo(info: BackendVideoInfo, url: string, cookieReady = f
     ext: 'srt',
   }))
 
+  // 自动字幕用 `auto:` 前缀做 id，避免与人工字幕语言码撞车
+  // （同一个 `en` 同时存在人工与自动两版，混用会让「选了自动」实际下到人工）
+  const automaticCaptions: SubtitleOption[] = (info.automaticCaptions ?? []).map((s) => ({
+    id: `auto:${s.language}`,
+    lang: s.language,
+    name: s.name,
+    ext: 'srt',
+    auto: true,
+  }))
+
   return {
     url: effectiveUrl,
     platformId: platform.id,
@@ -283,6 +306,8 @@ export function toVideoInfo(info: BackendVideoInfo, url: string, cookieReady = f
     audios,
     tracks,
     subtitles,
+    automaticCaptions,
+    music: info.music,
     needsCookies: Boolean(info.isYoutube && !cookieReady),
     notice: info.parseNotice || undefined,
     cacheFile: info.cacheFile,
@@ -300,6 +325,13 @@ export interface ParseOutcome {
   message?: string
   /** 缺依赖时要弹「一键下载」 */
   missingKind?: string
+  /**
+   * 解析失败的类别（`platform-blocked` / `authentication` …）。
+   *
+   * 界面用它决定提示方向：`platform-blocked` 是「站点要求签名/验证」，
+   * 继续引导用户配 Cookie 只会让人反复重试。
+   */
+  parseErrorKind?: string
 }
 
 /**
@@ -329,6 +361,9 @@ export async function parseUrl(url: string, proxy = ''): Promise<ParseOutcome> {
       message: stripMarker(raw) || '解析失败',
       // 版本过旧同样要打开依赖面板（下一步是「更新」而不是「下载」）
       missingKind: marker.kind === 'deps' || marker.kind === 'deps-stale' ? marker.code : undefined,
+      // 解析失败的类别。界面据此换提示：platform-blocked（抖音/快手要求签名/
+      // 验证）不能再引导用户去配 Cookie，那条路实测走不通。
+      parseErrorKind: marker.kind === 'parse' ? marker.code : undefined,
     }
   }
 }
@@ -344,6 +379,8 @@ export interface StartDownloadParams {
   mode: 'video' | 'audio' | 'subtitle'
   hasAudio: boolean
   subtitles: string[]
+  /** 自动字幕语言码（后端据此加 --write-auto-subs） */
+  autoSubtitles?: string[]
   outputDir: string
   /** 选中的音轨（仅 YouTube 多音轨） */
   audioTrack?: { formatId: string; language: string; isM3u8?: boolean }
@@ -377,6 +414,7 @@ export async function startDownload(
       downloadMode: p.mode,
       hasAudio: p.hasAudio,
       subtitles: p.subtitles,
+      autoSubtitles: p.autoSubtitles ?? [],
       outputDir: p.outputDir,
       audioTrack: p.audioTrack,
       directUrl: p.directUrl,

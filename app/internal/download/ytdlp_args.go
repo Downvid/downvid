@@ -67,11 +67,17 @@ type Options struct {
 	// DownloadMode 是 "video" / "audio" / "subtitle"。
 	DownloadMode string
 
-	HasAudio     bool
-	AudioTrack   *AudioTrack
-	Subtitles    []string
-	Proxy        string
-	FilenameTmpl string
+	HasAudio   bool
+	AudioTrack *AudioTrack
+	Subtitles  []string
+	// AutoSubtitles 是自动生成字幕的语言码。
+	//
+	// 与 Subtitles 分开：yt-dlp 下载自动字幕要 `--write-auto-subs`，
+	// 只传 `--write-subs` 时自动字幕**一条都下不到**（实测），而退出码仍是 0，
+	// 界面显示"已完成"却找不到文件。
+	AutoSubtitles []string
+	Proxy         string
+	FilenameTmpl  string
 
 	// Acceleration 对应 shared/acceleration.ts 的 AccelerationSettings。
 	Acceleration *Acceleration
@@ -320,11 +326,8 @@ func BuildArgs(o Options, outputDir string, ctx BuildArgsContext) []string {
 	}
 
 	if isSubtitleOnly {
-		langs := "all"
-		if len(o.Subtitles) > 0 {
-			langs = strings.Join(o.Subtitles, ",")
-		}
-		args = append(args, "--skip-download", "--write-subs", "--sub-langs", langs, "--convert-subs", "srt")
+		args = append(args, "--skip-download", "--convert-subs", "srt")
+		args = appendSubtitlesArgs(args, o)
 	} else {
 		args = append([]string{"-f", BuildFormatSelector(o)}, args...)
 		if isAudioOnly {
@@ -334,8 +337,9 @@ func BuildArgs(o Options, outputDir string, ctx BuildArgsContext) []string {
 		} else {
 			args = append(args, "--merge-output-format", "mp4")
 		}
-		if len(o.Subtitles) > 0 {
-			args = append(args, "--write-subs", "--sub-langs", strings.Join(o.Subtitles, ","), "--convert-subs", "srt")
+		if len(o.Subtitles)+len(o.AutoSubtitles) > 0 {
+			args = append(args, "--convert-subs", "srt")
+			args = appendSubtitlesArgs(args, o)
 		}
 	}
 
@@ -377,6 +381,27 @@ func BuildArgs(o Options, outputDir string, ctx BuildArgsContext) []string {
 	// （electron/download/ytdlp.ts: `spawn(ytdlpPath, [...args, ...cookieArgs, ...source])`）。
 	// 拼在这里会让后续加 cookie 参数的调用方把 URL 放到错误位置——
 	// yt-dlp 会把它当成又一个输入源，不报错但行为变了。
+	return args
+}
+
+// appendSubtitlesArgs 组装字幕相关参数。
+//
+// ## 为什么人工字幕与自动字幕要分开传
+//
+// yt-dlp 用两个不同的开关：`--write-subs` 只下人工字幕，`--write-auto-subs`
+// 只下自动字幕。语言码可以重叠（同一个 `en` 往往两版都有），所以「选了哪个
+// 就传哪个」是唯一正确的做法。
+//
+// 变异点（修之前真实存在的问题）：早先只传 `--write-subs`，于是用户勾了
+// 自动字幕——界面能勾、能计数——但 yt-dlp 一个文件都不会下，退出码还是 0，
+// 界面显示"已完成"。这是最糟的一类失败：看起来成功了。
+func appendSubtitlesArgs(args []string, o Options) []string {
+	if len(o.Subtitles) > 0 {
+		args = append(args, "--write-subs", "--sub-langs", strings.Join(o.Subtitles, ","))
+	}
+	if len(o.AutoSubtitles) > 0 {
+		args = append(args, "--write-auto-subs", "--sub-langs", strings.Join(o.AutoSubtitles, ","))
+	}
 	return args
 }
 

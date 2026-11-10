@@ -20,8 +20,47 @@ func IsKuaishou(u string) bool {
 
 var (
 	ksShortVideoRegexp = regexp.MustCompile(`/short-video/([^?&#]+)`)
-	ksShortLinkRegexp  = regexp.MustCompile(`/f/([^?&#]+)`)
+	// 快手的分享短链有两种写法，实测都指向真实视频：
+	//   - `https://v.kuaishou.com/<code>`   → 302 到 `c.kuaishou.com/fw/photo/<id>`
+	//   - `https://v.kuaishou.com/f/<code>` → 302 到 `c.kuaishou.com/fw/user/<id>`
+	//
+	// 早先只认 `/f/`，而 App 分享出来的是**不带 `/f/`** 的那种，于是
+	// 短链一条都解析不出来，直接报「无法从 URL 提取快手视频 ID」。
+	ksShortLinkRegexp = regexp.MustCompile(`(?:v|www)?\.?kuaishou\.com/(?:f/)?([A-Za-z0-9_-]+)`)
 )
+
+// KuaishouCookieDomains 是快手相关的 Cookie 域名。
+//
+// 快手 GraphQL 对无有效会话的请求直接返回 `Need captcha`，因此与抖音一样
+// 需要把浏览器导出的 Cookie 一并带上（能否通过另说，见 KindPlatformBlocked）。
+var KuaishouCookieDomains = []string{"kuaishou.com", "kwai.com", "gifshow.com"}
+
+// ksUserAgent 是请求快手时使用的 UA。两个请求（短链跳转、GraphQL）必须一致：
+// 站点会把 UA 与 Cookie 里的设备信息做比对。
+const ksUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) " +
+	"AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
+// extractKuaishouPhotoID 从跳转后的 URL 里取 photo id。
+//
+// 实测的落点有四种形态，缺一种就会「短链解析不出 id」：
+//   - /short-video/<id>
+//   - /fw/photo/<id>
+//   - /fw/user/<id>     （主页分享，不是视频——取出来的 id 不是 photo id）
+//   - /profile/<user>   （用户主页）
+//
+// 主页形态返回空串，让调用方报「不是视频链接」，而不是拿用户 id 去查 GraphQL
+// 得到一句语焉不详的「未包含 photo 信息」。
+func extractKuaishouPhotoID(u string) string {
+	if m := ksShortVideoRegexp.FindStringSubmatch(u); len(m) > 1 {
+		return m[1]
+	}
+	if m := ksPhotoPathRegexp.FindStringSubmatch(u); len(m) > 1 {
+		return m[1]
+	}
+	return ""
+}
+
+var ksPhotoPathRegexp = regexp.MustCompile(`/fw/photo/([^?&#/]+)`)
 
 type ksGraphQLRequest struct {
 	OperationName string         `json:"operationName"`
@@ -90,9 +129,18 @@ const ksGraphQLQuery = `query VisionVideoDetail($photoId: String!) {
   }
 }`
 
-// ParseKuaishouAPI 用直接 GraphQL API 快速解析快手视频（耗时约 200ms）。
-func ParseKuaishouAPI(rawURL string, proxyStr string) (*VideoInfo, error) {
+// ParseKuaishouAPI 用直接 GraphQL API 解析快手视频。
+//
+// cookiesFile 与抖音一样接收浏览器导出的 cookies.txt：快手的 GraphQL 对
+// 无会话请求返回 `Need captcha`，带上会话至少不再被当成匿名流量。
+func ParseKuaishouAPI(rawURL string, cookiesFile string, proxyStr string) (*VideoInfo, error) {
 	client := newHTTPClient(proxyStr, 15*time.Second)
+
+	// 解析 Cookies（与抖音同一套：支持 Netscape 与浏览器扩展导出的 JSON 数组）
+	cookieHeader := ""
+	if cookiesFile != "" {
+		cookieHeader = BuildCookieHeader(ParseCookiesFile(cookiesFile), KuaishouCookieDomains)
+	}
 
 	videoID := ""
 	if m := ksShortVideoRegexp.FindStringSubmatch(rawURL); len(m) > 1 {
@@ -102,16 +150,19 @@ func ParseKuaishouAPI(rawURL string, proxyStr string) (*VideoInfo, error) {
 	if videoID == "" {
 		if m := ksShortLinkRegexp.FindStringSubmatch(rawURL); len(m) > 1 {
 			shortCode := m[1]
-			fullURL := fmt.Sprintf("https://www.kuaishou.com/f/%s", shortCode)
+			// 短链会 302 到真实页面；`/fw/photo/<id>`、`/fw/user/<id>`、
+			// `/short-video/<id>` 三种落点都要认，否则拿不到 id。
+			fullURL := fmt.Sprintf("https://v.kuaishou.com/%s", shortCode)
 			req, err := http.NewRequest("GET", fullURL, nil)
 			if err == nil {
-				req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+				req.Header.Set("User-Agent", ksUserAgent)
+				if cookieHeader != "" {
+					req.Header.Set("Cookie", cookieHeader)
+				}
 				if resp, err := client.Do(req); err == nil {
 					finalURL := resp.Request.URL.String()
 					resp.Body.Close()
-					if vm := ksShortVideoRegexp.FindStringSubmatch(finalURL); len(vm) > 1 {
-						videoID = vm[1]
-					}
+					videoID = extractKuaishouPhotoID(finalURL)
 				}
 			}
 		}
@@ -136,7 +187,12 @@ func ParseKuaishouAPI(rawURL string, proxyStr string) (*VideoInfo, error) {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+	req.Header.Set("User-Agent", ksUserAgent)
+	req.Header.Set("Referer", "https://www.kuaishou.com/")
+	req.Header.Set("Origin", "https://www.kuaishou.com")
+	if cookieHeader != "" {
+		req.Header.Set("Cookie", cookieHeader)
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {

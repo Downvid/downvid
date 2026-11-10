@@ -140,7 +140,7 @@ const I18N = {
     'feat.title': 'What it does',
     'feat.sub': 'Everything you need, and none of the things you should not have.',
     'feat.sites.t': '1000+ sites',
-    'feat.sites.d': 'Powered by yt-dlp. Douyin and Kuaishou have dedicated parsers that return the watermark-free URL.',
+    'feat.sites.d': 'Powered by yt-dlp, covering 1000+ sites. Douyin and Kuaishou now require request signing / captcha and are not supported in this version.',
     'feat.quality.t': 'Quality and formats',
     'feat.quality.d': '360P to 4K, audio-only (MP3), subtitles-only (SRT) and YouTube multi-audio-track.',
     'feat.speed.t': 'Download acceleration',

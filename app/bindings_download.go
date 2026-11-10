@@ -234,16 +234,17 @@ func (a *App) buildArgs(opts DownloadRequest) []string {
 		jsRuntime = a.jsRuntime()
 	}
 	return download.BuildArgs(download.Options{
-		TaskID:       opts.TaskID,
-		URL:          opts.URL,
-		FormatID:     opts.FormatID,
-		DownloadMode: opts.DownloadMode,
-		HasAudio:     opts.HasAudio,
-		Subtitles:    opts.Subtitles,
-		AudioTrack:   toDownloadAudioTrack(opts.AudioTrack),
-		Proxy:        a.currentProxy(),
-		FilenameTmpl: opts.FilenameTemplate,
-		Acceleration: a.acceleration(),
+		TaskID:        opts.TaskID,
+		URL:           opts.URL,
+		FormatID:      opts.FormatID,
+		DownloadMode:  opts.DownloadMode,
+		HasAudio:      opts.HasAudio,
+		Subtitles:     opts.Subtitles,
+		AutoSubtitles: opts.AutoSubtitles,
+		AudioTrack:    toDownloadAudioTrack(opts.AudioTrack),
+		Proxy:         a.currentProxy(),
+		FilenameTmpl:  opts.FilenameTemplate,
+		Acceleration:  a.acceleration(),
 	}, opts.OutputDir, download.BuildArgsContext{
 		FfmpegLocation: a.ffmpegLocation(),
 		Aria2Path:      a.resolveAria2(),
@@ -604,12 +605,14 @@ func toDownloadAudioTrack(t *DownloadAudioTrack) *download.AudioTrack {
 
 // DownloadRequest 是一次下载的参数。
 type DownloadRequest struct {
-	TaskID           string   `json:"taskId"`
-	URL              string   `json:"url"`
-	FormatID         string   `json:"formatId"`
-	DownloadMode     string   `json:"downloadMode"` // video / audio / subtitle
-	HasAudio         bool     `json:"hasAudio"`
-	Subtitles        []string `json:"subtitles"`
+	TaskID       string   `json:"taskId"`
+	URL          string   `json:"url"`
+	FormatID     string   `json:"formatId"`
+	DownloadMode string   `json:"downloadMode"` // video / audio / subtitle
+	HasAudio     bool     `json:"hasAudio"`
+	Subtitles    []string `json:"subtitles"`
+	// AutoSubtitles 是自动生成字幕的语言码（与 Subtitles 分开，见 download.Options）
+	AutoSubtitles    []string `json:"autoSubtitles"`
 	OutputDir        string   `json:"outputDir"`
 	FilenameTemplate string   `json:"filenameTemplate"`
 	// DirectURL 非空时走**直链下载**（抖音/快手），不经过 yt-dlp。

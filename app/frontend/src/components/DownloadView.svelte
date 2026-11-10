@@ -231,7 +231,9 @@
         <div class="error-body">
           <h2>{t('error.title')}</h2>
           <p class="error-message">{app.parseError}</p>
-          <p class="error-hint">{t('error.hint')}</p>
+          <p class="error-hint">
+            {app.parseErrorKind === 'platform-blocked' ? t('error.hintBlocked') : t('error.hint')}
+          </p>
 
           {#if app.parseErrorDetail}
             <details class="error-details">
@@ -252,10 +254,12 @@
               <Icon name="arrow_back" size={16} />
               <span>{t('result.back')}</span>
             </button>
-            <button class="btn btn-ghost" onclick={openCookieSettings}>
-              <Icon name="cookie" size={16} />
-              <span>{t('error.settings')}</span>
-            </button>
+            {#if app.parseErrorKind !== 'platform-blocked'}
+              <button class="btn btn-ghost" onclick={openCookieSettings}>
+                <Icon name="cookie" size={16} />
+                <span>{t('error.settings')}</span>
+              </button>
+            {/if}
           </div>
         </div>
       </div>

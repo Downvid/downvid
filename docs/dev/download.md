@@ -19,8 +19,14 @@ PyInstaller 的单文件包每次启动都要把 ~72MB 解压到临时目录，�
 
 ## 两条完全独立的下载路径
 
-- **`direct.go`**：`directUrl` 存在（仅抖音/快手——解析器返回 CDN URL）→ 纯 HTTP 分块下载。
-  Range 可用时按小块队列调度，默认 8 路、最多 16 路；429/503 降低并发，分段失败从已写入位置重试。
+- **`direct.go`**：`directUrl` 存在（解析器返回平台 CDN URL）→ 纯 HTTP 分块下载。
+
+  注意：抖音 / 快手当前会被平台的请求签名与人机验证挡住，解析阶段就失败，
+  **走不到这条路径**。解析器失败时 `parse.go` 直接上报类别错误（platform-blocked /
+  unsupported-url），不再回落 yt-dlp —— 回落只会把真实原因换成一句误导性的
+  「需要登录」。详见 `docs/faq.md`。
+- 直链分块的调度细节：Range 可用时按小块队列调度，默认 8 路、最多 16 路；
+  429/503 降低并发，分段失败从已写入位置重试。
   `.part.json` 保存逐段进度，兼容旧四段布局。
 - **`run.go` + `ytdlp_args.go`**：`spawn(yt-dlp)`。解析结果 20 分钟内用 `--load-info-json`
   跳过二次提取。进度来自 `--progress-template` 输出的 `[dvp]` / `[dvpp]` 行，

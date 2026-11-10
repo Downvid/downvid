@@ -94,6 +94,11 @@ import type {
   VideoInfo,
 } from './types'
 import { detectPlatform, extractUrl, hostOf, platformName } from './url'
+
+/** 在数组里加入/移除一个值（纯函数，便于单测）。 */
+function toggle(list: string[], value: string): string[] {
+  return list.includes(value) ? list.filter((x) => x !== value) : [...list, value]
+}
 import { findExistingDownload } from './dedupe'
 import { applyQualityDisambiguation } from './filename'
 import { snapshotForRun } from './snapshot'
@@ -177,6 +182,13 @@ class AppStore {
   parseElapsed = $state(0)
   parseError = $state('')
   parseErrorDetail = $state('')
+  /**
+   * 解析失败的类别（`[[parse-error:kind]]` 里的 kind）。
+   *
+   * 单独存一份而不是让视图从文案里正则抠：界面要按类别换提示
+   * （platform-blocked 不能继续引导用户去配 Cookie，那条路是死的）。
+   */
+  parseErrorKind = $state('')
   url = $state('')
   video = $state<VideoInfo | null>(null)
   mode = $state<Mode>('video')
@@ -184,6 +196,8 @@ class AppStore {
   selectedAudioId = $state<string | null>(null)
   selectedTrackId = $state<string | null>(null)
   subtitles = $state<string[]>([])
+  /** 选中的自动字幕语言码（与人工字幕分开，见 TaskItem.autoSubtitles） */
+  autoSubtitles = $state<string[]>([])
 
   // ===== 任务与历史 =====
   tasks = $state<TaskItem[]>([])
@@ -473,6 +487,7 @@ class AppStore {
     this.parseElapsed = 0
     this.parseError = ''
     this.parseErrorDetail = ''
+    this.parseErrorKind = ''
 
     // 解析阶段拿不到真实进度（yt-dlp 只在下载阶段输出进度行），
     // 所以只显示已用秒数 + 一个不确定进度条。
@@ -486,7 +501,11 @@ class AppStore {
 
       if (!outcome.ok || !outcome.video) {
         this.parseState = 'error'
-        this.showParseError(outcome.message || t('error.parseFailed'), outcome.missingKind ?? '')
+        this.showParseError(
+          outcome.message || t('error.parseFailed'),
+          outcome.missingKind ?? '',
+          outcome.parseErrorKind ?? '',
+        )
         return
       }
 
@@ -521,6 +540,7 @@ class AppStore {
     this.selectedAudioId = null
     this.selectedTrackId = null
     this.subtitles = []
+    this.autoSubtitles = []
   }
 
   /**
@@ -552,17 +572,44 @@ class AppStore {
 
   /** 默认选中第一个格式（让「粘贴 → 解析 → 下载」能一路点完） */
   private applyDefaults(video: VideoInfo): void {
+    // 纯音频 / 歌曲：默认落在「仅音频」并选中最高音质。
+    //
+    // 变异点：早先无条件优先 video，而纯音频站点（SoundCloud 等）的视频列表
+    // 现在为空（见 formats.go 的兜底注释），若只按 formats[0] 取值会得到 null，
+    // 界面停在一个既没格式也没音频的「空选择」上。
+    const isMusicOnly = video.formats.length === 0 && video.audios.length > 0
     this.selectedFormatId = video.formats[0]?.id ?? null
-    this.selectedAudioId = null
+    this.selectedAudioId = isMusicOnly ? (video.audios[0]?.id ?? null) : null
     this.selectedTrackId = video.tracks[0]?.id ?? null
     this.subtitles = []
+    this.autoSubtitles = []
     this.mode = video.formats.length > 0 ? 'video' : video.audios.length > 0 ? 'audio' : 'subtitle'
   }
 
-  private showParseError(message: string, detail: string): void {
+  /** 当前链接是否是歌曲（后端识别，界面据此换标题与默认模式）。 */
+  get isMusic(): boolean {
+    return Boolean(this.video?.music?.isMusic)
+  }
+
+  /**
+   * 展示用的标题：歌曲显示「歌手 - 曲名」。
+   *
+   * 只有识别成歌曲才换：视频的 `<title>` 里已经常带歌手名，再拼一次会重复。
+   */
+  get displayTitle(): string {
+    const v = this.video
+    if (!v) return ''
+    const m = v.music
+    if (!m?.isMusic) return v.title
+    const track = m.track || v.title
+    return m.artist ? `${m.artist} - ${track}` : track
+  }
+
+  private showParseError(message: string, detail: string, kind = ''): void {
     this.parseState = 'error'
     this.parseError = message
     this.parseErrorDetail = detail
+    this.parseErrorKind = kind
   }
 
   setMode(mode: Mode): void {
@@ -584,10 +631,26 @@ class AppStore {
   }
 
   toggleSubtitle(lang: string): void {
-    this.subtitles = this.subtitles.includes(lang)
-      ? this.subtitles.filter((l) => l !== lang)
-      : [...this.subtitles, lang]
-    this.mode = this.subtitles.length ? 'subtitle' : this.mode === 'subtitle' ? 'video' : this.mode
+    this.subtitles = toggle(this.subtitles, lang)
+    this.afterSubtitleToggle()
+  }
+
+  /**
+   * 切换【自动】字幕。
+   *
+   * 与人工字幕分开维护：同一个语言码 `en` 可能同时存在人工与自动两版，
+   * 用同一个数组会把两者混成一个勾，后端也就分不清该传
+   * `--write-subs` 还是 `--write-auto-subs`（实测只传前者时自动字幕
+   * 一条都下不到，界面却显示"已完成"）。
+   */
+  toggleAutoSubtitle(lang: string): void {
+    this.autoSubtitles = toggle(this.autoSubtitles, lang)
+    this.afterSubtitleToggle()
+  }
+
+  private afterSubtitleToggle(): void {
+    const any = this.subtitles.length + this.autoSubtitles.length > 0
+    this.mode = any ? 'subtitle' : this.mode === 'subtitle' ? 'video' : this.mode
   }
 
   // ============================================================
@@ -664,7 +727,7 @@ class AppStore {
   /** 是否可下载（界面的按钮 enable 条件） */
   get canDownload(): boolean {
     if (!this.video) return false
-    if (this.mode === 'subtitle') return this.subtitles.length > 0
+    if (this.mode === 'subtitle') return this.subtitles.length + this.autoSubtitles.length > 0
     return this.currentPick() !== null
   }
 
@@ -705,6 +768,7 @@ class AppStore {
       directUrl: video.directUrl,
       cacheFile: video.cacheFile,
       subtitles: [...this.subtitles],
+      autoSubtitles: [...this.autoSubtitles],
       totalBytes: pick.totalBytes,
       bytesDone: 0,
       progress: 0,
@@ -741,6 +805,7 @@ class AppStore {
       // 界面上的「当前选中」随时会被用户改掉，不能作为续传依据。
       hasAudio: snap.hasAudio,
       subtitles: snap.subtitles,
+      autoSubtitles: snap.autoSubtitles,
       audioTrack: snap.audioTrack,
       directUrl: task.directUrl,
       // 解析缓存：让 yt-dlp 用 --load-info-json 跳过二次提取（YouTube 上省 15~25 秒）
@@ -1448,7 +1513,7 @@ class AppStore {
       const a = this.selectedAudio
       return t('format.summaryAudio', { quality: a.label, ext: a.ext, size: this.formatSize(a.sizeBytes) })
     }
-    return t('format.summarySubtitle', { count: this.subtitles.length })
+    return t('format.summarySubtitle', { count: this.subtitles.length + this.autoSubtitles.length })
   }
 
   get selectionHint(): string {

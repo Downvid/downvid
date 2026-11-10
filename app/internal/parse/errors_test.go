@@ -142,6 +142,7 @@ func TestShouldOfferIssue(t *testing.T) {
 	for _, k := range []ErrorKind{
 		KindAuthentication, KindAccessDenied, KindRateLimit,
 		KindInvalidURL, KindUnsupportedURL, KindRuntimeUnavailable, KindNotFound,
+		KindPlatformBlocked,
 	} {
 		if ShouldOfferIssue(k) {
 			t.Errorf("%s 是用户自己能解决的，不该提示提 Issue", k)
@@ -161,22 +162,55 @@ func TestShouldOfferIssue(t *testing.T) {
 	}
 }
 
-// 抖音/快手短链的 Unsupported URL 必须改判成「需要登录」。
+// 抖音/快手短链的 Unsupported URL 不能笼统报成「需要登录」。
 //
-// 实测：匿名请求访问 v.douyin.com 的短链，抖音一律 302 到 https://www.douyin.com/
-// （首页，不带视频 ID），yt-dlp 于是只回 `Unsupported URL`。若照原样显示
-// 「暂不支持该网站或链接类型」，用户会以为应用不支持抖音，而不是去检查 Cookie。
+// 实测（本机，带完整 Chrome 登录态）：
+//   - 抖音：`/aweme/v1/web/aweme/detail/` 一律 403 `ArgusSecurityPlugin
+//     Signature Not Found`，缺的是 a_bogus 请求签名，**配 Cookie 解决不了**；
+//   - 快手：yt-dlp 上游没有 Kuaishou extractor，`Unsupported URL` 是字面事实。
+//
+// 早先两条都改判成 authentication，界面于是提示「请检查 Cookies 设置」，
+// 而那是条死路。现在按真实原因分开报。
 func TestClassifyForURLDouyinShortLink(t *testing.T) {
 	raw := "ERROR: Unsupported URL: https://www.douyin.com/"
-	if got := classifyForURL(raw, "https://v.douyin.com/x4G02LFmUiU"); got != KindAuthentication {
-		t.Errorf("抖音短链应改判为 %s，got %s", KindAuthentication, got)
+	if got := classifyForURL(raw, "https://v.douyin.com/x4G02LFmUiU"); got != KindPlatformBlocked {
+		t.Errorf("抖音短链应改判为 %s，got %s", KindPlatformBlocked, got)
 	}
-	if got := classifyForURL(raw, "https://v.kuaishou.com/abc"); got != KindAuthentication {
-		t.Errorf("快手短链应改判为 %s，got %s", KindAuthentication, got)
+	// 快手没有 extractor，「不支持」就是事实，不该说成「要登录」
+	if got := classifyForURL(raw, "https://v.kuaishou.com/abc"); got != KindUnsupportedURL {
+		t.Errorf("快手短链应保持 %s，got %s", KindUnsupportedURL, got)
 	}
-	// 其它站点保持原判，别把「不支持」说成「要登录」
+	// 其它站点保持原判
 	if got := classifyForURL(raw, "https://example.com/v/1"); got != KindUnsupportedURL {
 		t.Errorf("非抖音/快手应保持 %s，got %s", KindUnsupportedURL, got)
+	}
+}
+
+// 抖音的签名拦截与快手的滑块必须归类为 platform-blocked，而不是 access-denied
+// 或 authentication —— 后两者会让用户去配 Cookie 或等几分钟，都无效。
+func TestClassifyPlatformBlocked(t *testing.T) {
+	cases := []string{
+		// 抖音：窗口外的真实响应体
+		"Blocked by ArgusSecurityPlugin Uifid Not Found",
+		"Blocked by ArgusSecurityPlugin Signature Not Found",
+		// 快手：GraphQL 的滑块
+		`{"errors":[{"message":"Need captcha","locations":[{"line":1,"column":46}]}]}`,
+		// 抖音旧版接口：encrypt_data_miss
+		`{"extra":{"logid":"x"},"status_code":11110,"status_msg":"encrypt_data_miss"}`,
+	}
+	for _, raw := range cases {
+		if got := ClassifyParseError(raw); got != KindPlatformBlocked {
+			t.Errorf("%q 应归类为 %s，got %s", raw, KindPlatformBlocked, got)
+		}
+	}
+	// 这是自查回归点：platform-blocked 的文案必须点明「浏览器里手动下载」，
+	// 不能只说「无法解析」让人继续重试。
+	if !strings.Contains(ParseMessages[KindPlatformBlocked], "浏览器") {
+		t.Error("platform-blocked 的提示必须给出可行动的出路")
+	}
+	// 不该把「用户自己能解决」的类别也吞进 platform-blocked
+	if got := ClassifyParseError("ERROR: Sign in to confirm your age"); got != KindAuthentication {
+		t.Errorf("got %s", got)
 	}
 }
 

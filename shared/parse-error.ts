@@ -1,9 +1,13 @@
-export type ParseErrorKind = 'unsupported-url' | 'invalid-url' | 'runtime-unavailable' | 'format-unavailable' | 'page-reload' | 'challenge-failed' | 'authentication' | 'access-denied' | 'network' | 'not-found' | 'rate-limit' | 'unknown'
+export type ParseErrorKind = 'unsupported-url' | 'invalid-url' | 'runtime-unavailable' | 'format-unavailable' | 'page-reload' | 'challenge-failed' | 'authentication' | 'access-denied' | 'network' | 'not-found' | 'rate-limit' | 'platform-blocked' | 'unknown'
 
 export function classifyParseError(raw: string): ParseErrorKind {
   const marked = /(?:\[\[parse-error:|错误类别：)([\w-]+)/.exec(raw)?.[1]
   if (marked && Object.prototype.hasOwnProperty.call(PARSE_MESSAGES, marked)) return marked as ParseErrorKind
   if (/Unsupported URL/i.test(raw)) return 'unsupported-url'
+  // 平台要求请求签名 / 人机验证。**必须排在 access-denied 与 authentication 之前**：
+  // 抖音这条响应以 403 开头（会被 403 规则吃掉），快手那条带 captcha 字样。
+  // 两者都是「配 Cookie 也没用」，说成「需要登录」会把用户送去一条死路。
+  if (/ArgusSecurityPlugin|Need captcha|verification_filter|status_code"\s*:\s*11110/i.test(raw)) return 'platform-blocked'
   if (/not a valid URL|请输入有效的链接/i.test(raw)) return 'invalid-url'
   if (/Requested format is not available|No video formats found|Only images are available/i.test(raw)) return 'format-unavailable'
   if (/The page needs to be reloaded/i.test(raw)) return 'page-reload'
@@ -28,6 +32,7 @@ export const PARSE_MESSAGES: Record<ParseErrorKind, string> = {
   network: '网络请求失败或超时，请检查连接后重试',
   'not-found': '视频不存在、不可用或已被删除',
   'rate-limit': '网站请求过于频繁，请稍后重试',
+  'platform-blocked': '该平台要求请求签名或人机验证，当前版本无法解析。请在浏览器中打开该链接后手动下载',
   unknown: '无法解析该链接',
 }
 
@@ -86,6 +91,7 @@ export const NO_ISSUE_KINDS: readonly ParseErrorKind[] = [
   'unsupported-url',
   'runtime-unavailable',
   'not-found',
+  'platform-blocked',
 ]
 
 /**

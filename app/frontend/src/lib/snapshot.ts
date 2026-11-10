@@ -26,6 +26,13 @@ export interface DownloadSnapshot {
   hasAudio: boolean
   audioTrack?: { formatId: string; language: string; isM3u8?: boolean }
   subtitles: string[]
+  /**
+   * 自动字幕语言码（与人工字幕分开）。
+   *
+   * 必须进快照：续传时若回读界面，用户这时可能已经取消了自动字幕勾选，
+   * 结果「暂停后再继续」下出来的东西与第一次不一样。
+   */
+  autoSubtitles?: string[]
 }
 
 /** 界面当前的选择（会随用户操作变化） */
@@ -35,6 +42,7 @@ export interface CurrentSelection {
   hasAudio: boolean
   audioTrack?: { formatId: string; language: string; isM3u8?: boolean }
   subtitles: string[]
+  autoSubtitles?: string[]
 }
 
 /**
@@ -58,6 +66,7 @@ export function snapshotForRun(
       hasAudio: task.hasAudio,
       audioTrack: task.audioTrack ? { ...task.audioTrack } : undefined,
       subtitles: [...task.subtitles],
+      autoSubtitles: [...(task.autoSubtitles ?? [])],
     }
   }
   if (!current) return null
@@ -67,5 +76,6 @@ export function snapshotForRun(
     hasAudio: current.hasAudio,
     audioTrack: current.audioTrack ? { ...current.audioTrack } : undefined,
     subtitles: [...current.subtitles],
+    autoSubtitles: [...(current.autoSubtitles ?? [])],
   }
 }

@@ -124,6 +124,12 @@ describe('errorMarker', () => {
     const m = errorMarker('[[deps-missing:ffmpeg]][[parse-error:unknown]]x')
     expect(m.kind).toBe('deps')
   })
+
+  it('识别 platform-blocked（抖音/快手要求签名或验证）', () => {
+    const m = errorMarker('[[parse-error:platform-blocked]]抖音：该平台要求请求签名或人机验证')
+    expect(m.kind).toBe('parse')
+    expect(m.code).toBe('platform-blocked')
+  })
 })
 
 describe('stripMarker', () => {

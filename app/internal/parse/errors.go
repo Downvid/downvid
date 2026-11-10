@@ -34,7 +34,15 @@ const (
 	KindNetwork            ErrorKind = "network"
 	KindNotFound           ErrorKind = "not-found"
 	KindRateLimit          ErrorKind = "rate-limit"
-	KindUnknown            ErrorKind = "unknown"
+	// KindPlatformBlocked 表示「站点要求请求签名 / 人机验证，本应用当前拿不到」。
+	//
+	// 与 authentication 分开是必须的：抖音的 403 是 `ArgusSecurityPlugin
+	// Signature Not Found`（缺 a_bogus 签名），快手是 GraphQL 返回
+	// `Need captcha`（滑块验证）。两者**配 Cookie 也解决不了**——实测带完整
+	// 浏览器登录态仍然被拒。归到 authentication 会让用户反复去配 Cookie，
+	// 而那条路是死的。
+	KindPlatformBlocked ErrorKind = "platform-blocked"
+	KindUnknown         ErrorKind = "unknown"
 )
 
 // ParseMessages 是每类错误给人的话。
@@ -53,6 +61,7 @@ var ParseMessages = map[ErrorKind]string{
 	KindNetwork:            "网络请求失败或超时，请检查连接后重试",
 	KindNotFound:           "视频不存在、不可用或已被删除",
 	KindRateLimit:          "网站请求过于频繁，请稍后重试",
+	KindPlatformBlocked:    "该平台要求请求签名或人机验证，当前版本无法解析。请在浏览器中打开该链接后手动下载",
 	KindUnknown:            "无法解析该链接",
 }
 
@@ -72,6 +81,10 @@ var classifyRules = []struct {
 	re   *regexp.Regexp
 }{
 	{KindUnsupportedURL, regexp.MustCompile(`(?i)Unsupported URL`)},
+	// 平台要求请求签名 / 人机验证。**必须排在 access-denied 与 authentication
+	// 之前**：抖音这条响应是 403 开头（会被 403 规则吃掉），快手那条带
+	// "captcha" 字样。两条都是「配 Cookie 也没用」，说成「需要登录」会误导用户。
+	{KindPlatformBlocked, regexp.MustCompile(`(?i)ArgusSecurityPlugin|Need captcha|verification_filter|status_code"\s*:\s*11110`)},
 	{KindInvalidURL, regexp.MustCompile(`(?i)not a valid URL|请输入有效的链接`)},
 	{KindFormatUnavailable, regexp.MustCompile(`(?i)Requested format is not available|No video formats found|Only images are available`)},
 	{KindPageReload, regexp.MustCompile(`(?i)The page needs to be reloaded`)},
@@ -134,21 +147,35 @@ func ParseDiagnostic(raw string, versions Versions) string {
 
 // classifyForURL 在通用分类之上补一层「站点上下文」。
 //
-// 抖音 / 快手的分享短链对**匿名请求**会被重定向到站点首页（带登录态才跳到视频页），
-// yt-dlp 收到首页地址只会说 `Unsupported URL`。那不是「不支持该网站」——这两个站点
-// 明明支持——而是缺登录态，所以按 authentication 报，界面才会提示去检查 Cookie。
+// 抖音 / 快手的分享短链对**匿名请求**会被重定向到站点首页，yt-dlp 收到首页
+// 地址只会说 `Unsupported URL`。那不是「不支持该网站」，所以不按
+// unsupported-url 报。
+//
+// 但改判成**什么**要分清：
+//   - 快手：yt-dlp 上游**没有** Kuaishou extractor，`Unsupported URL` 是字面事实，
+//     与 Cookie 无关 → 保持 unsupported-url。
+//   - 抖音：有 extractor，失败原因是缺签名/cookie → platform-blocked。
+//
+// 早先两者都改判成 authentication，于是界面提示「请检查 Cookies 设置」，
+// 而实测带完整浏览器登录态依然被拒（见 KindPlatformBlocked 注释）。
 func classifyForURL(raw, pageURL string) ErrorKind {
 	kind := ClassifyParseError(raw)
-	if kind == KindUnsupportedURL && (IsDouyin(pageURL) || IsKuaishou(pageURL)) {
-		return KindAuthentication
+	if kind != KindUnsupportedURL {
+		return kind
+	}
+	if IsKuaishou(pageURL) {
+		return KindUnsupportedURL
+	}
+	if IsDouyin(pageURL) {
+		return KindPlatformBlocked
 	}
 	return kind
 }
 
 // ParseDiagnosticWithKind 用调用方已经判定的类别生成诊断文本。
 //
-// 单独开一个入口是因为有两处需要「按上下文改判」：抖音/快手短链的
-// Unsupported URL 要改判成 authentication（见 classifyForURL）。
+// 单独开一个入口是因为有一处需要「按上下文改判」：抖音短链的
+// Unsupported URL 要改判成 platform-blocked（见 classifyForURL）。
 func ParseDiagnosticWithKind(raw string, kind ErrorKind, versions Versions) string {
 	lines := []string{"错误类别：" + string(kind), ParseMessages[kind]}
 
@@ -229,6 +256,8 @@ func SafeIssueReport(message, detail string) IssueReport {
 //   - unsupported-url     → 站点不受支持，是已知边界
 //   - runtime-unavailable → 装个 Node/Deno 即可
 //   - not-found           → 视频已被删除
+//   - platform-blocked    → 站点要求签名/验证，当前版本已明确不支持，
+//     用户唯一能做的是去浏览器里下载。提 Issue 只会重复同一句「不支持」。
 //
 // **不要**把 format-unavailable / page-reload / challenge-failed / network / unknown
 // 放进来——这些往往对应真实的解析回归（历史上 issue #50 就是 page-reload），
@@ -241,6 +270,7 @@ var NoIssueKinds = []ErrorKind{
 	KindUnsupportedURL,
 	KindRuntimeUnavailable,
 	KindNotFound,
+	KindPlatformBlocked,
 }
 
 // ShouldOfferIssue 判断这条错误是否值得开 Issue。

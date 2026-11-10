@@ -73,6 +73,12 @@ const messages: Record<Locale, Record<string, string>> = {
     'error.sampleMessage': '该视频需要登录才能访问',
     'error.title': '这个链接没有解析成功',
     'error.hint': '检查链接是否完整、视频是否公开；需要登录的视频请在设置中配置 Cookie。',
+    // platform-blocked 专用：抖音/快手要求请求签名或人机验证，配 Cookie 也没用，
+    // 所以这里必须给另一条出路，而不是继续引导去配 Cookie。
+    'error.hintBlocked': '该平台要求请求签名或人机验证，配置 Cookie 也无法解决。请在浏览器中打开该链接后手动下载。',
+    'subtitle.autoSection': '自动生成字幕（机器转录）',
+    'subtitle.autoNote': '自动字幕由语音识别生成，可能有错字或断句错误，适合检索不适合当正式稿。',
+    'subtitle.musicOnly': '这首是纯音频，没有画面可下载。',
     'error.retry': '重试',
     'error.settings': '打开 Cookie 设置',
 
@@ -431,6 +437,10 @@ const messages: Record<Locale, Record<string, string>> = {
     'error.sampleMessage': 'This video requires sign-in',
     'error.title': 'That link did not parse',
     'error.hint': 'Check that the link is complete and the video is public. For login-only videos, configure cookies in Settings.',
+    'error.hintBlocked': 'This site requires request signing or a captcha, which cookies cannot fix. Open the link in a browser and download it manually.',
+    'subtitle.autoSection': 'Auto-generated captions (machine transcript)',
+    'subtitle.autoNote': 'Auto captions come from speech recognition and may contain errors. Fine for searching, not for publishing.',
+    'subtitle.musicOnly': 'This is audio-only; there is no video to download.',
     'error.retry': 'Retry',
     'error.settings': 'Open cookie settings',
 

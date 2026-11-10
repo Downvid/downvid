@@ -44,8 +44,12 @@ type VideoInfo struct {
 	AudioTracks  []AudioTrack  `json:"audioTracks,omitempty"`
 	Subtitles    []Subtitle    `json:"subtitles,omitempty"`
 	AudioFormats []AudioFormat `json:"audioFormats,omitempty"`
-	IsYoutube    bool          `json:"isYoutube"`
-	ParseNotice  string        `json:"parseNotice"`
+	// AutomaticCaptions 是自动生成的字幕（机器转录），与 Subtitles 分开列出。
+	AutomaticCaptions []Subtitle `json:"automaticCaptions,omitempty"`
+	// Music 非空且 IsMusic=true 时表示这是歌曲而不是视频。
+	Music       *MusicInfo `json:"music,omitempty"`
+	IsYoutube   bool       `json:"isYoutube"`
+	ParseNotice string     `json:"parseNotice"`
 	// CacheFile 是原始 info JSON 的落盘路径，下载时用 --load-info-json 跳过二次提取
 	CacheFile string `json:"cacheFile,omitempty"`
 	// DirectURL 平台 CDN 直链（仅抖音/快手；有它时后端不走 yt-dlp）
@@ -149,6 +153,20 @@ type rawInfo struct {
 	Ext         string         `json:"ext"`
 	Formats     []rawFormat    `json:"formats"`
 	Subtitles   map[string]any `json:"subtitles"`
+	// AutomaticCaptions 是**自动生成**的字幕。
+	//
+	// 与 subtitles 分开：自动字幕是机器转录，可能不准，且几乎每个 YouTube 视频
+	// 都有几十种语言。只有用户主动要「自动字幕」时才列出，否则格式选择器会被
+	// 一百多条机器翻译淹没，把真正人工校对过的字幕挤到看不见。
+	AutomaticCaptions map[string]any `json:"automatic_captions"`
+	// 音乐元数据。纯音频站点（SoundCloud / Bandcamp / 各大音乐平台）靠这几项
+	// 判断「这是歌曲而不是视频」。
+	Track       string `json:"track"`
+	Artist      string `json:"artist"`
+	Album       string `json:"album"`
+	ReleaseYear int    `json:"release_year"`
+	// LiveStatus 为 "is_live" / "is_upcoming" 时是直播，没有可下载的成品文件。
+	LiveStatus string `json:"live_status"`
 }
 
 type rawFormat struct {
@@ -169,6 +187,28 @@ type rawFormat struct {
 	FilesizeAp int64   `json:"filesize_approx"`
 }
 
+// platformBlockedError 把「平台直连解析失败」包成带类别标记的错误。
+//
+// 不把解析器的原始错误直接抛给用户：那里面可能带 URL / 响应片段。
+// 只输出我方构造的固定文案；cause 仅用于错误链（`errors.Is`），
+// 不进入 Error()，避免把原始响应漏到界面上。
+func platformBlockedError(kind ErrorKind, platform string, cause error) error {
+	return wrappedError{
+		msg: fmt.Sprintf("[[parse-error:%s]]%s：%s",
+			kind, platform, ParseMessages[kind]),
+		cause: cause,
+	}
+}
+
+// wrappedError 是带 cause 的错误，供 `errors.Is/As` 穿透。
+type wrappedError struct {
+	msg   string
+	cause error
+}
+
+func (e wrappedError) Error() string { return e.msg }
+func (e wrappedError) Unwrap() error { return e.cause }
+
 // Parse 解析一个 URL。
 //
 // 失败时返回的错误消息带 `[[parse-error:kind]]` 标记（与 TS 版同一份契约），
@@ -183,7 +223,21 @@ func (p *Parser) Parse(opts ParseOptions) (*VideoInfo, error) {
 		return cached, nil
 	}
 
-	// 优先尝试平台专属高速 API（抖音 / 快手），~200ms 直出直链
+	// 优先尝试平台专属高速 API（抖音 / 快手）
+	//
+	// ## 为什么这两家失败后要直接返回，而不是回落到 yt-dlp
+	//
+	// 早先这里是 `if err == nil { return }`，**错误被静默丢弃**，然后继续走
+	// yt-dlp。结果是对这两家给出的是 yt-dlp 的错误，与真实原因无关：
+	//
+	//   - 抖音：真实原因是平台要求 a_bogus 请求签名（403 ArgusSecurityPlugin）。
+	//     带完整浏览器登录态实测仍是 403，**配 Cookie 解决不了**。而 yt-dlp 回的是
+	//     `Fresh cookies (not necessarily logged in) are needed`，界面于是让用户
+	//     反复去配 Cookie。
+	//   - 快手：yt-dlp 上游**没有** Kuaishou extractor，回落只会得到
+	//     `Unsupported URL`，被改判成「需要登录」，同样指向一条死路。
+	//
+	// 所以这里把解析器的错误原样上报：至少指向真实原因。
 	if IsDouyin(opts.URL) {
 		info, err := ParseDouyinAPI(opts.URL, opts.CookiesFile, opts.Proxy)
 		if err == nil && info != nil {
@@ -195,13 +249,15 @@ func (p *Parser) Parse(opts ParseOptions) (*VideoInfo, error) {
 		if errors.Is(err, errDouyinDeadLink) || errors.Is(err, errDouyinNeedsCookie) {
 			return nil, err
 		}
-
+		return nil, platformBlockedError(KindPlatformBlocked, "抖音", err)
 	}
 	if IsKuaishou(opts.URL) {
-		if info, err := ParseKuaishouAPI(opts.URL, opts.Proxy); err == nil && info != nil {
+		info, err := ParseKuaishouAPI(opts.URL, opts.CookiesFile, opts.Proxy)
+		if err == nil && info != nil {
 			p.toCache(key, info)
 			return info, nil
 		}
+		return nil, platformBlockedError(KindUnsupportedURL, "快手", err)
 	}
 
 	if opts.YtdlpPath == "" {
@@ -369,10 +425,92 @@ func (p *Parser) buildInfo(raw *rawInfo, isYoutube, allowManifests bool, opts Pa
 		info.AudioTracks = buildAudioTracks(raw.Formats)
 		info.AudioFormats = buildAudioFormats(raw.Formats)
 	}
+	// 非 YouTube 的纯音频站点（SoundCloud / Bandcamp / 音乐平台）也要能选音频。
+	//
+	// 变异点（修之前真实存在的问题）：这里原本只有 `if isYoutube`，于是
+	// SoundCloud 这类**只有音频格式**的站点：BuildVideoFormats 把所有格式都
+	// 过滤掉（它们 height=0），最后走兜底分支产出一条「最佳画质」的假视频格式，
+	// audioFormats 却是空的 —— 界面上既选不到音频，又把一首歌说成视频。
+	if !isYoutube && len(info.AudioFormats) == 0 {
+		info.AudioFormats = buildAudioFormats(raw.Formats)
+	}
 
 	info.Subtitles = buildSubtitles(raw.Subtitles)
+	info.AutomaticCaptions = buildSubtitles(raw.AutomaticCaptions)
+	if m := buildMusic(raw); m.IsMusic {
+		info.Music = &m
+	}
 
 	return info
+}
+
+// MusicInfo 是「这是一首歌」的识别结果。
+//
+// 单独一层的理由：前端要据此把界面从「选画质」换成「选音质」，
+// 并把标题显示成「歌手 - 曲名」而不是视频标题。
+type MusicInfo struct {
+	// IsMusic 表示这条链接大概率是歌曲而不是视频。
+	IsMusic bool   `json:"isMusic"`
+	Track   string `json:"track,omitempty"`
+	Artist  string `json:"artist,omitempty"`
+	Album   string `json:"album,omitempty"`
+	Year    int    `json:"year,omitempty"`
+}
+
+// buildMusic 判断一条链接是不是歌曲。
+//
+// 判据分两层，**先看站点给的元数据，再看格式形态**：
+//
+//  1. yt-dlp 给出 track/artist（SoundCloud、Bandcamp、YouTube Music）——
+//     这是站点自报的，最可信。
+//  2. 否则看格式：**全部**格式都没有视频流（vcodec 为 none 或空）且至少有一条
+//     音频，说明这条链接本身只有声音。若允许直播混入，会把「正在直播的音频
+//     电台」也算成歌曲，所以排除直播。
+//
+// 只凭扩展名判断（ext == "m4a"）是不够的：YouTube 的纯音频轨也是 m4a，
+// 但那条链接整体仍然是视频。
+func buildMusic(raw *rawInfo) MusicInfo {
+	m := MusicInfo{
+		Track:  strings.TrimSpace(raw.Track),
+		Artist: strings.TrimSpace(raw.Artist),
+		Album:  strings.TrimSpace(raw.Album),
+		Year:   raw.ReleaseYear,
+	}
+	if raw.LiveStatus != "" && raw.LiveStatus != "not_live" {
+		return MusicInfo{}
+	}
+	if m.Track != "" || m.Artist != "" {
+		m.IsMusic = true
+		return m
+	}
+
+	audioOnly := false
+	for _, f := range raw.Formats {
+		switch f.Vcodec {
+		case "none", "":
+			if f.Acodec != "" && f.Acodec != "none" {
+				audioOnly = true
+			}
+		default:
+			// 存在任何一条带视频流的格式 → 这是视频，不是歌曲
+			return MusicInfo{}
+		}
+	}
+	if !audioOnly {
+		return MusicInfo{}
+	}
+	// 站点没给曲名时退回标题，前端就不用为「有歌但没曲名」写分支
+	m.IsMusic = true
+	m.Track = strings.TrimSpace(raw.Title)
+	return m
+}
+
+// isAudioOnlyFormat 判断一条格式是否「纯音频」。
+//
+// 与 formats.go 的过滤条件必须一致，否则「音频列表」与「视频列表」会重叠。
+func isAudioOnlyFormat(f rawFormat) bool {
+	return (f.Vcodec == "none" || f.Vcodec == "") &&
+		f.Acodec != "" && f.Acodec != "none"
 }
 
 // buildAudioTracks 提取 YouTube 的多音轨。
@@ -491,6 +629,12 @@ func buildSubtitles(subs map[string]any) []Subtitle {
 
 	out := make([]Subtitle, 0, len(langs))
 	for _, lang := range langs {
+		// `live_chat` 不是字幕：直播录播里 yt-dlp 会把聊天回放放在 subtitles 下，
+		// 它不是可读文本（是需要播放器渲染的 JSON），列出来只会让用户下了个
+		// 打不开的文件。
+		if lang == "live_chat" {
+			continue
+		}
 		name, url := lang, ""
 		switch v := subs[lang].(type) {
 		case []any:

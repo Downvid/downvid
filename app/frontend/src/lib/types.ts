@@ -78,6 +78,15 @@ export interface SubtitleOption {
  * `platformId` / `platformName` / `host` 是**展示层**信息，由前端从 URL 推断
  * （平台名要翻译，后端给死文案就没法 i18n）。
  */
+/** 歌曲识别结果（后端 `parse.MusicInfo`）。 */
+export interface MusicInfo {
+  isMusic: boolean
+  track?: string
+  artist?: string
+  album?: string
+  year?: number
+}
+
 export interface VideoInfo {
   url: string
   platformId: PlatformId
@@ -91,6 +100,14 @@ export interface VideoInfo {
   audios: AudioOption[]
   tracks: TrackOption[]
   subtitles: SubtitleOption[]
+  /** 自动生成的字幕（机器转录），与人工字幕分开列 */
+  automaticCaptions: SubtitleOption[]
+  /**
+   * 歌曲信息。非空表示这条链接是歌曲而不是视频。
+   *
+   * 界面据此把「选画质」换成「选音质」，标题显示成「歌手 - 曲名」。
+   */
+  music?: MusicInfo
   needsCookies: boolean
   notice?: string
   /** 后端缓存的原始 info JSON（下载时 --load-info-json 用） */
@@ -172,7 +189,16 @@ export interface TaskItem {
   directUrl?: string
   /** 解析缓存的 info JSON 路径（下载时 --load-info-json 用） */
   cacheFile?: string
+  /** 选中的**人工**字幕语言码 */
   subtitles: string[]
+  /**
+   * 选中的**自动**字幕语言码。
+   *
+   * 与 subtitles 分开存而不是加 `auto:` 前缀塞进同一个数组：
+   * 后端要据此分别传 `--write-subs` 与 `--write-auto-subs`（yt-dlp 不会
+   * 因为语言码相同就自己分辨——只传 `--write-subs` 时自动字幕一条都下不到）。
+   */
+  autoSubtitles: string[]
   /** 最近 24 次采样的速度（画迷你折线用） */
   speedHistory: number[]
   filePath: string

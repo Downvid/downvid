@@ -324,8 +324,15 @@ func BuildVideoFormatsWithManifests(info FmtInfo, isYoutube bool, allowYoutubeMa
 	}
 	formats = deduped
 
-	// 兜底：站点没有提供可识别的分辨率信息时，交给 yt-dlp 自动选择最佳格式
-	if len(formats) == 0 && (len(info.Formats) > 0 || info.URL != "") {
+	// 兜底：站点没有提供可识别的分辨率信息时，交给 yt-dlp 自动选择最佳格式。
+	//
+	// **纯音频站点不要走这里**：SoundCloud / 音乐平台的格式 height 全为 0，
+	// 会全部被上面的过滤条件刷掉，于是落到这条兜底、产出一条叫「最佳画质」、
+	// `hasAudio=true` 的格式。界面上看起来像视频，实际点下去拿到的是一个音频
+	// 文件——而真正的音质列表（audioFormats）在另一栏。
+	// 有纯音频格式可选时，宁可让视频列表为空（前端据此只显示音频）。
+	if len(formats) == 0 && !hasAudioOnlyFormat(info.Formats) &&
+		(len(info.Formats) > 0 || info.URL != "") {
 		filesize := info.Filesize
 		if filesize == 0 {
 			filesize = 0
@@ -343,6 +350,21 @@ func BuildVideoFormatsWithManifests(info FmtInfo, isYoutube bool, allowYoutubeMa
 	}
 
 	return formats
+}
+
+// hasAudioOnlyFormat 报告是否存在可选的纯音频格式。
+//
+// formats.go 不能 import parse.go 的同名判断（同包），所以这里独立实现一份
+// 判别式，但**判据必须与 buildAudioFormats 的过滤条件逐字一致**：
+// 两处不一致会出现「界面说没有音频、兜底又造了一条视频」的自相矛盾。
+func hasAudioOnlyFormat(formats []RawFormat) bool {
+	for _, f := range formats {
+		if (f.Vcodec == "none" || f.Vcodec == "") &&
+			f.Acodec != nil && *f.Acodec != "" && *f.Acodec != "none" {
+			return true
+		}
+	}
+	return false
 }
 
 func defaultStr(v, fallback string) string {
