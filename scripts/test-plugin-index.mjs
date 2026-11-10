@@ -166,6 +166,38 @@ suite.case('added 与人工填写的 sites 不被每次扫描重置', async (t) 
   t.equal((p.sites || [])[0], 'bilibili.com', '人工填的 sites 应保留')
 })
 
+suite.case('icon 与 version 被收录进索引', async (t) => {
+  const dir = tempIndex()
+  await runWithManifest(dir, {
+    id: 'bilibili', name: 'B站', playback: 'downvid-parser',
+    version: '1.4.2', icon: '🧩', sites: ['bilibili.com'],
+  })
+  const p = readIndex(dir).plugins[0]
+  t.equal(p.version, '1.4.2', '版本要进索引，界面靠它判断能否更新')
+  t.equal(p.icon, '🧩', 'emoji 图标应保留')
+  t.equal((p.sites || [])[0], 'bilibili.com')
+})
+
+suite.case('http(s) 图片图标被保留', async (t) => {
+  const dir = tempIndex()
+  await runWithManifest(dir, {
+    id: 'img', name: 'Img', playback: 'downvid-parser',
+    icon: 'https://example.com/logo.png',
+  })
+  t.equal(readIndex(dir).plugins[0].icon, 'https://example.com/logo.png')
+})
+
+suite.case('危险 icon 被丢弃（索引会进界面，不能当注入点）', async (t) => {
+  for (const bad of ['javascript:alert(1)', '<svg onload=alert(1)>', 'x'.repeat(40)]) {
+    const dir = tempIndex()
+    await runWithManifest(dir, { id: 'bad', name: 'Bad', playback: 'downvid-parser', icon: bad })
+    const p = readIndex(dir).plugins[0]
+    // 插件本身仍被收录，只是图标丢掉——图标是装饰，不该让整条消失
+    t.equal(p.id, 'bad', `插件应仍被收录（icon=${JSON.stringify(bad)}）`)
+    t.equal(p.icon || '', '', `危险 icon 必须丢弃：${JSON.stringify(bad)}`)
+  }
+})
+
 suite.case('--dry-run 不写文件', async (t) => {
   const dir = tempIndex()
   const before = fs.readFileSync(path.join(dir, 'index.json'), 'utf8')

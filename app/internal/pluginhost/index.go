@@ -47,6 +47,10 @@ type Entry struct {
 	Author      string   `json:"author,omitempty"`
 	Sites       []string `json:"sites,omitempty"`
 	Added       string   `json:"added,omitempty"`
+	// Icon 是 emoji 或 http(s) 图片地址。空则界面用名称首字。
+	Icon string `json:"icon,omitempty"`
+	// Version 取自 plugin.json，界面用它判断「可更新」。
+	Version string `json:"version,omitempty"`
 }
 
 // Index 是整份索引。
@@ -108,7 +112,29 @@ func validateEntry(e Entry) error {
 	if strings.ContainsAny(e.ID, "/\\.") || strings.Contains(e.ID, "..") {
 		return fmt.Errorf("id %q 含非法字符", e.ID)
 	}
+	// icon 会直接进界面：只允许短 emoji 串或 http(s) 地址。
+	// 放任 `javascript:` 之类等于把索引文件变成注入点。
+	if e.Icon != "" && !validIcon(e.Icon) {
+		e.Icon = ""
+	}
 	return nil
+}
+
+// validIcon 判断 icon 是不是可以安全渲染的值。
+func validIcon(s string) bool {
+	if isHTTPURL(s) {
+		return true
+	}
+	// emoji：长度很短且不含控制字符与尖括号
+	if len([]rune(s)) > 8 || strings.ContainsAny(s, "<>\"'&") {
+		return false
+	}
+	for _, r := range s {
+		if r < 0x20 {
+			return false
+		}
+	}
+	return true
 }
 
 // ValidRepo 报告 s 是否是 `owner/name`。

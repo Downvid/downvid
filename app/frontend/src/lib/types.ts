@@ -273,6 +273,12 @@ export interface PluginEntry {
   repo: string
   author?: string
   sites?: string[]
+  /** emoji 或图片地址；空则界面用名称首字 */
+  icon?: string
+  /** 索引里的最新版本 */
+  version?: string
+  /** 本机已装版本（未装为空） */
+  installedVersion?: string
   installed: boolean
   /** 非空表示装了但加载失败，界面要显示原因而不是让用户以为装好了 */
   loadError?: string

@@ -152,6 +152,27 @@ function sitesOf(m) {
   return []
 }
 
+/**
+ * 取图标。只接受 emoji 短串或 http(s) 地址。
+ *
+ * 与 Go 侧 validIcon 同一判据：icon 会直接进界面，放行 `javascript:` 或带标签的
+ * 字符串等于把索引文件变成注入点。这里不通过就丢弃，而不是把整条插件拒掉——
+ * 图标只是装饰。
+ */
+function iconOf(m, prev) {
+  const raw = typeof m?.icon === 'string' ? m.icon.trim() : ''
+  if (!raw) return prev?.icon || ''
+  if (/^https?:\/\//i.test(raw)) return raw
+  if ([...raw].length > 8 || /[<>"'&]/.test(raw)) return ''
+  return raw
+}
+
+/** 版本号：取自 plugin.json，界面用它判断「可更新」 */
+function versionOf(m, prev) {
+  const v = typeof m?.version === 'string' ? m.version.trim() : ''
+  return v || prev?.version || ''
+}
+
 async function main() {
   const DRY = isDryRun()
   if (!exists('index.json')) {
@@ -206,7 +227,10 @@ async function main() {
       description: manifest.description || prev?.description || '',
       repo,
       author: manifest.author || prev?.author || '',
-      sites: sitesOf(prev) .length ? sitesOf(prev) : sitesOf(manifest),
+      sites: sitesOf(prev).length ? sitesOf(prev) : sitesOf(manifest),
+      // 人工填过的 icon 优先（作者可能只在索引里指定过）；否则跟随 manifest
+      icon: iconOf(manifest, prev),
+      version: versionOf(manifest, prev),
       added: prev?.added || new Date().toISOString().slice(0, 10),
     })
   }

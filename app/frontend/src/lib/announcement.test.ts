@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { fetchAnnouncement, mirrorSources, parseAnnouncement } from './announcement'
+import { fetchAnnouncement, mirrorSources, parseAnnouncement, parseSpans } from './announcement'
 
 /**
  * 公告（作者的话）的远端读取与降级。
@@ -93,7 +93,43 @@ describe('parseAnnouncement', () => {
   it('没有 frontmatter 时用默认标题，正文仍能解析', () => {
     const doc = parseAnnouncement('就是一段话')
     expect(doc.title).toBe('Announcement')
-    expect(doc.blocks[0]).toEqual({ type: 'p', text: '就是一段话' })
+    // 现在块里多带一份 spans（行内片段），文本仍是原文
+    expect(doc.blocks[0].text).toBe('就是一段话')
+    expect(doc.blocks[0].spans).toEqual([{ text: '就是一段话' }])
+  })
+})
+
+// ===== 行内链接 =====
+//
+// 公告正文原来按纯文本渲染，`[文字](https://…)` 会原样显示成一串 Markdown，
+// 用户点不了。插件公告全靠一个超链接指路，所以这条必须成立。
+describe('parseSpans', () => {
+  it('把 Markdown 链接拆成可点的片段', () => {
+    const spans = parseSpans('看这份 [开发指南](https://example.com/doc) 就行')
+    expect(spans).toEqual([
+      { text: '看这份 ' },
+      { text: '开发指南', href: 'https://example.com/doc' },
+      { text: ' 就行' },
+    ])
+  })
+
+  it('一行里多个链接都要认', () => {
+    const spans = parseSpans('[a](https://a.test) 和 [b](https://b.test)')
+    expect(spans.filter((s) => s.href).map((s) => s.text)).toEqual(['a', 'b'])
+  })
+
+  it('非 http(s) 的链接不生成 href（公告来自网络，不能当注入点）', () => {
+    // 放行这些等于给一个远端文本文件执行能力
+    for (const bad of ['javascript:alert(1)', 'data:text/html,x', 'file:///etc/passwd']) {
+      const spans = parseSpans(`[点我](${bad})`)
+      expect(spans.some((s) => s.href)).toBe(false)
+      // 原样保留成文字，不吞掉作者写的内容
+      expect(spans.map((s) => s.text).join('')).toContain(bad)
+    }
+  })
+
+  it('没有链接时返回原文一片', () => {
+    expect(parseSpans('普通文字')).toEqual([{ text: '普通文字' }])
   })
 })
 

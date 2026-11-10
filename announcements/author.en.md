@@ -1,16 +1,31 @@
 ---
-title: The Future of DownVid
-date: 2026-10-25
+title: Plugins Are Coming
+date: 2026-11-11
 signature: Black Cat
 ---
 
-## New Architecture
-The brand-new architecture you are experiencing with this announcement is a much better fit compared to the legacy version.
-However, I do not have spare machines. If Windows users encounter issues, they are hard to detect without filed issues. If you run into any problems using the new version, please submit an issue on GitHub — we will fix them and release updates promptly.
+## Next release: installable plugins
 
-## Legacy Architecture
-The legacy version was excessively bloated and very slow, taking up to 23 seconds to parse links in real-world tests.
-The contribution value of legacy version users is low. I will gradually wind down iterations on the legacy version over the next few releases and focus fully on the new architecture. In the meantime, legacy users receiving updates will see prompts encouraging them to switch to the new version.
+Site parsing won't be limited to what ships in the app. The next version opens a **plugin system**: anyone can write a plugin so DownVid understands a new site. Install it and it works — no release from us required.
 
-## Looking Forward
-If you have great ideas or suggestions, pull requests and issues are warmly welcomed!
+A plugin runs in its own runtime and does exactly one thing: **tell DownVid what a link is** — title, uploader, the available qualities, and a direct URL. Downloading stays inside DownVid, so resume, concurrent chunks and progress reporting behave the same as always.
+
+## Why write one
+
+- A site you care about isn't supported officially? Write it yourself, in a few dozen lines of JavaScript
+- No Go, no patching the main app
+- Every plugin makes the supported list a little longer
+
+## How
+
+The protocol, permissions, examples and submission steps live here:
+
+[Plugin development guide](https://github.com/Downvid/downvid/blob/main/docs/dev/plugins.md)
+
+Two things get a plugin listed: declare `"playback": "downvid-parser"` in its `plugin.json`, and tag the repository with `downvid-plugin`. The index picks it up automatically and it shows up in the in-app plugin list.
+
+## A word on trust
+
+Plugins are written and published by **third parties** and are not part of this project. We check that they install and don't obviously misbehave, but we can't promise they keep working, and we can't judge whether using one is acceptable for you.
+
+Open the repository link in the plugin list and read the source — that's the part you can verify yourself. Plugins that misbehave are removed from the index, and removals are recorded publicly.

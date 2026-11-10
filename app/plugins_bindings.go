@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/Downvid/downvid/app/internal/netx"
@@ -22,7 +24,13 @@ type PluginEntryView struct {
 	Repo        string   `json:"repo"`
 	Author      string   `json:"author,omitempty"`
 	Sites       []string `json:"sites,omitempty"`
-	// Installed 表示本机 plugins/<id> 目录存在。
+	// Icon 是 emoji 或 http(s) 图片地址；空则界面用名称首字。
+	Icon string `json:"icon,omitempty"`
+	// Version 是索引里记录的最新版本。
+	Version string `json:"version,omitempty"`
+	// InstalledVersion 是本机已安装的版本（未装时为空）。
+	InstalledVersion string `json:"installedVersion,omitempty"`
+	// Installed 表示本机 plugins/<id> 目录存在且含 plugin.json。
 	Installed bool `json:"installed"`
 	// LoadError 非空表示目录在但加载失败（契约不符、语法错误等），
 	// 界面据此显示「已安装但未生效」而不是让用户以为装成功了。
@@ -62,6 +70,8 @@ func (a *App) ListPlugins() PluginListView {
 				view.Entries = append(view.Entries, PluginEntryView{
 					ID: e.ID, Name: e.Name, Description: e.Description,
 					Repo: e.Repo, Author: e.Author, Sites: e.Sites,
+					Icon:      e.Icon,
+					Version:   e.Version,
 					Installed: installed[e.ID],
 				})
 			}
@@ -81,6 +91,13 @@ func (a *App) ListPlugins() PluginListView {
 			ID: id, Name: id, Installed: true,
 			Description: "本机已安装（不在索引中）",
 		})
+	}
+
+	// 本机已装版本的版本号：界面用它判断「可更新」
+	for i := range view.Entries {
+		if view.Entries[i].Installed {
+			view.Entries[i].InstalledVersion = readInstalledPluginVersion(a.pluginHostDir(), view.Entries[i].ID)
+		}
 	}
 
 	// 加载失败的原因填进去，让「已安装但没生效」可见
@@ -136,4 +153,25 @@ func (a *App) UninstallPlugin(id string) error {
 		return fmt.Errorf("卸载插件失败：%w", err)
 	}
 	return nil
+}
+
+// readInstalledPluginVersion 读本机插件的版本号。
+//
+// 读失败返回空串而不是报错：版本号只用于「能否更新」的提示，
+// 读不到时界面显示「已安装」，不影响使用。
+func readInstalledPluginVersion(pluginsDir, id string) string {
+	if !pluginhost.ValidPluginID(id) {
+		return ""
+	}
+	raw, err := os.ReadFile(filepath.Join(pluginsDir, id, "plugin.json"))
+	if err != nil {
+		return ""
+	}
+	var m struct {
+		Version string `json:"version"`
+	}
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(m.Version)
 }

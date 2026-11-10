@@ -165,6 +165,8 @@ type Bindings = {
   ListPlugins(): Promise<PluginList>
   ReloadPlugins(): Promise<PluginList>
   UninstallPlugin(id: string): Promise<void | null>
+  InstallPlugin(id: string): Promise<void | null>
+  UpdatePlugin(id: string): Promise<void | null>
   DepsSummary(): Promise<Record<string, unknown>>
   InstallDeps(opts: Record<string, unknown>): Promise<{ ok: boolean; error?: string }>
   CancelDepsInstall(): Promise<boolean>
@@ -997,6 +999,35 @@ export async function reloadPlugins(): Promise<PluginList> {
   } catch (e) {
     return { entries: [], dir: '', indexError: String((e as Error)?.message ?? e) }
   }
+}
+
+/** 安装插件（从索引里的仓库下载）。 */
+export async function installPlugin(id: string): Promise<{ ok: boolean; error?: string }> {
+  const b = await backend()
+  if (!b) return { ok: false, error: '当前是浏览器预览，没有后端' }
+  try {
+    await b.InstallPlugin(id)
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message ?? e) }
+  }
+}
+
+/** 更新插件（重装以取最新版本）。 */
+export async function updatePlugin(id: string): Promise<{ ok: boolean; error?: string }> {
+  const b = await backend()
+  if (!b) return { ok: false, error: '当前是浏览器预览，没有后端' }
+  try {
+    await b.UpdatePlugin(id)
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message ?? e) }
+  }
+}
+
+/** 订阅插件安装进度。 */
+export async function onPluginProgress(cb: (p: unknown) => void): Promise<() => void> {
+  return subscribe('plugin:progress', cb)
 }
 
 /** 卸载一个插件（只删插件本体，保留它的数据目录）。 */

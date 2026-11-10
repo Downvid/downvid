@@ -47,9 +47,11 @@ import {
   historyDelete,
   historyList,
   installDeps,
+  installPlugin,
   loadSettings,
   managedDir,
   onDepsProgress,
+  onPluginProgress,
   onProgress,
   openExternal,
   openPath,
@@ -61,6 +63,7 @@ import {
   resetSettings as backendResetSettings,
   saveSettings,
   showInFolder,
+  updatePlugin,
   pickDirectory,
   pickFile,
   platform as backendPlatform,
@@ -90,6 +93,7 @@ import type {
   DepItem,
   Dialog,
   HistoryItem,
+  PluginEntry,
   PluginList,
   SettingsSection,
   TaskItem,
@@ -98,6 +102,7 @@ import type {
   VideoInfo,
 } from './types'
 import { detectPlatform, extractUrl, hostOf, platformName } from './url'
+import { countPlugins, filterPlugins, hasUpdate, type PluginFilter } from './plugin-filter'
 
 /** 在数组里加入/移除一个值（纯函数，便于单测）。 */
 function toggle(list: string[], value: string): string[] {
@@ -223,7 +228,13 @@ class AppStore {
   /** 插件列表（索引 + 本机状态） */
   plugins = $state<PluginList>({ entries: [], dir: '' })
   pluginsLoading = $state(false)
-  /** 是否已经拉过一次：切换页面时不重复请求 */
+  /** 正在安装/更新的插件 id → 阶段文案 */
+  pluginBusy = $state<Record<string, string>>({})
+  /** 插件搜索词（纯前端过滤，不发请求） */
+  pluginSearch = $state('')
+  /** 插件筛选：全部 / 已安装 / 可更新 / 未安装 */
+  pluginFilter = $state<PluginFilter>('all')
+  /** 是否已拉过一次：重复切页不重复请求 */
   private pluginsLoaded = false
   depsPromptBusy = $state(false)
   depsPromptProgress = $state(0)
@@ -1249,6 +1260,51 @@ class AppStore {
   // ============================================================
 
   /** 首屏静默探测：失败不弹错（缺依赖时解析会给出可行动提示） */
+  /** 过滤后的插件列表（纯逻辑在 lib/plugin-filter.ts，可单测） */
+  get filteredPlugins(): PluginEntry[] {
+    return filterPlugins(this.plugins.entries, this.pluginSearch, this.pluginFilter)
+  }
+
+  /** 各筛选项下的数量 */
+  get pluginCounts() {
+    return countPlugins(this.plugins.entries)
+  }
+
+  /** 该插件是否可更新（已装且版本不同）。 */
+  pluginHasUpdate(p: PluginEntry): boolean {
+    return hasUpdate(p)
+  }
+
+  /** 安装或更新一个插件。`update` 只影响提示文案。 */
+  async installOrUpdatePlugin(id: string, update = false): Promise<void> {
+    if (this.pluginBusy[id]) return
+    this.pluginBusy = { ...this.pluginBusy, [id]: update ? t('plugins.updating') : t('plugins.installing') }
+    const off = await onPluginProgress((raw) => {
+      const p = raw as { id?: string; stage?: string; message?: string }
+      if (p?.id !== id) return
+      if (p.stage === 'error') return
+      const text =
+        p.stage === 'done' ? t('plugins.updated')
+        : p.stage === 'installing' ? t('plugins.installing')
+        : (p.message || t('plugins.installing'))
+      this.pluginBusy = { ...this.pluginBusy, [id]: text }
+    })
+    try {
+      const res = update ? await updatePlugin(id) : await installPlugin(id)
+      if (!res.ok) {
+        this.toast(res.error || t('plugins.failed'), 'error')
+        return
+      }
+      this.toast(update ? t('plugins.updated') : t('plugins.installedToast'), 'success')
+      await this.loadPlugins(true)
+    } finally {
+      off()
+      const next = { ...this.pluginBusy }
+      delete next[id]
+      this.pluginBusy = next
+    }
+  }
+
   /**
    * 拉取插件列表。
    *

@@ -24,7 +24,24 @@
   function openRepo(): void {
     openExternal(REPO_URL)
   }
+
+
 </script>
+
+<!--
+  渲染一段文字，把其中的 `[文字](url)` 变成可点链接。
+
+  用 snippet 而不是 {@html}：公告来自远端文件，走 innerHTML 等于把注入面
+  交给一个网络响应。这里只产出按钮与文本节点，无法注入标签。
+  snippet 必须放在模板里（不能写在 <script> 内）。
+-->
+{#snippet richText(block: { text: string; spans?: { text: string; href?: string }[] })}
+  {#each block.spans ?? [{ text: block.text }] as span}
+    {#if span.href}
+      <button type="button" class="inline-link" onclick={() => openExternal(span.href!)}>{span.text}</button>
+    {:else}{span.text}{/if}
+  {/each}
+{/snippet}
 
 <div
   class="overlay"
@@ -70,14 +87,14 @@
       {:else if doc}
         {#each doc.blocks as block, index (index)}
           {#if block.type === 'h2'}
-            <h3>{block.text}</h3>
+            <h3>{@render richText(block)}</h3>
           {:else if block.type === 'li'}
             <div class="list-item">
               <span class="bullet"></span>
-              <span>{block.text}</span>
+              <span>{@render richText(block)}</span>
             </div>
           {:else}
-            <p>{block.text}</p>
+            <p>{@render richText(block)}</p>
           {/if}
         {/each}
       {/if}
@@ -174,6 +191,18 @@
     flex-direction: column;
     gap: 11px;
   }
+  .inline-link {
+    display: inline;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--accent-deep);
+    font: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
   .dialog-body p {
     margin: 0;
     font-size: 12px;

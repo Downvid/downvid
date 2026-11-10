@@ -22,9 +22,26 @@ import authorEn from '../announcements/author.en.md?raw'
 import type { Locale } from './i18n.svelte'
 import { mirrorUrls } from './remote'
 
+/**
+ * 行内片段：普通文字或链接。
+ *
+ * 公告正文原来只当纯文本渲染，于是 `[文字](https://…)` 会原样显示成一串
+ * Markdown，用户点不了。这里把链接拆出来单独渲染，正文其余部分仍按纯文本走
+ * （不引入完整 Markdown 渲染器：公告是我们自己写的，不需要那份复杂度，
+ * 也不值得为此多一个 XSS 面）。
+ */
+export interface AnnouncementSpan {
+  text: string
+  /** 非空表示这一段是链接（只接受 http/https） */
+  href?: string
+}
+
 export interface AnnouncementBlock {
   type: 'p' | 'h2' | 'li'
+  /** 纯文本形式（保留给测试与无障碍读取） */
   text: string
+  /** 行内片段，界面按段渲染以便链接可点 */
+  spans?: AnnouncementSpan[]
 }
 
 export interface AnnouncementDoc {
@@ -54,13 +71,40 @@ function parseFrontmatter(raw: string): { meta: Record<string, string>; body: st
   return { meta, body: text }
 }
 
+/**
+ * 把一行文字拆成「文字 + 链接」片段。
+ *
+ * 只认 `[文字](url)` 这一种形态，且 url 必须是 http(s)。
+ * 不是 http(s) 的一律当普通文字——公告内容会被渲染进界面，
+ * 放行 `javascript:` 等于给公告文件一个注入点。
+ */
+export function parseSpans(line: string): AnnouncementSpan[] {
+  const spans: AnnouncementSpan[] = []
+  const re = /\[([^\]]+)\]\(([^)\s]+)\)/g
+  let last = 0
+  for (let m = re.exec(line); m; m = re.exec(line)) {
+    if (m.index > last) spans.push({ text: line.slice(last, m.index) })
+    const href = m[2]
+    if (/^https?:\/\//i.test(href)) {
+      spans.push({ text: m[1], href })
+    } else {
+      // 不安全的协议：原样保留成文字，不生成链接
+      spans.push({ text: m[0] })
+    }
+    last = m.index + m[0].length
+  }
+  if (last < line.length) spans.push({ text: line.slice(last) })
+  return spans.length ? spans : [{ text: line }]
+}
+
 export function parseAnnouncement(raw: string): AnnouncementDoc {
   const { meta, body } = parseFrontmatter(raw)
   const blocks: AnnouncementBlock[] = []
   const paragraph: string[] = []
   const flush = (): void => {
     if (paragraph.length) {
-      blocks.push({ type: 'p', text: paragraph.join(' ').trim() })
+      const text = paragraph.join(' ').trim()
+      blocks.push({ type: 'p', text, spans: parseSpans(text) })
       paragraph.length = 0
     }
   }
@@ -73,12 +117,14 @@ export function parseAnnouncement(raw: string): AnnouncementDoc {
     }
     if (line.startsWith('## ')) {
       flush()
-      blocks.push({ type: 'h2', text: line.slice(3).trim() })
+      const text = line.slice(3).trim()
+      blocks.push({ type: 'h2', text, spans: parseSpans(text) })
       continue
     }
     if (line.startsWith('- ')) {
       flush()
-      blocks.push({ type: 'li', text: line.slice(2).trim() })
+      const text = line.slice(2).trim()
+      blocks.push({ type: 'li', text, spans: parseSpans(text) })
       continue
     }
     paragraph.push(line)
