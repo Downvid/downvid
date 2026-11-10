@@ -33,7 +33,7 @@ bash app/scripts/build.sh         # 端到端构建
 (cd app && wails dev)             # 只调界面
 ```
 
-前置：Node ≥ 22、pnpm ≥ 8、Go ≥ 1.25、Wails CLI v2.16。
+前置：Node ≥ 22、pnpm ≥ 8、Go ≥ 1.27.3、Wails CLI v2.16。
 yt-dlp / ffmpeg **不需要**预装，见 [`docs/dev/runtime-deps.md`](docs/dev/runtime-deps.md)。
 
 `wails dev` 打出的应用**没有依赖边车**，依赖页只会显示「探测程序缺失」，构建过程也不会警告。
@@ -131,6 +131,19 @@ pnpm lint:docs                       # 本文件 ↔ CLAUDE.md ↔ 代码
 - **解析缓存要有条数上限**：每条持有完整 info JSON
 
 详见 [`docs/dev/download.md`](docs/dev/download.md)。
+
+## 插件系统要点
+
+- **插件只回答「这是什么」**：返回元数据与直链，不碰字节；下载仍由 `internal/fetch` /
+  `internal/download` 执行，续传与进度一行不用重写
+- **`app/internal/pluginhost` 是唯一 import 第三方插件运行时的包**，目的就是守住
+  `internal` 各包零依赖（否则「只想用解析器」的地方会被拖进一个 JS 引擎）
+- **`playback` 必须是 `downvid-parser`**：宿主靠它区分本项目的解析插件与其他 MyGo
+  生态插件（后者是 `stream`，`resolve` 语义完全不同）
+- **插件返回 `null` = 不认领**，是正常路径；抛异常才算该插件出错，不能连累其他插件
+- **返回值必须校验**：空标题 / 无格式 / 非 http(s) 直链一律报错，宁可失败也不猜
+
+详见 [`docs/dev/plugins.md`](docs/dev/plugins.md)。
 
 ## 跨平台构建的坑
 

@@ -8,7 +8,7 @@
 
 - Node.js 22+
 - pnpm >= 8
-- Go 1.24+（编译依赖边车 `backend/cmd/downvid-deps`）
+- Go 1.27.3+（编译依赖边车 `backend/cmd/downvid-deps` 与插件宿主）
 - Git
 
 > yt-dlp / ffmpeg 无需预先安装：运行时由边车自动识别系统里已有的版本，

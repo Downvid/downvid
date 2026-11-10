@@ -37,6 +37,7 @@ import (
 	"github.com/Downvid/downvid/app/internal/jsruntime"
 	"github.com/Downvid/downvid/app/internal/netx"
 	"github.com/Downvid/downvid/app/internal/parse"
+	"github.com/Downvid/downvid/app/internal/pluginhost"
 	"github.com/Downvid/downvid/app/internal/settings"
 	"github.com/Downvid/downvid/app/internal/shell"
 	"github.com/Downvid/downvid/app/internal/sidecar"
@@ -938,6 +939,25 @@ func runSidecar(sidecar string, args ...string) (string, error) {
 // 失败时返回带 `[[parse-error:kind]]` 标记的错误消息，前端据此显示可行动提示
 // （分类逻辑在 `internal/parse`，前端不重复实现——两处各判一次必然漂移）。
 func (a *App) Parse(url string, proxy string) (*parse.VideoInfo, error) {
+	// 插件优先。插件是用户自己装的，认领链接时应当先于内置解析器与 yt-dlp：
+	// 用户装它就是为了覆盖某个站点，若让 yt-dlp 先答，插件永远轮不到。
+	//
+	// 三种结果要分开处理：
+	//   - 有插件认领且解析成功 → 直接返回
+	//   - 没有插件认领（ErrNoPluginMatched）→ 继续走原来的链路，**不是错误**
+	//   - 插件出错 → 报给用户，但**不阻断**后续解析
+	//     （一个坏插件不该让用户连别的站点都解析不了）
+	if info, pluginID, err := a.tryPlugins(url); info != nil {
+		// 插件给的是直链时，缓存它：直链有效期通常只有几分钟，
+		// 缓存是为了让「解析后马上点下载」复用同一份签名地址。
+		if pluginID != "" {
+			log.Printf("[downvid] 由插件 %s 解析：%s", pluginID, url)
+		}
+		return info, nil
+	} else if err != nil && !errors.Is(err, pluginhost.ErrNoPluginMatched) {
+		log.Printf("[downvid] 插件解析失败（继续尝试内置解析器）：%v", err)
+	}
+
 	ytdlp := a.ResolveYtdlp()
 	// 抖音和快手拥有专属原生 API 解析，不需要 yt-dlp
 	if ytdlp == "" && !parse.IsDouyin(url) && !parse.IsKuaishou(url) {

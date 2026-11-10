@@ -39,7 +39,7 @@ bash app/scripts/build.sh         # end-to-end build
 (cd app && wails dev)             # UI work only
 ```
 
-Requires Node ≥ 22, pnpm ≥ 8, Go ≥ 1.25, Wails CLI v2.16.
+Requires Node ≥ 22, pnpm ≥ 8, Go ≥ 1.27.3, Wails CLI v2.16.
 yt-dlp / ffmpeg need **no** pre-install; see [`docs/dev/runtime-deps.md`](docs/dev/runtime-deps.md).
 
 An app built by `wails dev` has **no dependency sidecar**, so the dependencies page
@@ -144,6 +144,22 @@ A file with ≥15% (and ≥8 lines) taken verbatim from upstream Videdown must b
 - **The parse cache needs a record cap**: each entry holds a whole info JSON
 
 See [`docs/dev/download.md`](docs/dev/download.md).
+
+## Plugin system
+
+- **A plugin answers "what is this", nothing more**: it returns metadata and a direct
+  URL; bytes are still fetched by `internal/fetch` / `internal/download`, so resume,
+  concurrency and progress need no rewrite
+- **`app/internal/pluginhost` is the only package importing the third-party plugin
+  runtime**, which keeps `internal` packages dependency-free of each other
+- **`playback` must be `downvid-parser`**: the host uses it to tell this project's
+  parser plugins from other MyGo ecosystem plugins (`stream`, different `resolve`)
+- **Returning `null` means "not mine"** and is a normal path; throwing marks that one
+  plugin as broken and must not affect the others
+- **Results are validated**: empty title, no formats, or a non-http(s) direct URL is an
+  error -- fail rather than guess
+
+See [`docs/dev/plugins.md`](docs/dev/plugins.md).
 
 ## Cross-platform build traps
 
