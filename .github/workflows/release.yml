@@ -329,35 +329,32 @@ jobs:
             '  end tell' \
             'end tell' \
             > "$ROOT/layout.applescript"
-          # **必须给 osascript 加超时**：CI runner 没有可用的 Finder，
-          # osascript 会一直阻塞等 AppleEvent 回应，不会报错也不会返回。
-          # 曾经因此在 macOS 打包步骤挂满 15 分钟、整个发布被取消
-          # （Build 已经成功，卡的是这一步）。
-          # 这里 60 秒拿不到结果就放弃布局——DMG 依然可用，只是没有背景图。
-          if command -v timeout >/dev/null 2>&1; then
-            timeout 60 osascript "$ROOT/layout.applescript" \
-              || echo "::warning::Finder 布局超时或失败，DMG 将没有背景图"
+          # Finder 布局（背景图 + 图标位置）只在**有人登录的桌面会话**里能成功。
+          # GitHub 的 macOS runner 是 headless 的，Finder 根本没有挂载这个卷，
+          # AppleScript 会报 `Finder got an error: Can't get disk "DownVid". (-1728)`。
+          #
+          # 实测（2026-11-10 的 v1.11.0 发布）：这段即使把错误降级成 warning，
+          # 整步仍以 exit 1 结束，导致 mac 产物缺失、Release 少了 macOS 一栏。
+          # 所以不再让它参与判断——**CI 上一律跳过布局**，DMG 只是没有背景图。
+          # 本地手工打包（有桌面会话）时仍可执行，靠 DOWNVID_DMG_LAYOUT=1 打开。
+          #
+          # 原先这里还有一段「osascript 阻塞 15 分钟」的兜底：那个场景发生在
+          # 早期用 timeout 包住时。现在整段跳过，不再需要。
+          if [ "${DOWNVID_DMG_LAYOUT:-0}" = "1" ]; then
+            echo "::group::Finder 布局"
+            osascript "$ROOT/layout.applescript" \
+              || echo "::warning::Finder 布局失败，DMG 将没有背景图"
+            echo "::endgroup::"
           else
-            # macOS runner 默认没有 GNU timeout，用后台 + 轮询兜底
-            osascript "$ROOT/layout.applescript" &
-            AS_PID=$!
-            waited=0
-            while kill -0 "$AS_PID" 2>/dev/null && [ "$waited" -lt 60 ]; do
-              sleep 2
-              waited=$((waited + 2))
-            done
-            if kill -0 "$AS_PID" 2>/dev/null; then
-              kill -9 "$AS_PID" 2>/dev/null || true
-              echo "::warning::Finder 布局超时，已终止；DMG 将没有背景图"
-            else
-              wait "$AS_PID" 2>/dev/null || echo "::warning::Finder 布局失败，DMG 将没有背景图"
-            fi
+            echo "::notice::跳过 Finder 布局（headless runner 上必定失败），DMG 无背景图"
           fi
 
+          echo "::group::卸载并压缩 DMG"
           sync
           hdiutil detach "$MOUNT" -quiet || hdiutil detach "$MOUNT" -force -quiet
           hdiutil convert "$RW" -format UDZO -imagekey zlib-level=9 \
             -o "../../../DownVid-Wails-${{ matrix.suffix }}-${v}.dmg" >/dev/null
+          echo "::endgroup::"
           rm -rf "$ROOT"
           ls -la ../../../DownVid-Wails-*
 
