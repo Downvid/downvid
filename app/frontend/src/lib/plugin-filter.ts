@@ -9,6 +9,11 @@ import type { PluginEntry } from './types'
 
 export type PluginFilter = 'all' | 'installed' | 'updatable' | 'available'
 
+/** 是否能安装：被拦下的（如缺风险声明）一律不能。 */
+export function canInstall(p: PluginEntry): boolean {
+  return !p.installed && Boolean(p.repo) && !p.blockedReason
+}
+
 /** 该插件是否有新版本可更新。 */
 export function hasUpdate(p: PluginEntry): boolean {
   return Boolean(p.installed && p.version && p.installedVersion && p.version !== p.installedVersion)

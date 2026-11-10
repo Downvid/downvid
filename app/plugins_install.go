@@ -49,6 +49,20 @@ func (a *App) InstallPlugin(id string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
 	defer cancel()
 
+	// 安装前再核一次风险声明。
+	//
+	// 收录时已经查过，但索引是几天前抓的，作者完全可能在这之后把 README 里那句
+	// 声明删掉——而用户是**现在**才点安装。责任条款必须覆盖到「实际发生的这次安装」。
+	if err := pluginhost.VerifyRepoDisclaimer(ctx, client, entry.Repo); err != nil {
+		var de *pluginhost.DisclaimerError
+		if errors.As(err, &de) {
+			why := de.Reason + "\n\n" + pluginhost.DisclaimerHint
+			a.emitPluginProgress(PluginProgress{ID: id, Stage: "error", Message: de.Reason})
+			return errors.New("这个插件不能安装：" + why)
+		}
+		return fmt.Errorf("校验插件声明失败：%w", err)
+	}
+
 	a.emitPluginProgress(PluginProgress{ID: id, Stage: "downloading"})
 	if _, err := gh.Install(ctx, entry.Repo, dir); err != nil {
 		why := humanInstallError(err)

@@ -34,6 +34,8 @@ import path from 'node:path'
 
 const TOPIC = 'downvid-plugin'
 const CONTRACT = 'downvid-parser'
+/** 风险声明的版本要求，与 Go 侧 pluginhost.DisclaimerVersion 保持一致 */
+const DISCLAIMER_VERSION = 1
 /** 索引里 id 的形态，与 Go 侧 pluginhost.ValidPluginID 保持一致 */
 const ID_RE = /^[a-z0-9][a-z0-9-]{1,40}$/
 const REPO_RE = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/
@@ -70,6 +72,12 @@ const exists = (p) => fs.existsSync(path.join(rootDir(), p))
  * GitHub——慢、会限流、结果随别人的仓库变化而不稳定。
  */
 const apiBase = () => process.env.GITHUB_API || 'https://api.github.com'
+/**
+ * 取 README 的基地址，可被 `GITHUB_RAW` 覆盖。
+ *
+ * 与 apiBase 同理：测试要指向本地替身，否则每次回归都打真实 GitHub。
+ */
+const rawBase = () => process.env.GITHUB_RAW || 'https://raw.githubusercontent.com'
 
 /** 带 token 与重试的 GitHub API 调用 */
 async function gh(pathname) {
@@ -115,6 +123,52 @@ async function findPluginDir(repo) {
     }
   }
   return null
+}
+
+/**
+ * 检查插件仓库是否满足风险声明要求。
+ *
+ * 与 Go 侧 pluginhost.CheckDisclaimer 同一判据（那边是安装时第二道闸）：
+ *   1. README 里有 `DownVid-Plugin-Disclaimer: <版本>` 标记
+ *   2. 正文自己写明「风险由作者承担、与 DownVid 无关」
+ *
+ * 为什么必须落在作者自己的仓库里：插件从我们索引装出去，出事时用户找的是
+ * DownVid。只有这句话出现在**插件仓库**里，「责任在作者」才站得住；
+ * 只写在我们这边等于替作者背书。
+ */
+async function checkDisclaimer(repo) {
+  let readme = null
+  for (const name of ['README.md', 'readme.md', 'README.markdown']) {
+    const res = await fetch(`${rawBase()}/${repo}/HEAD/${name}`, {
+      headers: { 'User-Agent': 'downvid-index-bot' },
+    })
+    if (res.ok) {
+      readme = await res.text()
+      break
+    }
+  }
+  if (readme === null) return { ok: false, reason: '仓库没有 README' }
+
+  const lower = readme.toLowerCase()
+  const marker = 'downvid-plugin-disclaimer:'
+  const at = lower.indexOf(marker)
+  if (at < 0) return { ok: false, reason: 'README 缺少风险声明标记' }
+
+  const rest = readme.slice(at + marker.length).replace(/^[ \t]+/, '')
+  const m = /^(\d+)/.exec(rest)
+  if (!m) return { ok: false, reason: '声明标记缺少版本号' }
+  if (Number(m[1]) < DISCLAIMER_VERSION) {
+    return { ok: false, reason: `声明版本 ${m[1]} 过旧（要求 ${DISCLAIMER_VERSION}）` }
+  }
+
+  const hasRisk = readme.includes('风险') || lower.includes('risk')
+  const hasScope =
+    readme.includes('无关') || readme.includes('不承担') ||
+    lower.includes('not affiliated') || lower.includes('not responsible')
+  if (!hasRisk || !hasScope) {
+    return { ok: false, reason: 'README 正文没有写明风险由作者承担、与 DownVid 无关' }
+  }
+  return { ok: true }
 }
 
 /** 取 manifest 内容并校验 */
@@ -208,6 +262,13 @@ async function main() {
     const { manifest, error } = await readManifest(found.manifestURL)
     if (error) {
       problems.push(`${repo}：${error}`)
+      continue
+    }
+
+    // 风险声明是**硬门槛**：不达标就不收录
+    const disc = await checkDisclaimer(repo)
+    if (!disc.ok) {
+      problems.push(`${repo}：${disc.reason}（需在 README 加 <!-- DownVid-Plugin-Disclaimer: ${DISCLAIMER_VERSION} --> 并写明风险由作者承担）`)
       continue
     }
     const id = manifest.id

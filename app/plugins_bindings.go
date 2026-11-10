@@ -3,10 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Downvid/downvid/app/internal/netx"
@@ -32,6 +35,9 @@ type PluginEntryView struct {
 	InstalledVersion string `json:"installedVersion,omitempty"`
 	// Installed 表示本机 plugins/<id> 目录存在且含 plugin.json。
 	Installed bool `json:"installed"`
+	// BlockedReason 非空表示**不允许安装**（当前只用于风险声明不达标）。
+	// 界面据此禁用安装按钮并显示原因，而不是让用户点了才看到失败。
+	BlockedReason string `json:"blockedReason,omitempty"`
 	// LoadError 非空表示目录在但加载失败（契约不符、语法错误等），
 	// 界面据此显示「已安装但未生效」而不是让用户以为装成功了。
 	LoadError string `json:"loadError,omitempty"`
@@ -58,10 +64,12 @@ func (a *App) ListPlugins() PluginListView {
 
 	// 拉索引：走代理设置，与依赖探测同一套（否则需要代理的网络下永远空列表）
 	client, err := netx.Client(a.currentProxy(), 20*time.Second)
+	var ctx context.Context = context.Background()
 	if err != nil {
 		view.IndexError = err.Error()
 	} else {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
 		if idx, err := pluginhost.FetchIndex(ctx, client, pluginhost.IndexURL); err != nil {
 			view.IndexError = err.Error()
@@ -100,6 +108,8 @@ func (a *App) ListPlugins() PluginListView {
 		}
 	}
 
+	a.markDisclaimerBlocks(ctx, client, view.Entries)
+
 	// 加载失败的原因填进去，让「已安装但没生效」可见
 	if host, err := a.pluginHost(); err == nil && host != nil {
 		errs := host.Errors()
@@ -110,6 +120,39 @@ func (a *App) ListPlugins() PluginListView {
 		}
 	}
 	return view
+}
+
+// markDisclaimerBlocks 把「风险声明不达标」的插件标成不可安装。
+//
+// ## 为什么要并发
+//
+// 每个插件要拉一个 README。串行 20 个插件就是 20 次往返，用户在设置页会看到
+// 卡住十几秒。这里并发查，单个失败不影响其他（读不到 README 时不标记——
+// 网络抖动不该把插件永久显示成「不能装」，真正的拦截在安装那一步还会再查）。
+func (a *App) markDisclaimerBlocks(ctx context.Context, client *http.Client, entries []PluginEntryView) {
+	const workers = 6
+	sem := make(chan struct{}, workers)
+	var wg sync.WaitGroup
+
+	for i := range entries {
+		e := &entries[i]
+		if e.Installed || e.Repo == "" {
+			continue
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func() {
+			defer wg.Done()
+			defer func() { <-sem }()
+			err := pluginhost.VerifyRepoDisclaimer(ctx, client, e.Repo)
+			var de *pluginhost.DisclaimerError
+			if errors.As(err, &de) {
+				// 这里只写**行内**列表需要的简短原因；完整做法在安装时给出
+				e.BlockedReason = de.Reason
+			}
+		}()
+	}
+	wg.Wait()
 }
 
 // installedPluginDirs 返回本机 plugins 目录下已有的插件 id。

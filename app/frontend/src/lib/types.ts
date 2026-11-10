@@ -282,6 +282,12 @@ export interface PluginEntry {
   installed: boolean
   /** 非空表示装了但加载失败，界面要显示原因而不是让用户以为装好了 */
   loadError?: string
+  /**
+   * 非空表示**不允许安装**（当前只用于风险声明不达标）。
+   *
+   * 界面据此禁用安装按钮——让用户点了才看到失败，是最差的一种提示。
+   */
+  blockedReason?: string
 }
 
 /** 插件页数据（对应后端 `PluginListView`）。 */

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { countPlugins, filterPlugins, hasUpdate } from './plugin-filter'
+import { canInstall, countPlugins, filterPlugins, hasUpdate } from './plugin-filter'
 import type { PluginEntry } from './types'
 
 const entry = (over: Partial<PluginEntry>): PluginEntry => ({
@@ -88,6 +88,25 @@ describe('filterPlugins', () => {
 
   it('没有匹配时返回空数组而不是全部', () => {
     expect(filterPlugins(all, '不存在的插件', 'all')).toEqual([])
+  })
+})
+
+describe('canInstall', () => {
+  it('未安装且有仓库才能装', () => {
+    expect(canInstall(fresh)).toBe(true)
+  })
+
+  it('已安装的不能再装（应走「更新」）', () => {
+    expect(canInstall(bili)).toBe(false)
+  })
+
+  it('没有仓库地址不能装（来源不明）', () => {
+    expect(canInstall(entry({ id: 'x', repo: '' }))).toBe(false)
+  })
+
+  it('被拦下的（如缺风险声明）不能装', () => {
+    // 这是硬门槛：不满足就不许装，界面要显示原因而不是让用户点了才失败
+    expect(canInstall(entry({ id: 'x', repo: 'a/x', blockedReason: 'README 缺少风险声明标记' }))).toBe(false)
   })
 })
 

@@ -133,6 +133,11 @@
           {#if p.loadError}
             <!-- 装上却没生效时，原因是**唯一**有用的信息 -->
             <p class="plugin-error">{p.loadError}</p>
+          {:else if p.blockedReason}
+            <!-- 不能装时要说明缺什么，否则用户只会看到按钮是灰的 -->
+            <p class="plugin-error">
+              {t('plugins.blocked')}：{p.blockedReason}
+            </p>
           {/if}
 
           {#if busy}
@@ -177,7 +182,9 @@
                   <Icon name="delete" size={14} />
                 </button>
               {:else}
-                <button class="btn btn-primary btn-sm" disabled={Boolean(busy) || !p.repo}
+                <button class="btn btn-primary btn-sm"
+                  disabled={Boolean(busy) || Boolean(p.blockedReason) || !p.repo}
+                  title={p.blockedReason || ''}
                   onclick={() => app.installOrUpdatePlugin(p.id)}>
                   <Icon name="download" size={14} />
                   <span>{busy ? t('plugins.installing') : t('plugins.installAction')}</span>

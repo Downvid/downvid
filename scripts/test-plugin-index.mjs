@@ -33,19 +33,41 @@ function tempIndex(plugins = []) {
   return dir
 }
 
+const GOOD_README = `# demo plugin
+
+<!-- DownVid-Plugin-Disclaimer: 1 -->
+
+本插件由插件作者独立开发与维护。使用本插件产生的风险由插件作者与使用者承担，
+与 DownVid 项目无关。
+`
+
 const readIndex = (dir) => JSON.parse(fs.readFileSync(path.join(dir, 'index.json'), 'utf8'))
 
 /**
  * 起一个假 GitHub：只有一个仓库 alice/dv-test，manifest 由参数决定，
  * 跑一次收录脚本。返回脚本的输出。
  */
-async function runWithManifest(dir, manifest, extraArgs = []) {
+/** 默认给一份合规 README；用例可通过 opts.readme 覆盖 */
+let README = GOOD_README
+
+async function runWithManifest(dir, manifest, extraArgs = [], opts = {}) {
   const srv = await new Promise((resolve) => {
     const s = http.createServer((req, res) => {
       const port = s.address().port
+      if (req.url.startsWith('/__raw/readme')) {
+        res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' })
+        res.end(README)
+        return
+      }
       if (req.url === '/__raw/manifest') {
         res.writeHead(200, { 'content-type': 'application/json' })
         res.end(JSON.stringify(manifest))
+        return
+      }
+      // README 走 raw 地址：脚本请求 /<repo>/HEAD/README.md
+      if (req.url.endsWith('/README.md') || req.url.endsWith('/readme.md')) {
+        res.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' })
+        res.end(README)
         return
       }
       if (req.url.startsWith('/search/repositories')) {
@@ -66,9 +88,13 @@ async function runWithManifest(dir, manifest, extraArgs = []) {
 
   const prevDir = process.env.PLUGIN_INDEX_DIR
   const prevAPI = process.env.GITHUB_API
+  const prevRaw = process.env.GITHUB_RAW
   const prevArgs = process.argv.slice()
+  README = opts.readme ?? GOOD_README
   process.env.PLUGIN_INDEX_DIR = dir
   process.env.GITHUB_API = `http://127.0.0.1:${srv.address().port}`
+  // README 也走同一个替身
+  process.env.GITHUB_RAW = `http://127.0.0.1:${srv.address().port}`
   process.argv = [process.argv[0], 'update-plugin-index.mjs', ...extraArgs]
 
   // 同一份模块复用（import() 会缓存）：脚本的参数与目录都在**调用时**读，
@@ -87,6 +113,8 @@ async function runWithManifest(dir, manifest, extraArgs = []) {
   else process.env.PLUGIN_INDEX_DIR = prevDir
   if (prevAPI === undefined) delete process.env.GITHUB_API
   else process.env.GITHUB_API = prevAPI
+  if (prevRaw === undefined) delete process.env.GITHUB_RAW
+  else process.env.GITHUB_RAW = prevRaw
 
   srv.close()
   return out
@@ -196,6 +224,59 @@ suite.case('危险 icon 被丢弃（索引会进界面，不能当注入点）',
     t.equal(p.id, 'bad', `插件应仍被收录（icon=${JSON.stringify(bad)}）`)
     t.equal(p.icon || '', '', `危险 icon 必须丢弃：${JSON.stringify(bad)}`)
   }
+})
+
+// ===== 风险声明是硬门槛 =====
+//
+// 不达标就不收录。三条用例对应三种真实写法：没写、只写标记、版本过旧。
+suite.case('README 没有风险声明 → 不收录', async (t) => {
+  const dir = tempIndex()
+  const out = await runWithManifest(
+    dir,
+    { id: 'no-disc', name: '没声明', playback: 'downvid-parser' },
+    [],
+    { readme: '# 一个插件\n\n就是好用。\n' },
+  )
+  t.equal(readIndex(dir).plugins.length, 0, '没有声明不能收录')
+  t.ok(/声明/.test(out), '报告里要写清原因，作者才知道去补')
+})
+
+suite.case('只有标记、正文没交代 → 不收录', async (t) => {
+  const dir = tempIndex()
+  await runWithManifest(
+    dir,
+    { id: 'marker-only', name: '只有标记', playback: 'downvid-parser' },
+    [],
+    { readme: '<!-- DownVid-Plugin-Disclaimer: 1 -->\n\n# 插件\n' },
+  )
+  t.equal(readIndex(dir).plugins.length, 0, '渲染不可见的注释不能算同意：用户看不到风险归属')
+})
+
+suite.case('声明版本过旧 → 不收录', async (t) => {
+  const dir = tempIndex()
+  await runWithManifest(
+    dir,
+    { id: 'old-ver', name: '旧版本声明', playback: 'downvid-parser' },
+    [],
+    { readme: '<!-- DownVid-Plugin-Disclaimer: 0 -->\n\n风险由作者承担，与 DownVid 无关。\n' },
+  )
+  t.equal(readIndex(dir).plugins.length, 0, '责任条款变了就不该默认沿用旧同意')
+})
+
+suite.case('英文声明同样可以', async (t) => {
+  const dir = tempIndex()
+  await runWithManifest(
+    dir,
+    { id: 'en-disc', name: 'English', playback: 'downvid-parser' },
+    [],
+    {
+      readme:
+        '<!-- DownVid-Plugin-Disclaimer: 1 -->\n\n' +
+        'Any risk from using this plugin is borne by its author and the user; ' +
+        'this project is not responsible and not affiliated with it.\n',
+    },
+  )
+  t.equal(readIndex(dir).plugins.length, 1, '英文作者不该被拒')
 })
 
 suite.case('--dry-run 不写文件', async (t) => {
