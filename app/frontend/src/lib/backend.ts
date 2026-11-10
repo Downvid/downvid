@@ -28,6 +28,7 @@ import type {
   AudioOption,
   TrackOption,
   SubtitleOption,
+  PluginList,
 } from './types'
 import { detectPlatform, platformName, hostOf } from './url'
 import { t } from './i18n.svelte'
@@ -161,6 +162,9 @@ type Bindings = {
   OpenPath(path: string): Promise<{ ok: boolean; error?: string }>
   ShowInFolder(path: string): Promise<{ ok: boolean; error?: string }>
   OpenExternal(url: string): Promise<{ ok: boolean; error?: string }>
+  ListPlugins(): Promise<PluginList>
+  ReloadPlugins(): Promise<PluginList>
+  UninstallPlugin(id: string): Promise<void | null>
   DepsSummary(): Promise<Record<string, unknown>>
   InstallDeps(opts: Record<string, unknown>): Promise<{ ok: boolean; error?: string }>
   CancelDepsInstall(): Promise<boolean>
@@ -963,6 +967,47 @@ async function subscribe(name: string, cb: (data: unknown) => void): Promise<() 
     return typeof off === 'function' ? off : () => {}
   } catch {
     return () => {}
+  }
+}
+
+// ===== 插件 =====
+
+/**
+ * 拉取插件列表。
+ *
+ * 不抛异常：断网、索引仓库不可达都是常见情况，返回的 `indexError` 里带原因，
+ * 而 `entries` 仍会有本机已安装的插件——那时用户至少要能看见自己装了什么。
+ */
+export async function listPlugins(): Promise<PluginList> {
+  const b = await backend()
+  if (!b) return { entries: [], dir: '', indexError: '当前是浏览器预览，没有后端' }
+  try {
+    return await b.ListPlugins()
+  } catch (e) {
+    return { entries: [], dir: '', indexError: String((e as Error)?.message ?? e) }
+  }
+}
+
+/** 重新扫描插件目录（安装/卸载之后调用）。 */
+export async function reloadPlugins(): Promise<PluginList> {
+  const b = await backend()
+  if (!b) return { entries: [], dir: '', indexError: '当前是浏览器预览，没有后端' }
+  try {
+    return await b.ReloadPlugins()
+  } catch (e) {
+    return { entries: [], dir: '', indexError: String((e as Error)?.message ?? e) }
+  }
+}
+
+/** 卸载一个插件（只删插件本体，保留它的数据目录）。 */
+export async function uninstallPlugin(id: string): Promise<{ ok: boolean; error?: string }> {
+  const b = await backend()
+  if (!b) return { ok: false, error: '当前是浏览器预览，没有后端' }
+  try {
+    await b.UninstallPlugin(id)
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message ?? e) }
   }
 }
 

@@ -7,6 +7,7 @@
    * 所有文案走 t('key')，新增的键必须并回 lib/i18n.svelte.ts 与 src/i18n/core.ts。
    */
   import Icon from './Icon.svelte'
+  import PluginsView from './PluginsView.svelte'
   import EffortSlider from './EffortSlider.svelte'
   import { app } from '../lib/store.svelte'
   import type { SettingsSection } from '../lib/types'
@@ -20,9 +21,16 @@
     { id: 'network', key: 'settings.navNetwork', icon: 'lan' },
     { id: 'acceleration', key: 'settings.navAcceleration', icon: 'speed' },
     { id: 'deps', key: 'settings.navDeps', icon: 'dns' },
+    { id: 'plugins', key: 'settings.navPlugins', icon: 'extension' },
     { id: 'update', key: 'settings.navUpdate', icon: 'system_update' },
     { id: 'appearance', key: 'settings.navInterface', icon: 'palette' },
   ]
+
+  // 进入插件页时才拉索引：绝大多数用户不装插件，启动时不该多一次网络请求。
+  // 用 $effect 而不是 onMount：用户可能先停在别的页，切到插件页才算「进入」。
+  $effect(() => {
+    if (app.settingsSection === 'plugins') void app.loadPlugins()
+  })
 
   const qualityOptions = [
     { value: 'best', key: 'settings.qualityBest' },
@@ -458,6 +466,8 @@
             </div>
           </div>
         {/each}
+      {:else if app.settingsSection === 'plugins'}
+        <PluginsView />
       {:else if app.settingsSection === 'update'}
         <div class="row">
           <div class="row-label">

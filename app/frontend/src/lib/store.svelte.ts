@@ -53,8 +53,11 @@ import {
   onProgress,
   openExternal,
   openPath,
+  listPlugins,
   parseUrl,
   pauseDownload,
+  reloadPlugins,
+  uninstallPlugin,
   resetSettings as backendResetSettings,
   saveSettings,
   showInFolder,
@@ -87,6 +90,7 @@ import type {
   DepItem,
   Dialog,
   HistoryItem,
+  PluginList,
   SettingsSection,
   TaskItem,
   ToastItem,
@@ -216,6 +220,11 @@ class AppStore {
   // ===== 依赖 =====
   deps = $state<DepItem[]>([])
   depsChecking = $state(false)
+  /** 插件列表（索引 + 本机状态） */
+  plugins = $state<PluginList>({ entries: [], dir: '' })
+  pluginsLoading = $state(false)
+  /** 是否已经拉过一次：切换页面时不重复请求 */
+  private pluginsLoaded = false
   depsPromptBusy = $state(false)
   depsPromptProgress = $state(0)
 
@@ -1240,6 +1249,54 @@ class AppStore {
   // ============================================================
 
   /** 首屏静默探测：失败不弹错（缺依赖时解析会给出可行动提示） */
+  /**
+   * 拉取插件列表。
+   *
+   * `force` 为 true 时重新扫描插件目录（用户刚装/卸完、或点了「重新扫描」）。
+   * 首次进入设置页时惰性加载：绝大多数用户不装插件，不该在启动时就发请求。
+   */
+  async loadPlugins(force = false): Promise<void> {
+    if (this.pluginsLoading) return
+    if (!force && this.pluginsLoaded) return
+    this.pluginsLoading = true
+    try {
+      this.plugins = force ? await reloadPlugins() : await listPlugins()
+      this.pluginsLoaded = true
+    } finally {
+      this.pluginsLoading = false
+    }
+  }
+
+  /** 用系统浏览器打开一个外链（插件仓库地址等）。 */
+  async openExternalUrl(url: string): Promise<void> {
+    if (!/^https?:\/\//i.test(url)) return
+    await openExternal(url)
+  }
+
+  /**
+   * 卸载插件：**先确认**，且不删它的数据目录（那是用户的数据）。
+   *
+   * 用 askConfirm 的回调式接口（与删除历史记录一致）：确认框是全局的一个，
+   * 不返回 Promise——真删的动作放在 action 里。
+   */
+  uninstallPlugin(id: string): void {
+    this.askConfirm({
+      title: t('plugins.uninstall'),
+      message: t('plugins.uninstallConfirm'),
+      confirmLabel: t('plugins.uninstall'),
+      action: () => {
+        void (async () => {
+          const res = await uninstallPlugin(id)
+          if (!res.ok) {
+            this.toast(res.error || t('error.saveFailed'), 'error')
+            return
+          }
+          await this.loadPlugins(true)
+        })()
+      },
+    })
+  }
+
   private async checkDepsSilently(): Promise<void> {
     const list = await detectDeps()
     if (list) this.deps = toDepItems(list, this.deps)

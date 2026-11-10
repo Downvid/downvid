@@ -255,7 +255,7 @@ export type UpdateStatus =
   | 'error'
 
 /** 设置分区（设置页的侧栏） */
-export type SettingsSection = 'download' | 'acceleration' | 'network' | 'update' | 'deps' | 'appearance' | 'language'
+export type SettingsSection = 'download' | 'acceleration' | 'network' | 'update' | 'deps' | 'plugins' | 'appearance' | 'language'
 
 /** 一条 toast */
 export interface ToastItem {
@@ -263,4 +263,26 @@ export interface ToastItem {
   text: string
   kind: 'info' | 'success' | 'error'
   at: number
+}
+
+/** 插件列表里的一条（对应后端 `PluginEntryView`）。 */
+export interface PluginEntry {
+  id: string
+  name: string
+  description?: string
+  repo: string
+  author?: string
+  sites?: string[]
+  installed: boolean
+  /** 非空表示装了但加载失败，界面要显示原因而不是让用户以为装好了 */
+  loadError?: string
+}
+
+/** 插件页数据（对应后端 `PluginListView`）。 */
+export interface PluginList {
+  entries: PluginEntry[]
+  /** 拉索引失败的原因；此时 entries 里仍有本机已安装的插件 */
+  indexError?: string
+  /** 插件目录，界面用来提示手动放哪里 */
+  dir: string
 }
