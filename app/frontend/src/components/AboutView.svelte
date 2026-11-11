@@ -1,6 +1,7 @@
 <script lang="ts">
   import Icon from './Icon.svelte'
   import GitHubIcon from './GitHubIcon.svelte'
+  import QQIcon from './QQIcon.svelte'
   import logo from '../assets/logo.png'
   import donate from '../assets/donate.jpg'
   import goIcon from '../assets/tech/go.svg'
@@ -13,7 +14,7 @@
   import { APP_VERSION, BUILD_DATE, REPO_URL, WEBSITE_URL } from '../lib/constants'
   import { openExternal } from '../lib/backend'
   // 邮箱与 mailto 拼装沿用应用现有的唯一来源，避免在演示里复制一份
-  import { AFDIAN_URL, CONTACT_EMAIL, contactMailto } from '../../../../shared/app'
+  import { AFDIAN_URL, CONTACT_EMAIL, QQ_GROUP_URL, contactMailto } from '../../../../shared/app'
 
   const ISSUES_URL = REPO_URL + '/issues/new'
   const LICENSE_URL = REPO_URL + '/blob/main/LICENSE'
@@ -280,23 +281,34 @@
           <span class="meta-label">{t('about.build')}</span>
           {app.buildDate || BUILD_DATE}
         </span>
-        <button
-          type="button"
-          class="btn btn-sm update-btn"
-          class:btn-primary={available}
-          class:btn-ghost={!available}
-          disabled={checking}
-          onclick={onUpdateClick}
-        >
-          {#if checking}
-            <Icon name="refresh" size={15} class="spin" />
-          {:else if available}
-            <Icon name="system_update" size={15} />
-          {:else}
-            <Icon name="update" size={15} />
-          {/if}
-          <span aria-live="polite">{updateLabel}</span>
-        </button>
+        <div class="identity-actions">
+          <button
+            type="button"
+            class="btn btn-ghost btn-sm qq-btn"
+            title={t('about.qqGroupHint')}
+            onclick={() => openExternal(QQ_GROUP_URL)}
+          >
+            <QQIcon size={15} />
+            <span>{t('about.qqGroup')}</span>
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm update-btn"
+            class:btn-primary={available}
+            class:btn-ghost={!available}
+            disabled={checking}
+            onclick={onUpdateClick}
+          >
+            {#if checking}
+              <Icon name="refresh" size={15} class="spin" />
+            {:else if available}
+              <Icon name="system_update" size={15} />
+            {:else}
+              <Icon name="update" size={15} />
+            {/if}
+            <span aria-live="polite">{updateLabel}</span>
+          </button>
+        </div>
       </div>
     </section>
 
@@ -693,9 +705,21 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
+    flex-wrap: wrap;
     margin-top: auto;
     padding-top: 14px;
     border-top: 1px solid var(--rule-soft);
+  }
+  .identity-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+    flex: none;
+  }
+  .qq-btn {
+    flex: none;
   }
   .identity-build {
     display: flex;

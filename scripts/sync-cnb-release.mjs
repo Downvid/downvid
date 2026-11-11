@@ -127,6 +127,38 @@ async function ensureRelease(token, repo, { tag, name, body, draft, makeLatest }
   throw new Error(`无法创建或读取 CNB Release ${tag}`)
 }
 
+/**
+ * 预签名地址的 PUT 上传。
+ *
+ * 网络抖动在 GitHub Actions 与对象存储之间很常见；重试两次比让整个镜像
+ * 停在上一版划算。4xx（签名过期、权限问题）不重试。
+ */
+async function putAsset(assetName, uploadUrl, payload, size) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const put = await fetch(uploadUrl, {
+        method: 'PUT',
+        body: payload,
+        headers: {
+          'Content-Length': String(size),
+          'Content-Type': 'application/octet-stream',
+        },
+      })
+      if (!put.ok) {
+        const err = new Error(`上传 ${assetName} 失败（${put.status}）：${(await put.text()).slice(0, 500)}`)
+        err.statusCode = put.status
+        throw err
+      }
+      return
+    } catch (err) {
+      const retryable = !err.statusCode || err.statusCode >= 500 || err.statusCode === 429
+      if (attempt >= 3 || !retryable) throw err
+      console.warn(`上传 ${assetName} 失败：${err.message}；${attempt * 5} 秒后重试`)
+      await new Promise((resolve) => setTimeout(resolve, attempt * 5000))
+    }
+  }
+}
+
 async function uploadAsset(token, repo, releaseId, filePath, assetName) {
   const size = fs.statSync(filePath).size
   const upload = await api(token, repo, `/-/releases/${releaseId}/asset-upload-url`, {
@@ -138,17 +170,7 @@ async function uploadAsset(token, repo, releaseId, filePath, assetName) {
     throw new Error(`CNB 没有返回 ${assetName} 的上传地址`)
   }
 
-  const put = await fetch(upload.upload_url, {
-    method: 'PUT',
-    body: fs.readFileSync(filePath),
-    headers: {
-      'Content-Length': String(size),
-      'Content-Type': 'application/octet-stream',
-    },
-  })
-  if (!put.ok) {
-    throw new Error(`上传 ${assetName} 失败（${put.status}）：${await put.text()}`)
-  }
+  await putAsset(assetName, upload.upload_url, fs.readFileSync(filePath), size)
 
   const verifyURL = new URL(upload.verify_url, `${API}/`).toString()
   const sep = verifyURL.includes('?') ? '&' : '?'
@@ -240,5 +262,6 @@ async function main() {
 
 main().catch((err) => {
   console.error(`同步 CNB 失败：${err.message}`)
+  if (err.cause) console.error(`  原因：${err.cause}`)
   process.exit(1)
 })

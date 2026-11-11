@@ -102,7 +102,7 @@ import type {
   VideoInfo,
 } from './types'
 import { detectPlatform, extractUrl, hostOf, platformName } from './url'
-import { countPlugins, filterPlugins, hasUpdate, type PluginFilter } from './plugin-filter'
+import { countPlugins, filterPlugins, type PluginFilter } from './plugin-filter'
 
 /** 在数组里加入/移除一个值（纯函数，便于单测）。 */
 function toggle(list: string[], value: string): string[] {
@@ -234,8 +234,12 @@ class AppStore {
   pluginSearch = $state('')
   /** 插件筛选：全部 / 已安装 / 可更新 / 未安装 */
   pluginFilter = $state<PluginFilter>('all')
+  /** 详情弹窗里正在看的插件 id；列表刷新后详情自动跟着更新 */
+  pluginDetailId = $state('')
   /** 是否已拉过一次：重复切页不重复请求 */
   private pluginsLoaded = false
+  /** 列表加载中又被要求重扫：等本次结束后补一次，不能直接丢掉 */
+  private pluginsReloadPending = false
   depsPromptBusy = $state(false)
   depsPromptProgress = $state(0)
 
@@ -1270,9 +1274,20 @@ class AppStore {
     return countPlugins(this.plugins.entries)
   }
 
-  /** 该插件是否可更新（已装且版本不同）。 */
-  pluginHasUpdate(p: PluginEntry): boolean {
-    return hasUpdate(p)
+  /** 详情弹窗里的插件；按 id 从最新列表取，安装/更新后状态自动刷新 */
+  get pluginDetail(): PluginEntry | null {
+    if (!this.pluginDetailId) return null
+    return this.plugins.entries.find((p) => p.id === this.pluginDetailId) ?? null
+  }
+
+  openPluginDetail(p: PluginEntry): void {
+    this.pluginDetailId = p.id
+    this.dialog = 'plugin'
+  }
+
+  closePluginDetail(): void {
+    if (this.dialog === 'plugin') this.dialog = 'none'
+    this.pluginDetailId = ''
   }
 
   /** 安装或更新一个插件。`update` 只影响提示文案。 */
@@ -1289,6 +1304,7 @@ class AppStore {
         : (p.message || t('plugins.installing'))
       this.pluginBusy = { ...this.pluginBusy, [id]: text }
     })
+    let installed = false
     try {
       const res = update ? await updatePlugin(id) : await installPlugin(id)
       if (!res.ok) {
@@ -1296,13 +1312,16 @@ class AppStore {
         return
       }
       this.toast(update ? t('plugins.updated') : t('plugins.installedToast'), 'success')
-      await this.loadPlugins(true)
+      installed = true
     } finally {
       off()
       const next = { ...this.pluginBusy }
       delete next[id]
       this.pluginBusy = next
     }
+    // 刷新列表要重新拉索引并校验风险声明，可能持续数秒。先把这张卡的「安装中」
+    // 清掉——插件已经装好了，继续显示安装中会让人以为还没完成。
+    if (installed) await this.loadPlugins(true)
   }
 
   /**
@@ -1312,7 +1331,12 @@ class AppStore {
    * 首次进入设置页时惰性加载：绝大多数用户不装插件，不该在启动时就发请求。
    */
   async loadPlugins(force = false): Promise<void> {
-    if (this.pluginsLoading) return
+    if (this.pluginsLoading) {
+      // 装完插件要重扫，而首次加载可能还没结束。直接丢掉这次请求会让列表
+      // 停在安装前的状态，表现为「装好了但按钮还是安装」。
+      if (force) this.pluginsReloadPending = true
+      return
+    }
     if (!force && this.pluginsLoaded) return
     this.pluginsLoading = true
     try {
@@ -1320,7 +1344,21 @@ class AppStore {
       this.pluginsLoaded = true
     } finally {
       this.pluginsLoading = false
+      if (this.pluginsReloadPending) {
+        this.pluginsReloadPending = false
+        void this.loadPlugins(true)
+      }
     }
+  }
+
+  /** 打开插件目录（手动安装用）。目录可能还不存在，失败时如实提示。 */
+  async openPluginDir(): Promise<void> {
+    if (!this.plugins.dir) {
+      this.toast(t('error.openFolderFailed'), 'error')
+      return
+    }
+    const res = await openPath(this.plugins.dir)
+    if (!res.ok) this.toast(res.message || t('error.openFolderFailed'), 'error')
   }
 
   /** 用系统浏览器打开一个外链（插件仓库地址等）。 */
@@ -1347,6 +1385,7 @@ class AppStore {
             this.toast(res.error || t('error.saveFailed'), 'error')
             return
           }
+          this.toast(t('plugins.uninstalledToast'), 'success')
           await this.loadPlugins(true)
         })()
       },

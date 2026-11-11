@@ -12,6 +12,7 @@
   import DepsDialog from './components/DepsDialog.svelte'
   import AnnouncementDialog from './components/AnnouncementDialog.svelte'
   import ConfirmDialog from './components/ConfirmDialog.svelte'
+  import PluginDetailDialog from './components/PluginDetailDialog.svelte'
   import { app } from './lib/store.svelte'
 
   onMount(() => {
@@ -110,6 +111,8 @@
   <ConfirmDialog />
 {:else if app.dialog === 'announcement'}
   <AnnouncementDialog />
+{:else if app.dialog === 'plugin'}
+  <PluginDetailDialog />
 {/if}
 
 <ToastStack />

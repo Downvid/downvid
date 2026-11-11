@@ -27,9 +27,10 @@
  *
  *   node scripts/verify-release.mjs                     # 用 package.json 的版本
  *   node scripts/verify-release.mjs --tag v1.3.5        # 指定 tag
- *   node scripts/verify-release.mjs --allow-missing     # 本地开发时允许尚未发布
+ *   node scripts/verify-release.mjs --allow-missing     # 允许平台产物缺失（只警告）
  *
  * 需要网络。`GITHUB_TOKEN` 可选（未提供时走匿名请求，受 60 次/小时限流）。
+ * `GITHUB_API` 可覆盖 API 根地址（本地测试用），默认 `https://api.github.com`。
  */
 
 import fs from 'node:fs'
@@ -61,12 +62,13 @@ if (!owner || !repo) {
 
 const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'))
 const tag = readArg('--tag') || `v${pkg.version}`
+const API_BASE = process.env.GITHUB_API || 'https://api.github.com'
 
 // ===== 查询 Release =====
 async function fetchRelease() {
   const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'downvid-release-check' }
   if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`
-  const url = `https://api.github.com/repos/${owner}/${repo}/releases/tags/${tag}`
+  const url = `${API_BASE}/repos/${owner}/${repo}/releases/tags/${tag}`
   const res = await fetch(url, { headers })
   if (res.status === 404) return null
   if (!res.ok) throw new Error(`GitHub API ${res.status}: ${await res.text()}`)
@@ -97,6 +99,7 @@ if (!release) {
 }
 
 const problems = []
+const missingAssets = []
 
 // ===== 1. 状态 =====
 if (release.draft) problems.push('该 Release 仍是 draft（用户与自动更新都看不到）')
@@ -109,19 +112,33 @@ if (release.prerelease) {
 const assetNames = (release.assets || []).map((a) => a.name)
 for (const [re, label] of REQUIRED_ASSETS) {
   if (!assetNames.some((n) => re.test(n))) {
-    problems.push(`缺少 ${label}（该平台的用户升级不了）`)
+    missingAssets.push(`缺少 ${label}（该平台的用户升级不了）`)
   }
 }
 
 if (problems.length) {
-  console.error(`发布不完整：${tag}`)
+  console.error(`发布状态异常：${tag}`)
   for (const p of problems) console.error(`  ✗ ${p}`)
-  console.error(`\n  产物清单：${assetNames.length ? assetNames.join(', ') : '(空)'}`)
   process.exit(1)
+}
+
+if (missingAssets.length) {
+  // `--allow-missing` 的语义是「平台产物缺失只警告」——Release 已经创建，
+  // 把它判红会让后面的 Gitee / CNB 同步步骤全部跳过，反而丢掉可用的镜像。
+  // draft / 没有 Release 不在豁免范围内，上面已经直接失败。
+  if (!hasFlag('--allow-missing')) {
+    console.error(`发布不完整：${tag}`)
+    for (const p of missingAssets) console.error(`  ✗ ${p}`)
+    console.error(`\n  产物清单：${assetNames.length ? assetNames.join(', ') : '(空)'}`)
+    process.exit(1)
+  }
+  console.warn(`发布不完整：${tag}（--allow-missing，继续）`)
+  for (const p of missingAssets) console.warn(`  ! ${p}`)
+  console.warn(`  产物清单：${assetNames.length ? assetNames.join(', ') : '(空)'}`)
 }
 
 console.log(
   // GitHub API 返回的是 snake_case（published_at），这里两个都兜一下
   `发布校验通过：${tag} 已发布（${(release.published_at || release.publishedAt || release.created_at || '').slice(0, 10) || '时间未知'}），` +
-    `${assetNames.length} 个产物，三个平台齐全。`,
+    `${assetNames.length} 个产物${missingAssets.length ? `，缺少 ${missingAssets.length} 个平台包（已允许）` : '，三个平台齐全'}。`,
 )

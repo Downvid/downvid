@@ -8,7 +8,7 @@
 | 问题 | 结论 | 怎么复核 |
 | --- | --- | --- |
 | 从哪来 | `cshuangyy/videdown@0c620c1`（2026-08-22），分叉点 `1d7b041` | `scripts/data/provenance/upstream/_SOURCE.txt` |
-| 上游代码还剩多少 | 上游 **2707** 条有效源码行中，**140** 行（**5.2%**）仍逐字存在 | `pnpm audit:provenance` |
+| 上游代码还剩多少 | 上游 **2707** 条有效源码行中，**144** 行（**5.3%**）仍逐字存在 | `pnpm audit:provenance` |
 | 谁在贡献这些行 | 全部落在界面外壳（`app/frontend/`）与文档里的 CSS/HTML 片段 | `--report` 的「活在哪」一列 |
 | 还有没有「上游衍生文件」 | 没有：没有任何当前文件的上游成分达到 15% 阈值 | `--report` 最后一节 |
 
@@ -35,24 +35,24 @@
 
 | 上游文件 | 有效行 | 逐字存活 | 比例 |
 | --- | ---: | ---: | ---: |
-| `electron/main.ts` | 1229 | 26 | 2.1% |
+| `electron/main.ts` | 1229 | 27 | 2.2% |
 | `electron/electron-env.d.ts` | 34 | 4 | 11.8% |
-| `electron/preload.ts` | 103 | 4 | 3.9% |
+| `electron/preload.ts` | 103 | 5 | 4.9% |
 | `index.html` | 11 | 8 | 72.7% |
-| `src/types/index.ts` | 48 | 20 | 41.7% |
+| `src/types/index.ts` | 48 | 21 | 43.8% |
 | `src/style.css` | 84 | 27 | 32.1% |
 | `src/App.vue` | 52 | 12 | 23.1% |
 | `src/env.d.ts` | 40 | 9 | 22.5% |
 | `src/components/icons/MaterialIcon.vue` | 35 | 13 | 37.1% |
 | `src/components/SettingsView.vue` | 101 | 5 | 5% |
 | `src/components/DownloadView.vue` | 615 | 5 | 0.8% |
-| `src/components/AboutView.vue` | 123 | 1 | 0.8% |
 | `src/components/HistoryView.vue` | 84 | 1 | 1.2% |
 | `src/components/HelloWorld.vue` | 17 | 1 | 5.9% |
 | `postcss.config.js` | 3 | 1 | 33.3% |
 | `tailwind.config.js` | 72 | 1 | 1.4% |
 | `src/vite-env.d.ts` | 1 | 1 | 100% |
-| **合计** | **2707** | **140** | **5.2%** |
+| `vite.config.ts` | 16 | 3 | 18.8% |
+| **合计** | **2707** | **144** | **5.3%** |
 
 > 读这张表的正确姿势：`tailwind.config.js` 的 1.4% 与 `src/style.css` 的 32.1% 是同一件事——
 > Tailwind v4 把配置搬进了 CSS 的 `@theme`，所以命中从旧的配置文件转移到了 `app/frontend/src/app.css`。

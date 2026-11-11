@@ -437,7 +437,9 @@ jobs:
   release:
     needs: [version, build-wails]
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # Gitee 上传大包可能比 GitHub/CNB 慢几个数量级；30 分钟会让整个 release job
+    # 在同步中途被 kill，连 CNB 与官网步骤都跑不到。留出重试空间。
+    timeout-minutes: 45
     # **不要因为单个平台失败就不发版**。
     #
     # 2026-11-04 真实发生过：GitHub 的 macOS runner 池耗尽，所有 macos-latest

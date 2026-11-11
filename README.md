@@ -18,6 +18,7 @@
   <a href="https://github.com/Downvid/downvid/releases/latest"><img src="https://img.shields.io/github/v/release/Downvid/downvid?style=flat&label=Release&logo=github&logoColor=white&color=0284c7" alt="Latest Release" /></a>
   <a href="https://github.com/Downvid/downvid/stargazers"><img src="https://img.shields.io/github/stars/Downvid/downvid?style=flat&label=Stars&logo=github&logoColor=white&color=eab308" alt="GitHub Stars" /></a>
   <a href="https://alternativeto.net/software/downvid/"><img src="https://img.shields.io/badge/AlternativeTo-DownVid-0289d5?style=flat&logo=alternativeto&logoColor=white" alt="AlternativeTo" /></a>
+  <a href="https://qm.qq.com/q/jmCfaELZ04"><img src="https://img.shields.io/badge/QQ%20%E4%BA%A4%E6%B5%81%E7%BE%A4-DownVid-1EBAFC?style=flat&logo=qq&logoColor=white" alt="QQ 交流群" /></a>
   <a href="https://github.com/Downvid/downvid/actions/workflows/codeql.yml"><img src="https://img.shields.io/github/actions/workflow/status/Downvid/downvid/codeql.yml?branch=main&label=CodeQL&logo=github-actions&logoColor=white&color=16a34a" alt="CodeQL" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/License-MIT-7c3aed?style=flat&logo=open-source-initiative&logoColor=white" alt="MIT License" /></a>
 </p>
@@ -30,6 +31,8 @@
   <a href="https://afdian.com/a/xynrin">爱发电赞助</a>
   ·
   <a href="https://github.com/Downvid/downvid/issues">反馈问题</a>
+  ·
+  <a href="https://qm.qq.com/q/jmCfaELZ04">交流群</a>
   ·
   <a href="./docs/installation.md">安装指南</a>
 </p>
@@ -72,6 +75,12 @@
 
 ---
 
+## 交流群
+
+点击链接加入群聊【Downvid交流群】：[https://qm.qq.com/q/jmCfaELZ04](https://qm.qq.com/q/jmCfaELZ04)
+
+---
+
 > [!IMPORTANT]
 > 本项目是 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 的图形界面封装。**项目自身不包含**
 > 破解或绕过技术保护措施的代码。请遵守当地法律法规、平台规则及内容版权要求，使用者需自行承担使用责任。
@@ -85,6 +94,7 @@
 ## 目录
 
 - [赞助与商务合作](#赞助与商务合作)
+- [交流群](#交流群)
 - [项目简介](#项目简介)
 - [核心亮点](#核心亮点)
 - [功能特性](#功能特性)

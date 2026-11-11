@@ -10,8 +10,8 @@
   },
   "totals": {
     "upstreamSignificantLines": 2707,
-    "retainedVerbatimLines": 140,
-    "retainedPct": 5.2,
+    "retainedVerbatimLines": 144,
+    "retainedPct": 5.3,
     "registryFiles": 17
   },
   "files": {
@@ -34,7 +34,7 @@
       "significantLines": 0,
       "upstreamLines": 0,
       "upstreamPct": 0,
-      "retainedElsewhere": 2,
+      "retainedElsewhere": 2.2,
       "homes": [
         "app/frontend/src/lib/backend.ts(9)",
         "tests/website-version.test.ts(4)",
@@ -47,10 +47,11 @@
       "significantLines": 0,
       "upstreamLines": 0,
       "upstreamPct": 0,
-      "retainedElsewhere": 3.9,
+      "retainedElsewhere": 4.9,
       "homes": [
         "app/frontend/src/app.css(4)",
-        "docs/benchmark.html(2)"
+        "docs/benchmark.html(2)",
+        "tests/verify-release.test.ts(1)"
       ]
     },
     "index.html": {
@@ -133,8 +134,8 @@
       "retainedElsewhere": 37.1,
       "homes": [
         "app/frontend/src/app.css(12)",
-        "app/frontend/src/lib/types.ts(1)",
-        "docs/benchmark.html(1)"
+        "app/frontend/src/lib/sponsors.ts(1)",
+        "app/frontend/src/lib/types.ts(1)"
       ]
     },
     "src/components/SettingsView.vue": {
@@ -180,9 +181,9 @@
       "significantLines": 0,
       "upstreamLines": 0,
       "upstreamPct": 0,
-      "retainedElsewhere": 41.7,
+      "retainedElsewhere": 43.8,
       "homes": [
-        "app/frontend/src/lib/types.ts(14)",
+        "app/frontend/src/lib/types.ts(15)",
         "app/frontend/src/lib/backend.ts(11)",
         "app/frontend/src/lib/store.svelte.ts(6)"
       ]

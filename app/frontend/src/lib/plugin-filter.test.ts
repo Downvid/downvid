@@ -14,6 +14,7 @@ const bili = entry({
   id: 'bilibili',
   name: '哔哩哔哩',
   description: 'B站的解析器',
+  author: 'alice-zhang',
   repo: 'alice/dv-bilibili',
   sites: ['bilibili.com', 'b23.tv'],
   version: '1.2.0',
@@ -69,6 +70,23 @@ describe('filterPlugins', () => {
   it('按描述与 id 搜索', () => {
     expect(filterPlugins(all, '短视频', 'all').map((p) => p.id)).toEqual(['kuaishou'])
     expect(filterPlugins(all, 'weibo', 'all').map((p) => p.id)).toEqual(['weibo'])
+  })
+
+  it('按作者搜索（用户可能只记得是谁做的）', () => {
+    // 'alice-zhang' 只出现在 author 里：repo 是 alice/dv-bilibili，
+    // 这样用例才能单独钉住 author 字段，而不是被 repo 顺带命中
+    expect(filterPlugins(all, 'alice-zhang', 'all').map((p) => p.id)).toEqual(['bilibili'])
+  })
+
+  it('按仓库搜索', () => {
+    expect(filterPlugins(all, 'dv-weibo', 'all').map((p) => p.id)).toEqual(['weibo'])
+  })
+
+  it('多个词按「都要命中」处理，顺序无关', () => {
+    expect(filterPlugins(all, '短视频 快手', 'all').map((p) => p.id)).toEqual(['kuaishou'])
+    expect(filterPlugins(all, '快手 短视频', 'all').map((p) => p.id)).toEqual(['kuaishou'])
+    // 只命中一个词不算匹配：那会把「B站」和「短视频」的插件互相串进来
+    expect(filterPlugins(all, '短视频 哔哩', 'all')).toEqual([])
   })
 
   it('大小写与首尾空格不影响匹配', () => {

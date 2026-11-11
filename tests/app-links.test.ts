@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
-import { APP, CONTACT_EMAIL, REPO_SLUG, WEBSITE_URL, contactMailto } from '../shared/app'
+import { APP, CONTACT_EMAIL, QQ_GROUP_URL, REPO_SLUG, WEBSITE_URL, contactMailto } from '../shared/app'
 
 /**
  * 外部链接与联系方式的**唯一来源**契约（shared/app.ts）。
@@ -39,6 +39,30 @@ describe('官网地址', () => {
     expect(about).toContain('WEBSITE_URL')
     // 硬编码的域名不会随常量一起更新
     expect(about).not.toMatch(/https:\/\/downvid-[a-z]+\.vercel\.app/)
+  })
+})
+
+describe('QQ 交流群', () => {
+  it('是一个 https 的 qm.qq.com 加群链接', () => {
+    expect(QQ_GROUP_URL).toMatch(/^https:\/\/qm\.qq\.com\/q\/[A-Za-z0-9_-]+$/)
+  })
+
+  it('两个 README 都包含它', () => {
+    for (const file of ['README.md', 'README.en.md']) {
+      expect(read(file), `${file} 应提供 QQ 交流群入口`).toContain(QQ_GROUP_URL)
+    }
+  })
+
+  it('关于页用共享常量，而不是硬编码链接', () => {
+    const about = read('app/frontend/src/components/AboutView.svelte')
+    expect(about).toContain('QQ_GROUP_URL')
+    expect(about).not.toContain('qm.qq.com')
+  })
+
+  it('Release 正文从 shared/app.ts 读取它，而不是复制一份', () => {
+    const script = read('scripts/gen-release-notes.mjs')
+    expect(script).toContain('QQ_GROUP_URL')
+    expect(script).not.toContain('qm.qq.com')
   })
 })
 

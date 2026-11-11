@@ -1,13 +1,16 @@
 #!/usr/bin/env node
 /**
- * 生成 Release Notes 的下载引导区与双语对照表。
+ * 生成 Release Notes 的下载引导区。
  *
- * 背景：Release 正文里的 CHANGELOG 内容较长，很多用户拉到页面后不知道
- * 该点哪里下载。这里在正文顶部生成一排可点击的下载徽章与双语对照表，
- * 明确「哪个平台、装哪个文件」。
+ * 目标形状：
+ * - 顶部三枚「大徽章」：GitHub / Gitee / CNB，各带平台 logo，分别直链
+ *   macOS / Windows / Linux 的主推包（不跳 Release 页面，点击即下载）；
+ * - 下方按「平台 + 架构」自动生成的下载徽章，列出其余格式与架构；
+ *   不再生成下载对照表——表格在小屏上难读，而且和徽章重复；
+ * - 平台/架构从产物文件名里解析，新增 arm64 等架构时不需要改脚本。
  *
- * 徽章链接与表格只列出**实际存在的产物**——按 artifacts 目录扫描，
- * 避免出现指向 404 的链接（历史上产物名变更时正是这样踩过坑）。
+ * 徽章链接只列出实际存在的产物，避免出现指向 404 的链接（历史上产物名变更时
+ * 正是这样踩过坑）。
  *
  * 用法：
  *   node scripts/gen-release-notes.mjs <artifacts 目录> <版本号> [<changelog 文件>]
@@ -20,12 +23,21 @@ import path from 'node:path'
 
 const OWNER = 'Downvid'
 const REPO = 'downvid'
+const GITEE_REPO = 'Xynrin/downvid'
+const CNB_REPO = 'yxxbc/downvid'
 
 const [artifactsDir, version, changelogFile] = process.argv.slice(2)
 if (!artifactsDir || !version) {
   console.error('用法: node scripts/gen-release-notes.mjs <artifacts 目录> <版本号> [<changelog 文件>]')
   process.exit(1)
 }
+
+const tag = `v${version}`
+
+const ROOT = path.resolve(import.meta.dirname, '..')
+const SHARED_APP = fs.readFileSync(path.join(ROOT, 'shared/app.ts'), 'utf8')
+const QQ_GROUP_URL = SHARED_APP.match(/export const QQ_GROUP_URL = '([^']+)'/)?.[1] ?? ''
+if (!QQ_GROUP_URL) throw new Error('shared/app.ts 缺少 QQ_GROUP_URL')
 
 /** 递归列出所有文件 */
 function listFiles(root) {
@@ -36,78 +48,219 @@ function listFiles(root) {
   })
 }
 
-const all = listFiles(artifactsDir).map((f) => path.basename(f))
+// 文件名排序后再扫描：同一类产物出现多个时，徽章选择是确定的
+const all = listFiles(artifactsDir)
+  .map((f) => path.basename(f))
+  .sort()
 
-/** 产物在三个镜像里的下载地址（资产名相同，Release 由发布流程同步）。 */
-function downloadUrls(filename) {
+/** 某个镜像上的资产直链（资产名相同，Release 由发布流程同步）。 */
+function downloadUrl(mirror, filename) {
   const name = encodeURIComponent(filename)
-  const tag = `v${version}`
-  return {
-    github: `https://github.com/${OWNER}/${REPO}/releases/download/${tag}/${name}`,
-    gitee: `https://gitee.com/Xynrin/downvid/releases/download/${tag}/${name}`,
-    cnb: `https://cnb.cool/yxxbc/downvid/-/releases/download/${tag}/${name}`,
-  }
+  const base = {
+    github: `https://github.com/${OWNER}/${REPO}/releases/download/${tag}`,
+    gitee: `https://gitee.com/${GITEE_REPO}/releases/download/${tag}`,
+    cnb: `https://cnb.cool/${CNB_REPO}/-/releases/download/${tag}`,
+  }[mirror]
+  return `${base}/${name}`
 }
 
-function find(pattern) {
-  const file = all.find((f) => pattern.test(f))
-  return file ? { file, ...downloadUrls(file) } : null
+/**
+ * 三个镜像的品牌样式。
+ *
+ * 三个「快速下载」入口把三个平台分到三个镜像上：macOS → GitHub，
+ * Windows → Gitee，Linux → CNB。每个入口都直链资产，不跳 Release 页面。
+ */
+const MIRRORS = {
+  github: { label: 'GitHub', logo: 'github', color: '238636' },
+  gitee: { label: 'Gitee', logo: 'gitee', color: 'C71D23' },
+  cnb: { label: 'CNB', logo: 'cloudnativebuild', color: 'C2410C' },
 }
 
-/** shields.io 徽章，点击即下载 */
-function badge(label, message, color, url, logo) {
-  if (!url) return `<!-- ${label} 产物缺失，已跳过 -->`
-  const params = new URLSearchParams({ style: 'for-the-badge', label, labelColor: 'black', color })
+const PLATFORM_MIRROR = {
+  mac: 'github',
+  windows: 'gitee',
+  linux: 'cnb',
+}
+
+/**
+ * shields.io 的 for-the-badge 徽章，点击跳转。
+ *
+ * `logo` 既可以是 Simple Icons 的 slug，也可以是 data URI——Windows 的图标
+ * 已经从 Simple Icons 移除，只能用内联 SVG 保住「每个平台都有图标」。
+ */
+function badge({ label, message, color, url, logo, labelColor = 'black', logoColor = 'white' }) {
+  if (!url) return ''
+  const params = new URLSearchParams({
+    style: 'for-the-badge',
+    label,
+    message,
+    labelColor,
+    color,
+  })
   if (logo) params.set('logo', logo)
-  const img = `https://img.shields.io/static/v1?${params.toString()}&message=${encodeURIComponent(message)}`
-  return `[![${label}](${img})](${url})`
+  if (logoColor) params.set('logoColor', logoColor)
+  const img = `https://img.shields.io/static/v1?${params.toString()}`
+  return `[![${label} ${message}](${img})](${url})`
 }
 
-// ===== 按平台收集实际产物（包含安装器与便携包/更新包） =====
-const vEsc = version.replace(/\./g, '\\.')
+// ===== 产物名解析：DownVid-Wails-<platform>-<arch>-<version><suffix> =====
 
-// macOS
-const macDmg = find(new RegExp(`^DownVid-Wails-mac-universal-${vEsc}\\.dmg$`))
-const macZip = find(new RegExp(`^DownVid-Wails-mac-universal-${vEsc}\\.zip$`))
+const WINDOWS_LOGO =
+  'data:image/svg+xml;base64,' +
+  Buffer.from(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="white" d="M0 0h11v11H0zM13 0h11v11H13zM0 13h11v11H0zM13 13h11v11H13z"/></svg>',
+  ).toString('base64')
 
-// Windows
-const winExe = find(new RegExp(`^DownVid-Wails-windows-x64-${vEsc}-installer\\.exe$`))
-const winZip = find(new RegExp(`^DownVid-Wails-windows-x64-${vEsc}\\.zip$`))
+const PLATFORM_META = {
+  mac: { name: 'macOS', color: '1F1F1F', logo: 'apple' },
+  windows: { name: 'Windows', color: '0078D6', logo: WINDOWS_LOGO },
+  linux: { name: 'Linux', color: 'B45309', logo: 'linux' },
+}
 
-// Linux
-const linuxDeb = find(new RegExp(`^DownVid-Wails-linux-x64-${vEsc}\\.deb$`))
-const linuxTar = find(new RegExp(`^DownVid-Wails-linux-x64-${vEsc}\\.tar\\.gz$`))
+const PLATFORM_ORDER = ['mac', 'windows', 'linux']
+const ARCH_ORDER = ['universal', 'x64', 'arm64', 'x86']
 
-const primaryMac = macDmg || macZip
-const primaryWin = winExe || winZip
-const primaryLinux = linuxDeb || linuxTar
+const PREFIX = 'DownVid-Wails-'
+const VERSION_MARKER = `-${version}`
 
-const primaryBadges = [
-  primaryMac ? badge('macOS', macDmg ? '下载 DMG 安装器' : '下载通用版 (Zip)', '000000', primaryMac.github, 'apple') : null,
-  primaryWin ? badge('Windows', winExe ? '下载 EXE 安装向导' : '下载 x64 绿色版', '0078D6', primaryWin.github, 'windows') : null,
-  primaryLinux ? badge('Linux', linuxDeb ? '下载 DEB 安装包' : '下载 x64 便携包', 'FFB300', primaryLinux.github, 'linux') : null,
-].filter(Boolean)
+function normalizeArch(raw) {
+  const arch = raw.toLowerCase()
+  if (arch === 'aarch64') return 'arm64'
+  return arch
+}
 
-// ===== 双语下载对照表 =====
-const rows = []
-const pushRow = (platform, arch, type, entry, descZh, descEn) => {
-  if (entry) {
-    const mirrors = `[GitHub](${entry.github}) · [Gitee](${entry.gitee}) · [CNB](${entry.cnb})`
-    rows.push(`| ${platform} | ${arch} | ${type} | ${entry.file} | ${mirrors} | ${descZh} / ${descEn} |`)
+function displayArch(arch) {
+  if (arch === 'universal') return 'Universal'
+  return arch
+}
+
+/** 从文件名后缀判断产物类型；不认识的产物直接跳过，不猜。 */
+function classify(platform, suffix) {
+  const s = suffix.toLowerCase()
+  if (platform === 'mac') {
+    if (s === '.dmg') return { id: 'dmg', label: 'DMG', rank: 1 }
+    if (s === '.pkg') return { id: 'pkg', label: 'PKG', rank: 2 }
+    if (s === '.zip') return { id: 'zip', label: 'ZIP', rank: 3 }
   }
+  if (platform === 'windows') {
+    if (s.endsWith('-installer.exe')) return { id: 'installer', label: 'Installer', rank: 1 }
+    if (s === '.exe') return { id: 'exe', label: 'EXE', rank: 2 }
+    if (s === '.zip') return { id: 'zip', label: 'Portable', rank: 3 }
+  }
+  if (platform === 'linux') {
+    if (s === '.deb') return { id: 'deb', label: 'DEB', rank: 1 }
+    if (s === '.rpm') return { id: 'rpm', label: 'RPM', rank: 2 }
+    if (s === '.appimage') return { id: 'appimage', label: 'AppImage', rank: 3 }
+    if (s === '.tar.gz') return { id: 'tarball', label: 'tar.gz', rank: 4 }
+  }
+  return null
 }
 
-// macOS rows
-pushRow('macOS', 'Universal (Apple / Intel)', '安装器 / Installer', macDmg, '推荐，挂载后拖入「应用程序」', 'Recommended DMG installer')
-pushRow('macOS', 'Universal (Apple / Intel)', '更新便携 / Update', macZip, '解压即用，应用内自更新使用', 'Portable & auto-update zip')
+const groups = new Map()
 
-// Windows rows
-pushRow('Windows', 'x64', '安装器 / Installer', winExe, '推荐安装向导，创建快捷方式与静默更新', 'Recommended NSIS installer')
-pushRow('Windows', 'x64', '便携版 / Portable', winZip, '绿色免安装版，解压即用', 'Portable standalone zip')
+for (const file of all) {
+  if (!file.startsWith(PREFIX)) continue
+  const rest = file.slice(PREFIX.length)
+  const marker = rest.indexOf(VERSION_MARKER)
+  if (marker <= 0) continue
 
-// Linux rows
-pushRow('Linux', 'x64', '安装包 / Deb Package', linuxDeb, 'Debian / Ubuntu 推荐安装包', 'Recommended deb package')
-pushRow('Linux', 'x64', '便携包 / Portable', linuxTar, '解压后赋予执行权限即可运行', 'Portable tar.gz archive')
+  const head = rest.slice(0, marker)
+  const suffix = rest.slice(marker + VERSION_MARKER.length)
+  const bits = head.split('-')
+  const platform = bits.shift()
+  const arch = normalizeArch(bits.join('-'))
+  // hasOwn 而不是直接取值：产物名由 CI 生成，但别让 `constructor` 之类的
+  // 原型属性混进来（`PLATFORM_META['constructor']` 是个函数，真值）
+  if (!Object.hasOwn(PLATFORM_META, platform) || !arch) continue
+
+  const kind = classify(platform, suffix)
+  if (!kind) continue
+
+  const key = `${platform}|${arch}`
+  if (!groups.has(key)) groups.set(key, { platform, arch, items: new Map() })
+  const group = groups.get(key)
+  // 同一类型出现多个文件时只留排序后的第一个，避免同类徽章重复
+  if (!group.items.has(kind.id)) group.items.set(kind.id, { file, label: kind.label, rank: kind.rank })
+}
+
+const platformRank = (platform) => {
+  const index = PLATFORM_ORDER.indexOf(platform)
+  return index === -1 ? 99 : index
+}
+const archRank = (arch) => {
+  const index = ARCH_ORDER.indexOf(arch)
+  return index === -1 ? 99 : index
+}
+
+const sortedGroups = [...groups.values()].sort(
+  (a, b) =>
+    platformRank(a.platform) - platformRank(b.platform) ||
+    archRank(a.arch) - archRank(b.arch) ||
+    a.arch.localeCompare(b.arch),
+)
+
+// ===== 顶部三个快速下载：每个平台的主推包，分别直链三个镜像 =====
+const quickItems = new Set()
+const quickBadges = []
+
+for (const platform of PLATFORM_ORDER) {
+  const firstGroup = sortedGroups.find((group) => group.platform === platform)
+  if (!firstGroup) continue
+  const primary = [...firstGroup.items.values()].sort((a, b) => a.rank - b.rank)[0]
+  if (!primary) continue
+  const meta = PLATFORM_META[platform]
+  const mirror = MIRRORS[PLATFORM_MIRROR[platform]]
+  quickItems.add(primary.file)
+  quickBadges.push(
+    badge({
+      label: mirror.label,
+      message: `${meta.name} ${displayArch(firstGroup.arch)} · ${primary.label}`,
+      color: mirror.color,
+      url: downloadUrl(PLATFORM_MIRROR[platform], primary.file),
+      logo: mirror.logo,
+    }),
+  )
+}
+
+// ===== 其余架构与格式：同一平台沿用同一个镜像，全部直链 =====
+const moreBadges = sortedGroups
+  .flatMap((group) => {
+    const meta = PLATFORM_META[group.platform]
+    const mirror = MIRRORS[PLATFORM_MIRROR[group.platform]]
+    const label = `${meta.name} ${displayArch(group.arch)} · ${mirror.label}`
+    return [...group.items.values()]
+      .filter((item) => !quickItems.has(item.file))
+      .sort((a, b) => a.rank - b.rank)
+      .map((item) =>
+        badge({
+          label,
+          message: item.label,
+          color: meta.color,
+          url: downloadUrl(PLATFORM_MIRROR[group.platform], item.file),
+          logo: meta.logo,
+        }),
+      )
+  })
+  .join('\n')
+
+// ===== 交流群 =====
+const qqBadge = badge({
+  label: 'QQ',
+  message: 'DownVid 交流群',
+  color: '1EBAFC',
+  url: QQ_GROUP_URL,
+  logo: 'qq',
+})
+
+// ===== 平台说明（保留双语对照，但不再放下载矩阵） =====
+
+const notesTable = `| 🇨🇳 中文说明 | 🇺🇸 English Notes |
+|:---|:---|
+| **macOS**：推荐下载 \`.dmg\` 安装。应用未购买商业证书签名，首次打开若提示未受信任，请在「系统设置 → 隐私与安全性」中点击「仍要打开」。 | **macOS**: Recommended \`.dmg\`. Build is unsigned; if prompted about an untrusted developer, allow it in System Settings → Privacy & Security. |
+| **Windows**：推荐下载 \`-installer.exe\`，安装后自动创建快捷方式并支持应用内静默更新；亦可下载 \`.zip\` 免安装版。 | **Windows**: Recommended \`-installer.exe\` NSIS installer with shortcuts and silent in-app update; portable \`.zip\` is also available. |
+| **Linux**：Debian / Ubuntu 推荐安装 \`.deb\`；其他发行版可下载 \`.tar.gz\` 便携包，解压后执行 \`chmod +x downvid && ./downvid\`。 | **Linux**: \`.deb\` recommended for Debian/Ubuntu; other distros can extract \`.tar.gz\` and run \`chmod +x downvid && ./downvid\`. |
+| **运行依赖**：yt-dlp 与 ffmpeg **不随安装包分发**。软件会自动检测系统已有环境，若缺失可在「设置 → 运行依赖」中一键下载。 | **Dependencies**: yt-dlp & ffmpeg are not bundled. Existing system installations are reused; missing tools can be downloaded in Settings → Dependencies. |
+| **自动更新**：软件内置更新机制，可在「关于」页面检查更新并自动应用，无需手动重装。 | **Auto Update**: Built-in updater allows seamless updates without manual re-installation. |`
 
 // ===== CHANGELOG 正文 =====
 function extractChangelog() {
@@ -141,49 +294,31 @@ function extractChangelog() {
 
 const changelogBody = extractChangelog()
 
-const notesTable = `| 🇨🇳 中文说明 | 🇺🇸 English Notes |
-|:---|:---|
-| **macOS**：推荐下载 \`.dmg\` 安装。应用未购买商业证书签名，首次打开若提示未受信任，请在「系统设置 → 隐私与安全性」中点击「仍要打开」。 | **macOS**: Recommended \`.dmg\`. Build is unsigned; if prompted about an untrusted developer, allow it in System Settings → Privacy & Security. |
-| **Windows**：推荐下载 \`-installer.exe\`，安装后自动创建快捷方式并支持应用内静默更新；亦可下载 \`.zip\` 免安装版。 | **Windows**: Recommended \`-installer.exe\` NSIS installer with shortcuts and silent in-app update; portable \`.zip\` is also available. |
-| **Linux**：Debian / Ubuntu 推荐安装 \`.deb\`；其他发行版可下载 \`.tar.gz\` 便携包，解压后执行 \`chmod +x downvid && ./downvid\`。 | **Linux**: \`.deb\` recommended for Debian/Ubuntu; other distros can extract \`.tar.gz\` and run \`chmod +x downvid && ./downvid\`. |
-| **运行依赖**：yt-dlp 与 ffmpeg **不随安装包分发**。软件会自动检测系统已有环境，若缺失可在「设置 → 运行依赖」中一键下载。 | **Dependencies**: yt-dlp & ffmpeg are not bundled. Existing system installations are reused; missing tools can be downloaded in Settings → Dependencies. |
-| **自动更新**：软件内置更新机制，可在「关于」页面检查更新并自动应用，无需手动重装。 | **Auto Update**: Built-in updater allows seamless updates without manual re-installation. |`
-
-const downloadTable = rows.length > 0
-  ? `| 平台 / Platform | 架构 / Arch | 类型 / Type | 安装包 / Package | 下载 / Download | 说明 / Description |
-|:---|:---|:---|:---|:---|:---|
-${rows.join('\n')}
-
-> 三个镜像（GitHub / Gitee / CNB）由发布流程同步；某个镜像暂时不可用时换另一个即可。<br>
-> All three mirrors are synced by the release workflow; use another if one is temporarily unavailable.`
-  : `_产物生成中或未检测到可用安装包 / Generating artifacts or no packages found_`
-
 const body = `<!-- 此正文由 scripts/gen-release-notes.mjs 生成，请勿手动编辑 -->
 <div align="center">
 
-### ⬇️ 点击直接下载 / Direct Downloads
+### ⬇️ 直接下载 / Direct Downloads
 
-${primaryBadges.join('\n')}
+${quickBadges.join('\n') || '_产物生成中或未检测到可用安装包 / Generating artifacts or no packages found_'}
 
-<sub>选择对应系统的主推版本直接下载 · 更多格式参见下方对照表</sub><br>
-<sub>Select your platform to download · See table below for portable & update packages</sub>
+<sub>v${version} · macOS → GitHub · Windows → Gitee · Linux → CNB · 点击即下载<br>v${version} · macOS → GitHub · Windows → Gitee · Linux → CNB · click to download</sub>
 
+${moreBadges ? `\n<br>\n\n### 📦 其他架构与格式 / More Builds & Formats\n\n${moreBadges}\n` : ''}
 </div>
-
----
-
-## 📦 下载对照表 / Download Matrix
-
-${downloadTable}
-
-> 运行依赖 **yt-dlp / ffmpeg 不随安装包分发**：启动后会自动识别机器上已安装的版本并复用，识别不到时在「设置 → 运行依赖」里一键下载即可。<br>
-> **Dependencies are not bundled**: Installed tools on your machine will be detected automatically; one-click download is available in Settings → Dependencies.
 
 ---
 
 ### ⚠️ 各平台说明 / Platform Notes
 
 ${notesTable}
+
+---
+
+### 💬 交流群 / Community
+
+${qqBadge}
+
+<sub><a href="${QQ_GROUP_URL}">点击链接加入群聊【Downvid交流群】</a> / <a href="${QQ_GROUP_URL}">Click to join the DownVid QQ group</a></sub>
 
 ---
 

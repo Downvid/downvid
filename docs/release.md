@@ -150,13 +150,18 @@ git tag -d v1.3.0 && git push origin :refs/tags/v1.3.0
 | `.github/workflows/release.yml` | 打包步骤（真正的名字来源） |
 | `app/internal/update/migration.go` | 自更新识别安装包形态 |
 | `website/app.js` | 官网按系统直链产物 |
-| `scripts/gen-release-notes.mjs` | Release 正文的下载徽章与对照表 |
+| `scripts/gen-release-notes.mjs` | Release 正文的镜像 / 平台下载徽章 |
 
 | 平台 | 产物名 |
 | --- | --- |
 | macOS（通用） | `DownVid-Wails-mac-universal-<version>.zip` |
 | Windows x64 | `DownVid-Wails-windows-x64-<version>.zip` |
 | Linux x64 | `DownVid-Wails-linux-x64-<version>.tar.gz` |
+
+> Release 正文顶部是三枚直链大徽章：macOS 主推包放在 GitHub，Windows x64 主推包
+> 放在 Gitee，Linux x64 主推包放在 CNB；点击即下载，不经过 Release 页面。
+> 下方列出其余架构与格式，链接同样是资产直链。平台与架构从产物文件名解析——
+> 以后新增 `windows-arm64`、`linux-arm64` 等产物时徽章会自动出现，不需要改脚本。
 
 `pnpm lint:website` 会比对官网模板与 `release.yml`；`scripts/verify-release.mjs`
 会在发布后核对三个包是否都挂上了。
@@ -267,6 +272,10 @@ Gitee（`Xynrin/downvid`）与 CNB（`yxxbc/downvid`）都是完整镜像：各�
 - CNB 清单：固定 `update` Release 的 `manifest.cnb.json` 资产。CNB 的 raw API 需要登录，所以
   客户端读公开的 Release 下载 URL。
 - 同步失败时对应镜像会停在上一版，但另外两条源不受影响。
+
+> Gitee 上传走 `https.request` 流式 multipart：Node 的 `fetch` 默认 5 分钟
+> body 超时，100MB+ 的包在 GitHub Actions 上会稳定失败（v1.11.0 实测 5 分 07 秒）。
+> 现在只在 10 分钟没有数据时中断，429 / 5xx 重试两次；release job 的超时放宽到 45 分钟。
 
 本地补同步（token 统一放在本地 skill 的 `tokens.env`）：
 

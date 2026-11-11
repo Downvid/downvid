@@ -44,6 +44,14 @@ export const WEBSITE_URL = 'https://downvid-coral.vercel.app'
 export const AFDIAN_URL = 'https://afdian.com/a/xynrin'
 
 /**
+ * QQ 交流群加群链接。
+ *
+ * 「关于」页、README 与 Release 正文共用。qm.qq.com 的链接会跟随群设置
+ * 变化，换群时只改这一处；`tests/app-links.test.ts` 会核对三处是否一致。
+ */
+export const QQ_GROUP_URL = 'https://qm.qq.com/q/jmCfaELZ04'
+
+/**
  * 商务合作与赞助接洽邮箱。
  *
  * 用途**仅限**合作/赞助这类需要私下沟通的事：功能建议与缺陷请走 Issues，
