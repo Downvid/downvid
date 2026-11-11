@@ -3,16 +3,33 @@
   "app_id": "com.downvid.downvid",
   "channel": "stable",
   "version": "1.12.0",
-  "published_at": "2026-11-11T17:22:36.093Z",
-  "notes": "> [!WARNING]\n> 本次发布缺少以下平台的产物：**linux-x64**\n> 构建在 CI 侧未完成（通常是 runner 不可用）。补齐后会重新发布。\n\n<!-- 此正文由 scripts/gen-release-notes.mjs 生成，请勿手动编辑 -->\n<div align=\"center\">\n\n### ⬇️ 直接下载 / Direct Downloads\n\n[![GitHub macOS Universal · DMG](https://img.shields.io/static/v1?style=for-the-badge&label=GitHub&message=macOS+Universal+%C2%B7+DMG&labelColor=black&color=238636&logo=github&logoColor=white)](https://github.com/Downvid/downvid/releases/download/v1.12.0/DownVid-Wails-mac-universal-1.12.0.dmg)\n[![Gitee Windows x64 · Installer](https://img.shields.io/static/v1?style=for-the-badge&label=Gitee&message=Windows+x64+%C2%B7+Installer&labelColor=black&color=C71D23&logo=gitee&logoColor=white)](https://gitee.com/Xynrin/downvid/releases/download/v1.12.0/DownVid-Wails-windows-x64-1.12.0-installer.exe)\n\n<sub>v1.12.0 · macOS → GitHub · Windows → Gitee · Linux → CNB · 点击即下载<br>v1.12.0 · macOS → GitHub · Windows → Gitee · Linux → CNB · click to download</sub>\n\n\n<br>\n\n### 📦 其他架构与格式 / More Builds & Formats\n\n[![macOS Universal · GitHub ZIP](https://img.shields.io/static/v1?style=for-the-badge&label=macOS+Universal+%C2%B7+GitHub&message=ZIP&labelColor=black&color=1F1F1F&logo=apple&logoColor=white)](https://github.com/Downvid/downvid/releases/download/v1.12.0/DownVid-Wails-mac-universal-1.12.0.zip)\n[![Windows x64 · Gitee Portable](https://img.shields.io/static/v1?style=for-the-badge&label=Windows+x64+%C2%B7+Gitee&message=Portable&labelColor=black&color=0078D6&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0wIDBoMTF2MTFIMHpNMTMgMGgxMXYxMUgxM3pNMCAxM2gxMXYxMUgwek0xMyAxM2gxMXYxMUgxM3oiLz48L3N2Zz4%3D&logoColor=white)](https://gitee.com/Xynrin/downvid/releases/download/v1.12.0/DownVid-Wails-windows-x64-1.12.0.zip)\n\n</div>\n\n---\n\n### ⚠️ 各平台说明 / Platform Notes\n\n| 🇨🇳 中文说明 | 🇺🇸 English Notes |\n|:---|:---|\n| **macOS**：推荐下载 `.dmg` 安装。应用未购买商业证书签名，首次打开若提示未受信任，请在「系统设置 → 隐私与安全性」中点击「仍要打开」。 | **macOS**: Recommended `.dmg`. Build is unsigned; if prompted about an untrusted developer, allow it in System Settings → Privacy & Security. |\n| **Windows**：推荐下载 `-installer.exe`，安装后自动创建快捷方式并支持应用内静默更新；亦可下载 `.zip` 免安装版。 | **Windows**: Recommended `-installer.exe` NSIS installer with shortcuts and silent in-app update; portable `.zip` is also available. |\n| **Linux**：Debian / Ubuntu 推荐安装 `.deb`；其他发行版可下载 `.tar.gz` 便携包，解压后执行 `chmod +x downvid && ./downvid`。 | **Linux**: `.deb` recommended for Debian/Ubuntu; other distros can extract `.tar.gz` and run `chmod +x downvid && ./downvid`. |\n| **运行依赖**：yt-dlp 与 ffmpeg **不随安装包分发**。软件会自动检测系统已有环境，若缺失可在「设置 → 运行依赖」中一键下载。 | **Dependencies**: yt-dlp & ffmpeg are not bundled. Existing system installations are reused; missing tools can be downloaded in Settings → Dependencies. |\n| **自动更新**：软件内置更新机制，可在「关于」页面检查更新并自动应用，无需手动重装。 | **Auto Update**: Built-in updater allows seamless updates without manual re-installation. |\n\n---\n\n### 💬 交流群 / Community\n\n[![QQ DownVid 交流群](https://img.shields.io/static/v1?style=for-the-badge&label=QQ&message=DownVid+%E4%BA%A4%E6%B5%81%E7%BE%A4&labelColor=black&color=1EBAFC&logo=qq&logoColor=white)](https://qm.qq.com/q/jmCfaELZ04)\n\n<sub><a href=\"https://qm.qq.com/q/jmCfaELZ04\">点击链接加入群聊【Downvid交流群】</a> / <a href=\"https://qm.qq.com/q/jmCfaELZ04\">Click to join the DownVid QQ group</a></sub>\n\n---\n\n## 📝 更新内容 / Changelog\n\n### 新增\n\n- **插件系统**：在「设置 → 插件」里浏览、搜索、安装、更新和卸载第三方站点解析\n  插件。插件只在独立 JS 运行时里返回元数据与直链，下载仍由内置下载器完成，\n  断点续传、并发和进度都不受影响。\n- **插件详情与风险声明**：点卡片查看作者、仓库、版本、支持站点以及加载失败或\n  不可安装的具体原因。安装前会校验插件仓库 README 的风险声明；不达标的插件在\n  列表里直接禁用安装按钮，并写明缺少什么。\n- **QQ 交流群**：「关于」页、README 与 Release 正文新增「Downvid交流群」入口：\n  <https://qm.qq.com/q/jmCfaELZ04>。\n\n### 修复\n\n- **插件更新永远失败**：更新时复用安装流程会把已存在的插件目录当成冲突，导致\n  每次更新都报错；现在更新会正确替换插件本体，并保留它的数据目录。\n- **公告链接被空白切断**：公告正文里的链接在换行处会被拆成两段，点击后打不开。\n- **Gitee / CNB 镜像同步**：Release 工作流在缺少某个平台产物时会提前失败，\n  导致两个镜像的同步步骤被跳过；现在缺失平台只警告并继续。Gitee 大文件上传\n  改用流式上传，避免 Node `fetch` 默认的 5 分钟超时。\n\n### 变更\n\n- **Release 下载入口**：顶部三枚大徽章直接下载 macOS（GitHub）/ Windows（Gitee）/\n  Linux（CNB）主推包；下方按架构和格式列出 ZIP / Portable / arm64 等产物，\n  全部是资产直链，不再生成下载对照表。\n- **插件页视觉与交互**：卡片网格、作者与状态行、右上角安装/更新、加载骨架、\n  空状态、搜索清除和详情弹窗。\n\n---\n\n<sub>完整历史见 [CHANGELOG.md](https://github.com/Downvid/downvid/blob/main/CHANGELOG.md) · 遇到问题请先看 [故障排除 / Troubleshooting](https://github.com/Downvid/downvid/blob/main/docs/troubleshooting.md)</sub>",
+  "published_at": "2026-11-11T17:49:56.694Z",
+  "notes": "<!-- 此正文由 scripts/gen-release-notes.mjs 生成，请勿手动编辑 -->\n<div align=\"center\">\n\n### ⬇️ 直接下载 / Direct Downloads\n\n[![GitHub macOS Universal · DMG](https://img.shields.io/static/v1?style=for-the-badge&label=GitHub&message=macOS+Universal+%C2%B7+DMG&labelColor=black&color=238636&logo=github&logoColor=white)](https://github.com/Downvid/downvid/releases/download/v1.12.0/DownVid-Wails-mac-universal-1.12.0.dmg)\n[![Gitee Windows x64 · Installer](https://img.shields.io/static/v1?style=for-the-badge&label=Gitee&message=Windows+x64+%C2%B7+Installer&labelColor=black&color=C71D23&logo=gitee&logoColor=white)](https://gitee.com/Xynrin/downvid/releases/download/v1.12.0/DownVid-Wails-windows-x64-1.12.0-installer.exe)\n[![CNB Linux x64 · DEB](https://img.shields.io/static/v1?style=for-the-badge&label=CNB&message=Linux+x64+%C2%B7+DEB&labelColor=black&color=C2410C&logo=cloudnativebuild&logoColor=white)](https://cnb.cool/yxxbc/downvid/-/releases/download/v1.12.0/DownVid-Wails-linux-x64-1.12.0.deb)\n\n<sub>v1.12.0 · macOS → GitHub · Windows → Gitee · Linux → CNB · 点击即下载<br>v1.12.0 · macOS → GitHub · Windows → Gitee · Linux → CNB · click to download</sub>\n\n\n<br>\n\n### 📦 其他架构与格式 / More Builds & Formats\n\n[![macOS Universal · GitHub ZIP](https://img.shields.io/static/v1?style=for-the-badge&label=macOS+Universal+%C2%B7+GitHub&message=ZIP&labelColor=black&color=1F1F1F&logo=apple&logoColor=white)](https://github.com/Downvid/downvid/releases/download/v1.12.0/DownVid-Wails-mac-universal-1.12.0.zip)\n[![Windows x64 · Gitee Portable](https://img.shields.io/static/v1?style=for-the-badge&label=Windows+x64+%C2%B7+Gitee&message=Portable&labelColor=black&color=0078D6&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0wIDBoMTF2MTFIMHpNMTMgMGgxMXYxMUgxM3pNMCAxM2gxMXYxMUgwek0xMyAxM2gxMXYxMUgxM3oiLz48L3N2Zz4%3D&logoColor=white)](https://gitee.com/Xynrin/downvid/releases/download/v1.12.0/DownVid-Wails-windows-x64-1.12.0.zip)\n[![Linux x64 · CNB tar.gz](https://img.shields.io/static/v1?style=for-the-badge&label=Linux+x64+%C2%B7+CNB&message=tar.gz&labelColor=black&color=B45309&logo=linux&logoColor=white)](https://cnb.cool/yxxbc/downvid/-/releases/download/v1.12.0/DownVid-Wails-linux-x64-1.12.0.tar.gz)\n\n</div>\n\n---\n\n### ⚠️ 各平台说明 / Platform Notes\n\n| 🇨🇳 中文说明 | 🇺🇸 English Notes |\n|:---|:---|\n| **macOS**：推荐下载 `.dmg` 安装。应用未购买商业证书签名，首次打开若提示未受信任，请在「系统设置 → 隐私与安全性」中点击「仍要打开」。 | **macOS**: Recommended `.dmg`. Build is unsigned; if prompted about an untrusted developer, allow it in System Settings → Privacy & Security. |\n| **Windows**：推荐下载 `-installer.exe`，安装后自动创建快捷方式并支持应用内静默更新；亦可下载 `.zip` 免安装版。 | **Windows**: Recommended `-installer.exe` NSIS installer with shortcuts and silent in-app update; portable `.zip` is also available. |\n| **Linux**：Debian / Ubuntu 推荐安装 `.deb`；其他发行版可下载 `.tar.gz` 便携包，解压后执行 `chmod +x downvid && ./downvid`。 | **Linux**: `.deb` recommended for Debian/Ubuntu; other distros can extract `.tar.gz` and run `chmod +x downvid && ./downvid`. |\n| **运行依赖**：yt-dlp 与 ffmpeg **不随安装包分发**。软件会自动检测系统已有环境，若缺失可在「设置 → 运行依赖」中一键下载。 | **Dependencies**: yt-dlp & ffmpeg are not bundled. Existing system installations are reused; missing tools can be downloaded in Settings → Dependencies. |\n| **自动更新**：软件内置更新机制，可在「关于」页面检查更新并自动应用，无需手动重装。 | **Auto Update**: Built-in updater allows seamless updates without manual re-installation. |\n\n---\n\n### 💬 交流群 / Community\n\n[![QQ DownVid 交流群](https://img.shields.io/static/v1?style=for-the-badge&label=QQ&message=DownVid+%E4%BA%A4%E6%B5%81%E7%BE%A4&labelColor=black&color=1EBAFC&logo=qq&logoColor=white)](https://qm.qq.com/q/jmCfaELZ04)\n\n<sub><a href=\"https://qm.qq.com/q/jmCfaELZ04\">点击链接加入群聊【Downvid交流群】</a> / <a href=\"https://qm.qq.com/q/jmCfaELZ04\">Click to join the DownVid QQ group</a></sub>\n\n---\n\n## 📝 更新内容 / Changelog\n\n### 新增\n\n- **插件系统**：在「设置 → 插件」里浏览、搜索、安装、更新和卸载第三方站点解析\n  插件。插件只在独立 JS 运行时里返回元数据与直链，下载仍由内置下载器完成，\n  断点续传、并发和进度都不受影响。\n- **插件详情与风险声明**：点卡片查看作者、仓库、版本、支持站点以及加载失败或\n  不可安装的具体原因。安装前会校验插件仓库 README 的风险声明；不达标的插件在\n  列表里直接禁用安装按钮，并写明缺少什么。\n- **QQ 交流群**：「关于」页、README 与 Release 正文新增「Downvid交流群」入口：\n  <https://qm.qq.com/q/jmCfaELZ04>。\n\n### 修复\n\n- **插件更新永远失败**：更新时复用安装流程会把已存在的插件目录当成冲突，导致\n  每次更新都报错；现在更新会正确替换插件本体，并保留它的数据目录。\n- **公告链接被空白切断**：公告正文里的链接在换行处会被拆成两段，点击后打不开。\n- **Gitee / CNB 镜像同步**：Release 工作流在缺少某个平台产物时会提前失败，\n  导致两个镜像的同步步骤被跳过；现在缺失平台只警告并继续。Gitee 大文件上传\n  改用流式上传，避免 Node `fetch` 默认的 5 分钟超时。\n\n### 变更\n\n- **Release 下载入口**：顶部三枚大徽章直接下载 macOS（GitHub）/ Windows（Gitee）/\n  Linux（CNB）主推包；下方按架构和格式列出 ZIP / Portable / arm64 等产物，\n  全部是资产直链，不再生成下载对照表。\n- **插件页视觉与交互**：卡片网格、作者与状态行、右上角安装/更新、加载骨架、\n  空状态、搜索清除和详情弹窗。\n\n---\n\n<sub>完整历史见 [CHANGELOG.md](https://github.com/Downvid/downvid/blob/main/CHANGELOG.md) · 遇到问题请先看 [故障排除 / Troubleshooting](https://github.com/Downvid/downvid/blob/main/docs/troubleshooting.md)</sub>",
   "assets": [
+    {
+      "name": "DownVid-Wails-linux-x64-1.12.0.deb",
+      "os": "linux",
+      "arch": "amd64",
+      "url": "https://gitee.com/Xynrin/downvid/releases/download/v1.12.0/DownVid-Wails-linux-x64-1.12.0.deb",
+      "sha256": "94ac9391b71ab8adb9f1c94a57359d12d47d669d1b040ef73b4fc2b65a8b5589",
+      "size": 9351310
+    },
+    {
+      "name": "DownVid-Wails-linux-x64-1.12.0.tar.gz",
+      "os": "linux",
+      "arch": "amd64",
+      "url": "https://gitee.com/Xynrin/downvid/releases/download/v1.12.0/DownVid-Wails-linux-x64-1.12.0.tar.gz",
+      "sha256": "e5856751c089f23733b5ada24a21ed05333e7a1b0f5bd45237a1d1c21ec70cbb",
+      "size": 11552789,
+      "format": "tar.gz"
+    },
     {
       "name": "DownVid-Wails-mac-universal-1.12.0.dmg",
       "os": "darwin",
       "arch": "universal",
       "url": "https://gitee.com/Xynrin/downvid/releases/download/v1.12.0/DownVid-Wails-mac-universal-1.12.0.dmg",
-      "sha256": "3734dddb6dede2596c0b7dbaa33e06f7ba2cbd6cc7261c575489800841d81ad0",
-      "size": 28816984,
+      "sha256": "3ab61af8fda0b8a7e6ecedcc3366ae6ad9f5f90e5cfd4abe042ca9886634eb58",
+      "size": 28816989,
       "format": "dmg"
     },
     {
@@ -20,8 +37,8 @@
       "os": "darwin",
       "arch": "universal",
       "url": "https://gitee.com/Xynrin/downvid/releases/download/v1.12.0/DownVid-Wails-mac-universal-1.12.0.zip",
-      "sha256": "0311e1c0026646d183e669176c274229eb2f3810ebb940d13d3976caea3543ad",
-      "size": 28895722,
+      "sha256": "0784b4b82e6acc638d4c46aee94a6ac04ac493841637ccbe7a665238febfdd8d",
+      "size": 28895705,
       "format": "zip"
     },
     {
@@ -29,8 +46,8 @@
       "os": "windows",
       "arch": "amd64",
       "url": "https://gitee.com/Xynrin/downvid/releases/download/v1.12.0/DownVid-Wails-windows-x64-1.12.0-installer.exe",
-      "sha256": "8967070d5b25f7204792cd22424c0359f51c888b20548f3d0fd34a93dd74324f",
-      "size": 13868022,
+      "sha256": "2b5e7be03d5b228fca5b9a4015cdc4e4266950c1efd09594d64725d5430f6b66",
+      "size": 13868024,
       "format": "exe"
     },
     {
@@ -38,8 +55,8 @@
       "os": "windows",
       "arch": "amd64",
       "url": "https://gitee.com/Xynrin/downvid/releases/download/v1.12.0/DownVid-Wails-windows-x64-1.12.0.zip",
-      "sha256": "ac67e3f3c4d3241e308605cf60b71d5757c6dac38f9d5b34270d723e50747164",
-      "size": 12218131,
+      "sha256": "191288952f3fcb10bd0452fed3c051e8b1503f7187fa08ba9480b2de7321a0e4",
+      "size": 12218132,
       "format": "zip"
     }
   ]
