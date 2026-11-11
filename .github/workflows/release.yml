@@ -197,18 +197,21 @@ jobs:
       - name: Install Linux build deps
         if: matrix.os == 'ubuntu-22.04'
         run: |
-          # `apt-get update` 只是刷新包索引，不是系统升级；但镜像/网络异常时
-          # 可能长时间无响应，把整个发布卡在 build 阶段。这里给它 3 分钟上限，
-          # 超时就用 runner 自带的索引继续安装，不再无限等待。
+          # Wails 在 Linux 上用 cgo 链接 GTK / WebKit：macOS / Windows 的 SDK
+          # 随 runner 提供，Linux 的开发头文件不在 ubuntu-22.04 镜像里，必须装。
+          # 但**先不要 apt-get update**：runner 自带的包索引通常够用，直接安装
+          # 能避开镜像刷新卡住的常见故障；只有装不上时才刷新索引重试。
+          DEPS=(build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.0-dev libayatana-appindicator3-dev)
+          if timeout 300s sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${DEPS[@]}"; then
+            exit 0
+          fi
+          echo "::warning::直接安装失败，刷新包索引后重试"
           timeout 180s sudo apt-get update \
             -o Acquire::Retries=2 \
             -o Acquire::http::Timeout=30 \
             -o Acquire::https::Timeout=30 \
-            || echo "::warning::apt-get update 超时或失败，沿用现有包索引继续"
-          timeout 300s sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            build-essential pkg-config \
-            libgtk-3-dev libwebkit2gtk-4.0-dev \
-            libayatana-appindicator3-dev
+            || echo "::warning::apt-get update 超时，继续尝试安装"
+          timeout 300s sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "${DEPS[@]}"
 
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0
