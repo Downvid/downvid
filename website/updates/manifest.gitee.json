@@ -2,61 +2,44 @@
   "schema_version": 1,
   "app_id": "com.downvid.downvid",
   "channel": "stable",
-  "version": "1.10.1",
-  "published_at": "2026-11-08T18:43:26.399Z",
-  "notes": "<!-- 此正文由 scripts/gen-release-notes.mjs 生成，请勿手动编辑 -->\n<div align=\"center\">\n\n### ⬇️ 点击直接下载 / Direct Downloads\n\n[![macOS](https://img.shields.io/static/v1?style=for-the-badge&label=macOS&labelColor=black&color=000000&logo=apple&message=%E4%B8%8B%E8%BD%BD%20DMG%20%E5%AE%89%E8%A3%85%E5%99%A8)](https://github.com/Downvid/downvid/releases/download/v1.10.1/DownVid-Wails-mac-universal-1.10.1.dmg)\n[![Windows](https://img.shields.io/static/v1?style=for-the-badge&label=Windows&labelColor=black&color=0078D6&logo=windows&message=%E4%B8%8B%E8%BD%BD%20EXE%20%E5%AE%89%E8%A3%85%E5%90%91%E5%AF%BC)](https://github.com/Downvid/downvid/releases/download/v1.10.1/DownVid-Wails-windows-x64-1.10.1-installer.exe)\n[![Linux](https://img.shields.io/static/v1?style=for-the-badge&label=Linux&labelColor=black&color=FFB300&logo=linux&message=%E4%B8%8B%E8%BD%BD%20DEB%20%E5%AE%89%E8%A3%85%E5%8C%85)](https://github.com/Downvid/downvid/releases/download/v1.10.1/DownVid-Wails-linux-x64-1.10.1.deb)\n\n<sub>选择对应系统的主推版本直接下载 · 更多格式参见下方对照表</sub><br>\n<sub>Select your platform to download · See table below for portable & update packages</sub>\n\n</div>\n\n---\n\n## 📦 下载对照表 / Download Matrix\n\n| 平台 / Platform | 架构 / Arch | 类型 / Type | 安装包 / Package | 下载 / Download | 说明 / Description |\n|:---|:---|:---|:---|:---|:---|\n| macOS | Universal (Apple / Intel) | 安装器 / Installer | DownVid-Wails-mac-universal-1.10.1.dmg | [GitHub](https://github.com/Downvid/downvid/releases/download/v1.10.1/DownVid-Wails-mac-universal-1.10.1.dmg) · [Gitee](https://gitee.com/Xynrin/downvid/releases/download/v1.10.1/DownVid-Wails-mac-universal-1.10.1.dmg) · [CNB](https://cnb.cool/yxxbc/downvid/-/releases/download/v1.10.1/DownVid-Wails-mac-universal-1.10.1.dmg) | 推荐，挂载后拖入「应用程序」 / Recommended DMG installer |\n| macOS | Universal (Apple / Intel) | 更新便携 / Update | DownVid-Wails-mac-universal-1.10.1.zip | [GitHub](https://github.com/Downvid/downvid/releases/download/v1.10.1/DownVid-Wails-mac-universal-1.10.1.zip) · [Gitee](https://gitee.com/Xynrin/downvid/releases/download/v1.10.1/DownVid-Wails-mac-universal-1.10.1.zip) · [CNB](https://cnb.cool/yxxbc/downvid/-/releases/download/v1.10.1/DownVid-Wails-mac-universal-1.10.1.zip) | 解压即用，应用内自更新使用 / Portable & auto-update zip |\n| Windows | x64 | 安装器 / Installer | DownVid-Wails-windows-x64-1.10.1-installer.exe | [GitHub](https://github.com/Downvid/downvid/releases/download/v1.10.1/DownVid-Wails-windows-x64-1.10.1-installer.exe) · [Gitee](https://gitee.com/Xynrin/downvid/releases/download/v1.10.1/DownVid-Wails-windows-x64-1.10.1-installer.exe) · [CNB](https://cnb.cool/yxxbc/downvid/-/releases/download/v1.10.1/DownVid-Wails-windows-x64-1.10.1-installer.exe) | 推荐安装向导，创建快捷方式与静默更新 / Recommended NSIS installer |\n| Windows | x64 | 便携版 / Portable | DownVid-Wails-windows-x64-1.10.1.zip | [GitHub](https://github.com/Downvid/downvid/releases/download/v1.10.1/DownVid-Wails-windows-x64-1.10.1.zip) · [Gitee](https://gitee.com/Xynrin/downvid/releases/download/v1.10.1/DownVid-Wails-windows-x64-1.10.1.zip) · [CNB](https://cnb.cool/yxxbc/downvid/-/releases/download/v1.10.1/DownVid-Wails-windows-x64-1.10.1.zip) | 绿色免安装版，解压即用 / Portable standalone zip |\n| Linux | x64 | 安装包 / Deb Package | DownVid-Wails-linux-x64-1.10.1.deb | [GitHub](https://github.com/Downvid/downvid/releases/download/v1.10.1/DownVid-Wails-linux-x64-1.10.1.deb) · [Gitee](https://gitee.com/Xynrin/downvid/releases/download/v1.10.1/DownVid-Wails-linux-x64-1.10.1.deb) · [CNB](https://cnb.cool/yxxbc/downvid/-/releases/download/v1.10.1/DownVid-Wails-linux-x64-1.10.1.deb) | Debian / Ubuntu 推荐安装包 / Recommended deb package |\n| Linux | x64 | 便携包 / Portable | DownVid-Wails-linux-x64-1.10.1.tar.gz | [GitHub](https://github.com/Downvid/downvid/releases/download/v1.10.1/DownVid-Wails-linux-x64-1.10.1.tar.gz) · [Gitee](https://gitee.com/Xynrin/downvid/releases/download/v1.10.1/DownVid-Wails-linux-x64-1.10.1.tar.gz) · [CNB](https://cnb.cool/yxxbc/downvid/-/releases/download/v1.10.1/DownVid-Wails-linux-x64-1.10.1.tar.gz) | 解压后赋予执行权限即可运行 / Portable tar.gz archive |\n\n> 三个镜像（GitHub / Gitee / CNB）由发布流程同步；某个镜像暂时不可用时换另一个即可。<br>\n> All three mirrors are synced by the release workflow; use another if one is temporarily unavailable.\n\n> 运行依赖 **yt-dlp / ffmpeg 不随安装包分发**：启动后会自动识别机器上已安装的版本并复用，识别不到时在「设置 → 运行依赖」里一键下载即可。<br>\n> **Dependencies are not bundled**: Installed tools on your machine will be detected automatically; one-click download is available in Settings → Dependencies.\n\n---\n\n### ⚠️ 各平台说明 / Platform Notes\n\n| 🇨🇳 中文说明 | 🇺🇸 English Notes |\n|:---|:---|\n| **macOS**：推荐下载 `.dmg` 安装。应用未购买商业证书签名，首次打开若提示未受信任，请在「系统设置 → 隐私与安全性」中点击「仍要打开」。 | **macOS**: Recommended `.dmg`. Build is unsigned; if prompted about an untrusted developer, allow it in System Settings → Privacy & Security. |\n| **Windows**：推荐下载 `-installer.exe`，安装后自动创建快捷方式并支持应用内静默更新；亦可下载 `.zip` 免安装版。 | **Windows**: Recommended `-installer.exe` NSIS installer with shortcuts and silent in-app update; portable `.zip` is also available. |\n| **Linux**：Debian / Ubuntu 推荐安装 `.deb`；其他发行版可下载 `.tar.gz` 便携包，解压后执行 `chmod +x downvid && ./downvid`。 | **Linux**: `.deb` recommended for Debian/Ubuntu; other distros can extract `.tar.gz` and run `chmod +x downvid && ./downvid`. |\n| **运行依赖**：yt-dlp 与 ffmpeg **不随安装包分发**。软件会自动检测系统已有环境，若缺失可在「设置 → 运行依赖」中一键下载。 | **Dependencies**: yt-dlp & ffmpeg are not bundled. Existing system installations are reused; missing tools can be downloaded in Settings → Dependencies. |\n| **自动更新**：软件内置更新机制，可在「关于」页面检查更新并自动应用，无需手动重装。 | **Auto Update**: Built-in updater allows seamless updates without manual re-installation. |\n\n---\n\n## 📝 更新内容 / Changelog\n\n### 变更\n\n- **依赖更新**：前端与构建工具跟进补丁版本——Svelte 5.57.3、bits-ui 2.20.6、\n  Tailwind CSS 4.3.5、Vite 8.3.6（根目录）/ 7.3.7（前端）、Vitest 5.1.0、\n  svelte-check 4.7.8、marked 18.1.3、puppeteer-core 25.16.0、ws 8.22.1、\n  postcss 8.5.32、@types/node 26.6.6、vite-plugin-electron 1.2.0。\n- **Go 依赖**：Wails 2.16 的间接依赖跟进补丁版本——go-webview2 1.0.23、\n  go-winloader、echo 4.13.4、go-colorable 0.1.16、go-isatty 0.0.24。\n- **运行依赖清单**：已核对上游，yt-dlp `2026.11.04.232659`、ffmpeg `b6.1.1`、\n  aria2 `1.37.0` 均为当前最新，本次没有变化。\n\n---\n\n<sub>完整历史见 [CHANGELOG.md](https://github.com/Downvid/downvid/blob/main/CHANGELOG.md) · 遇到问题请先看 [故障排除 / Troubleshooting](https://github.com/Downvid/downvid/blob/main/docs/troubleshooting.md)</sub>",
+  "version": "1.12.0",
+  "published_at": "2026-11-11T17:22:36.093Z",
+  "notes": "> [!WARNING]\n> 本次发布缺少以下平台的产物：**linux-x64**\n> 构建在 CI 侧未完成（通常是 runner 不可用）。补齐后会重新发布。\n\n<!-- 此正文由 scripts/gen-release-notes.mjs 生成，请勿手动编辑 -->\n<div align=\"center\">\n\n### ⬇️ 直接下载 / Direct Downloads\n\n[![GitHub macOS Universal · DMG](https://img.shields.io/static/v1?style=for-the-badge&label=GitHub&message=macOS+Universal+%C2%B7+DMG&labelColor=black&color=238636&logo=github&logoColor=white)](https://github.com/Downvid/downvid/releases/download/v1.12.0/DownVid-Wails-mac-universal-1.12.0.dmg)\n[![Gitee Windows x64 · Installer](https://img.shields.io/static/v1?style=for-the-badge&label=Gitee&message=Windows+x64+%C2%B7+Installer&labelColor=black&color=C71D23&logo=gitee&logoColor=white)](https://gitee.com/Xynrin/downvid/releases/download/v1.12.0/DownVid-Wails-windows-x64-1.12.0-installer.exe)\n\n<sub>v1.12.0 · macOS → GitHub · Windows → Gitee · Linux → CNB · 点击即下载<br>v1.12.0 · macOS → GitHub · Windows → Gitee · Linux → CNB · click to download</sub>\n\n\n<br>\n\n### 📦 其他架构与格式 / More Builds & Formats\n\n[![macOS Universal · GitHub ZIP](https://img.shields.io/static/v1?style=for-the-badge&label=macOS+Universal+%C2%B7+GitHub&message=ZIP&labelColor=black&color=1F1F1F&logo=apple&logoColor=white)](https://github.com/Downvid/downvid/releases/download/v1.12.0/DownVid-Wails-mac-universal-1.12.0.zip)\n[![Windows x64 · Gitee Portable](https://img.shields.io/static/v1?style=for-the-badge&label=Windows+x64+%C2%B7+Gitee&message=Portable&labelColor=black&color=0078D6&logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2CPHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI%2BPHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0wIDBoMTF2MTFIMHpNMTMgMGgxMXYxMUgxM3pNMCAxM2gxMXYxMUgwek0xMyAxM2gxMXYxMUgxM3oiLz48L3N2Zz4%3D&logoColor=white)](https://gitee.com/Xynrin/downvid/releases/download/v1.12.0/DownVid-Wails-windows-x64-1.12.0.zip)\n\n</div>\n\n---\n\n### ⚠️ 各平台说明 / Platform Notes\n\n| 🇨🇳 中文说明 | 🇺🇸 English Notes |\n|:---|:---|\n| **macOS**：推荐下载 `.dmg` 安装。应用未购买商业证书签名，首次打开若提示未受信任，请在「系统设置 → 隐私与安全性」中点击「仍要打开」。 | **macOS**: Recommended `.dmg`. Build is unsigned; if prompted about an untrusted developer, allow it in System Settings → Privacy & Security. |\n| **Windows**：推荐下载 `-installer.exe`，安装后自动创建快捷方式并支持应用内静默更新；亦可下载 `.zip` 免安装版。 | **Windows**: Recommended `-installer.exe` NSIS installer with shortcuts and silent in-app update; portable `.zip` is also available. |\n| **Linux**：Debian / Ubuntu 推荐安装 `.deb`；其他发行版可下载 `.tar.gz` 便携包，解压后执行 `chmod +x downvid && ./downvid`。 | **Linux**: `.deb` recommended for Debian/Ubuntu; other distros can extract `.tar.gz` and run `chmod +x downvid && ./downvid`. |\n| **运行依赖**：yt-dlp 与 ffmpeg **不随安装包分发**。软件会自动检测系统已有环境，若缺失可在「设置 → 运行依赖」中一键下载。 | **Dependencies**: yt-dlp & ffmpeg are not bundled. Existing system installations are reused; missing tools can be downloaded in Settings → Dependencies. |\n| **自动更新**：软件内置更新机制，可在「关于」页面检查更新并自动应用，无需手动重装。 | **Auto Update**: Built-in updater allows seamless updates without manual re-installation. |\n\n---\n\n### 💬 交流群 / Community\n\n[![QQ DownVid 交流群](https://img.shields.io/static/v1?style=for-the-badge&label=QQ&message=DownVid+%E4%BA%A4%E6%B5%81%E7%BE%A4&labelColor=black&color=1EBAFC&logo=qq&logoColor=white)](https://qm.qq.com/q/jmCfaELZ04)\n\n<sub><a href=\"https://qm.qq.com/q/jmCfaELZ04\">点击链接加入群聊【Downvid交流群】</a> / <a href=\"https://qm.qq.com/q/jmCfaELZ04\">Click to join the DownVid QQ group</a></sub>\n\n---\n\n## 📝 更新内容 / Changelog\n\n### 新增\n\n- **插件系统**：在「设置 → 插件」里浏览、搜索、安装、更新和卸载第三方站点解析\n  插件。插件只在独立 JS 运行时里返回元数据与直链，下载仍由内置下载器完成，\n  断点续传、并发和进度都不受影响。\n- **插件详情与风险声明**：点卡片查看作者、仓库、版本、支持站点以及加载失败或\n  不可安装的具体原因。安装前会校验插件仓库 README 的风险声明；不达标的插件在\n  列表里直接禁用安装按钮，并写明缺少什么。\n- **QQ 交流群**：「关于」页、README 与 Release 正文新增「Downvid交流群」入口：\n  <https://qm.qq.com/q/jmCfaELZ04>。\n\n### 修复\n\n- **插件更新永远失败**：更新时复用安装流程会把已存在的插件目录当成冲突，导致\n  每次更新都报错；现在更新会正确替换插件本体，并保留它的数据目录。\n- **公告链接被空白切断**：公告正文里的链接在换行处会被拆成两段，点击后打不开。\n- **Gitee / CNB 镜像同步**：Release 工作流在缺少某个平台产物时会提前失败，\n  导致两个镜像的同步步骤被跳过；现在缺失平台只警告并继续。Gitee 大文件上传\n  改用流式上传，避免 Node `fetch` 默认的 5 分钟超时。\n\n### 变更\n\n- **Release 下载入口**：顶部三枚大徽章直接下载 macOS（GitHub）/ Windows（Gitee）/\n  Linux（CNB）主推包；下方按架构和格式列出 ZIP / Portable / arm64 等产物，\n  全部是资产直链，不再生成下载对照表。\n- **插件页视觉与交互**：卡片网格、作者与状态行、右上角安装/更新、加载骨架、\n  空状态、搜索清除和详情弹窗。\n\n---\n\n<sub>完整历史见 [CHANGELOG.md](https://github.com/Downvid/downvid/blob/main/CHANGELOG.md) · 遇到问题请先看 [故障排除 / Troubleshooting](https://github.com/Downvid/downvid/blob/main/docs/troubleshooting.md)</sub>",
   "assets": [
     {
-      "name": "DownVid-Wails-linux-x64-1.10.1.deb",
-      "os": "linux",
-      "arch": "amd64",
-      "url": "https://gitee.com/Xynrin/downvid/releases/download/v1.10.1/DownVid-Wails-linux-x64-1.10.1.deb",
-      "sha256": "43437dc46f5444ddf9b58c254d1eaf8d64fc42869d8be25af00c3b12d24a5f7e",
-      "size": 5791550
-    },
-    {
-      "name": "DownVid-Wails-linux-x64-1.10.1.tar.gz",
-      "os": "linux",
-      "arch": "amd64",
-      "url": "https://gitee.com/Xynrin/downvid/releases/download/v1.10.1/DownVid-Wails-linux-x64-1.10.1.tar.gz",
-      "sha256": "5cc62a34ee51b2d96a8de281b565d6c5388dd9c1687e32a5caa66a38449b23bf",
-      "size": 8092997,
-      "format": "tar.gz"
-    },
-    {
-      "name": "DownVid-Wails-mac-universal-1.10.1.dmg",
+      "name": "DownVid-Wails-mac-universal-1.12.0.dmg",
       "os": "darwin",
       "arch": "universal",
-      "url": "https://gitee.com/Xynrin/downvid/releases/download/v1.10.1/DownVid-Wails-mac-universal-1.10.1.dmg",
-      "sha256": "4e82d3eeb3a04094358d47e7c1feebb1479b7c2ec89e01d1460547d9767afe43",
-      "size": 21382686,
+      "url": "https://gitee.com/Xynrin/downvid/releases/download/v1.12.0/DownVid-Wails-mac-universal-1.12.0.dmg",
+      "sha256": "3734dddb6dede2596c0b7dbaa33e06f7ba2cbd6cc7261c575489800841d81ad0",
+      "size": 28816984,
       "format": "dmg"
     },
     {
-      "name": "DownVid-Wails-mac-universal-1.10.1.zip",
+      "name": "DownVid-Wails-mac-universal-1.12.0.zip",
       "os": "darwin",
       "arch": "universal",
-      "url": "https://gitee.com/Xynrin/downvid/releases/download/v1.10.1/DownVid-Wails-mac-universal-1.10.1.zip",
-      "sha256": "38be64608dd3ca08852057b19ac660e118e213cac75e59b76bf573b2225cd981",
-      "size": 21424355,
+      "url": "https://gitee.com/Xynrin/downvid/releases/download/v1.12.0/DownVid-Wails-mac-universal-1.12.0.zip",
+      "sha256": "0311e1c0026646d183e669176c274229eb2f3810ebb940d13d3976caea3543ad",
+      "size": 28895722,
       "format": "zip"
     },
     {
-      "name": "DownVid-Wails-windows-x64-1.10.1-installer.exe",
+      "name": "DownVid-Wails-windows-x64-1.12.0-installer.exe",
       "os": "windows",
       "arch": "amd64",
-      "url": "https://gitee.com/Xynrin/downvid/releases/download/v1.10.1/DownVid-Wails-windows-x64-1.10.1-installer.exe",
-      "sha256": "eb617640ce46f99599ed432d8c379b820288326f6dbfdac86768494317118024",
-      "size": 10419134,
+      "url": "https://gitee.com/Xynrin/downvid/releases/download/v1.12.0/DownVid-Wails-windows-x64-1.12.0-installer.exe",
+      "sha256": "8967070d5b25f7204792cd22424c0359f51c888b20548f3d0fd34a93dd74324f",
+      "size": 13868022,
       "format": "exe"
     },
     {
-      "name": "DownVid-Wails-windows-x64-1.10.1.zip",
+      "name": "DownVid-Wails-windows-x64-1.12.0.zip",
       "os": "windows",
       "arch": "amd64",
-      "url": "https://gitee.com/Xynrin/downvid/releases/download/v1.10.1/DownVid-Wails-windows-x64-1.10.1.zip",
-      "sha256": "25631bbc0b29f3fe3034002e3602fcc180f94461693faad7391100fd206c97b4",
-      "size": 8686096,
+      "url": "https://gitee.com/Xynrin/downvid/releases/download/v1.12.0/DownVid-Wails-windows-x64-1.12.0.zip",
+      "sha256": "ac67e3f3c4d3241e308605cf60b71d5757c6dac38f9d5b34270d723e50747164",
+      "size": 12218131,
       "format": "zip"
     }
   ]
