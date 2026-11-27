@@ -306,6 +306,64 @@ func TestInstallRejectsConcurrent(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 }
 
+func TestInstallDisjointKindsCanRunAndCancelTogether(t *testing.T) {
+	sidecar := fakeSidecar(t, `printf '{"event":"start","tool":"%s"}\n' "$5"
+sleep 30
+`)
+	m := NewManager(sidecar, t.TempDir())
+	defer m.Cancel()
+	started := make(chan string, 2)
+	done := make(chan error, 2)
+	for _, kind := range []Kind{KindYtdlp, KindFfmpeg} {
+		go func() {
+			done <- m.Install(FetchOptions{Only: []Kind{kind}}, func(e Progress) { started <- e.Tool })
+		}()
+	}
+	seen := map[string]bool{}
+	for range 2 {
+		select {
+		case kind := <-started:
+			seen[kind] = true
+		case err := <-done:
+			t.Fatalf("不同依赖应允许同时安装：%v", err)
+		case <-time.After(5 * time.Second):
+			t.Fatal("未观察到两个独立的边车进程")
+		}
+	}
+	if !seen[KindYtdlp] || !seen[KindFfmpeg] {
+		t.Fatalf("边车应各自只收到自己的依赖：%v", seen)
+	}
+	for _, only := range [][]Kind{{KindFfmpeg, KindFfprobe}, nil} {
+		err := m.Install(FetchOptions{Only: only, Timeout: 500 * time.Millisecond}, nil)
+		if err == nil || !strings.Contains(err.Error(), "已有依赖下载正在进行") {
+			t.Fatalf("重叠请求 %v 应在启动前被拒绝，got %v", only, err)
+		}
+	}
+	if !m.Cancel() {
+		t.Fatal("并发安装时应可取消")
+	}
+	for range 2 {
+		select {
+		case err := <-done:
+			if err == nil || err.Error() != "已取消" {
+				t.Fatalf("两个安装都应收到取消结果：%v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("取消后仍有进程未退出")
+		}
+	}
+	if m.IsDownloading() || m.Cancel() {
+		t.Fatal("取消后的会话应被清理")
+	}
+}
+
+func TestInstallRejectsCompoundKind(t *testing.T) {
+	m := NewManager(fakeSidecar(t, "exit 0"), t.TempDir())
+	if err := m.Install(FetchOptions{Only: []Kind{"yt-dlp,ffmpeg"}}, nil); err == nil || !strings.Contains(err.Error(), "未知运行依赖") {
+		t.Fatalf("逗号分隔的种类不能绕过占用检查：%v", err)
+	}
+}
+
 // --- FormatBytes ---
 
 func TestFormatBytes(t *testing.T) {

@@ -1,12 +1,14 @@
 package parse
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"regexp"
 	"sort"
 	"strconv"
@@ -16,10 +18,45 @@ import (
 
 // IsDouyin 报告是否是抖音链接。
 func IsDouyin(u string) bool {
-	return strings.Contains(u, "douyin.com") || strings.Contains(u, "iesdouyin.com")
+	parsed, err := url.Parse(u)
+	if err != nil || (parsed.Scheme != "https" && parsed.Scheme != "http") || parsed.User != nil {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	return host == "douyin.com" || strings.HasSuffix(host, ".douyin.com") ||
+		host == "iesdouyin.com" || strings.HasSuffix(host, ".iesdouyin.com")
 }
 
 var douyinVideoIDRegexp = regexp.MustCompile(`/video/(\d+)`)
+
+// douyinMediaURL 只接受抖音视频 CDN 的文件地址，不把分享页或播放列表当成 MP4。
+func douyinMediaURL(u *url.URL) bool {
+	host := strings.ToLower(u.Hostname())
+	p := strings.ToLower(u.Path)
+	ext := path.Ext(p)
+	return u.Scheme == "https" && u.User == nil && u.Port() == "" &&
+		(host == "douyinvod.com" || strings.HasSuffix(host, ".douyinvod.com")) &&
+		(ext == ".mp4" || (ext == "" && strings.Contains(p, "/video/tos/") && !strings.HasSuffix(p, "/")))
+}
+
+// ParseDouyinMediaURL 识别用户已经取得的媒体直链，不请求详情接口，也不读取 Cookie。
+// 非媒体直链返回 nil，调用方可以继续使用正常的站点解析。
+func ParseDouyinMediaURL(rawURL string) *VideoInfo {
+	u, err := url.Parse(rawURL)
+	if err != nil || !douyinMediaURL(u) {
+		return nil
+	}
+	// URL 的签名会轮换；文件名不含查询参数，也不直接暴露 CDN 路径。
+	sum := sha256.Sum256([]byte(u.EscapedPath()))
+	id := fmt.Sprintf("%x", sum[:6])
+	return &VideoInfo{
+		ID:         id,
+		Title:      "抖音视频 " + id,
+		WebpageURL: rawURL,
+		DirectURL:  rawURL,
+		Formats:    []Format{{FormatID: "direct", Quality: "原始画质", Ext: "mp4", HasAudio: true}},
+	}
+}
 
 type douyinBitRateItem struct {
 	GearName string `json:"gear_name"`

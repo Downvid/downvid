@@ -210,9 +210,7 @@ func runFetch(args []string) {
 		cli.Fail(err.Error())
 	}
 
-	// 安装后的平台处理（macOS 去隔离属性 + ad-hoc 签名）
 	for _, task := range tasks {
-		fetch.Finalize(task.Target, fetch.Options{}, emit)
 		summary = append(summary, fetch.Event{Event: "installed", Tool: task.Tool, Path: task.Target})
 	}
 

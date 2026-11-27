@@ -335,6 +335,18 @@ func TestStaleYtdlpMessage(t *testing.T) {
 	}
 }
 
+func TestParseDouyinMediaDoesNotStartSiteParser(t *testing.T) {
+	app := newTestApp(t)
+	const url = "https://v26-web.douyinvod.com/video/tos/cn/object?fixture=1"
+	info, err := app.Parse(url, "")
+	if err != nil || info == nil || info.DirectURL != url {
+		t.Fatalf("应把用户粘贴的完整直链交给下载器，got %+v, err %v", info, err)
+	}
+	if app.parser != nil || app.cookieMgr != nil {
+		t.Fatal("视频文件地址不需要站点解析器或 Cookie")
+	}
+}
+
 // 缺 taskId / url 时立刻拒绝。
 func TestStartDownloadValidatesInput(t *testing.T) {
 	app := newTestApp(t)

@@ -2,18 +2,11 @@
 /**
  * 生成 Release Notes 的下载引导区。
  *
- * 目标形状：
- * - 顶部三枚「大徽章」：GitHub / Gitee / CNB，各带平台 logo，分别直链
- *   macOS / Windows / Linux 的主推包（不跳 Release 页面，点击即下载）；
- * - 下方按「平台 + 架构」自动生成的下载徽章，列出其余格式与架构；
- *   不再生成下载对照表——表格在小屏上难读，而且和徽章重复；
- * - 平台/架构从产物文件名里解析，新增 arm64 等架构时不需要改脚本。
- *
- * 徽章链接只列出实际存在的产物，避免出现指向 404 的链接（历史上产物名变更时
- * 正是这样踩过坑）。
+ * 先按系统和架构组织安装包，同一份包的多个下载源并排。
+ * 只显示本次产物和调用方确认已就绪的下载源，默认只链接 GitHub。
  *
  * 用法：
- *   node scripts/gen-release-notes.mjs <artifacts 目录> <版本号> [<changelog 文件>]
+ *   node scripts/gen-release-notes.mjs <artifacts 目录> <版本号> [<changelog 文件>] [--sources=github,gitee,cnb]
  *
  * 输出：完整的 Release 正文到 stdout。CI 直接写入 release body。
  */
@@ -21,14 +14,19 @@
 import fs from 'node:fs'
 import path from 'node:path'
 
+import { classifyAsset } from './lib/update-manifest.mjs'
+
 const OWNER = 'Downvid'
 const REPO = 'downvid'
 const GITEE_REPO = 'Xynrin/downvid'
 const CNB_REPO = 'yxxbc/downvid'
 
-const [artifactsDir, version, changelogFile] = process.argv.slice(2)
-if (!artifactsDir || !version) {
-  console.error('用法: node scripts/gen-release-notes.mjs <artifacts 目录> <版本号> [<changelog 文件>]')
+const [artifactsDir, version, ...options] = process.argv.slice(2)
+const changelogFile = options.find((option) => !option.startsWith('--'))
+const sourceOption = options.find((option) => option.startsWith('--sources='))
+const sources = [...new Set((sourceOption?.slice('--sources='.length) ?? 'github').split(','))]
+if (!artifactsDir || !version || sources.some((source) => !['github', 'gitee', 'cnb'].includes(source))) {
+  console.error('用法: node scripts/gen-release-notes.mjs <artifacts 目录> <版本号> [<changelog 文件>] [--sources=github,gitee,cnb]')
   process.exit(1)
 }
 
@@ -44,14 +42,12 @@ function listFiles(root) {
   if (!fs.existsSync(root)) return []
   return fs.readdirSync(root, { withFileTypes: true }).flatMap((entry) => {
     const full = path.join(root, entry.name)
-    return entry.isDirectory() ? listFiles(full) : [full]
+    return entry.isDirectory() ? listFiles(full) : entry.isFile() ? [full] : []
   })
 }
 
 // 文件名排序后再扫描：同一类产物出现多个时，徽章选择是确定的
-const all = listFiles(artifactsDir)
-  .map((f) => path.basename(f))
-  .sort()
+const all = [...new Set(listFiles(artifactsDir).map((f) => path.basename(f)))].sort()
 
 /** 某个镜像上的资产直链（资产名相同，Release 由发布流程同步）。 */
 function downloadUrl(mirror, filename) {
@@ -64,22 +60,10 @@ function downloadUrl(mirror, filename) {
   return `${base}/${name}`
 }
 
-/**
- * 三个镜像的品牌样式。
- *
- * 三个「快速下载」入口把三个平台分到三个镜像上：macOS → GitHub，
- * Windows → Gitee，Linux → CNB。每个入口都直链资产，不跳 Release 页面。
- */
 const MIRRORS = {
-  github: { label: 'GitHub', logo: 'github', color: '238636' },
-  gitee: { label: 'Gitee', logo: 'gitee', color: 'C71D23' },
-  cnb: { label: 'CNB', logo: 'cloudnativebuild', color: 'C2410C' },
-}
-
-const PLATFORM_MIRROR = {
-  mac: 'github',
-  windows: 'gitee',
-  linux: 'cnb',
+  github: 'GitHub',
+  gitee: 'Gitee',
+  cnb: 'CNB',
 }
 
 /**
@@ -126,11 +110,16 @@ const VERSION_MARKER = `-${version}`
 function normalizeArch(raw) {
   const arch = raw.toLowerCase()
   if (arch === 'aarch64') return 'arm64'
+  if (arch === 'amd64') return 'x64'
+  if (arch === '386') return 'x86'
   return arch
 }
 
-function displayArch(arch) {
-  if (arch === 'universal') return 'Universal'
+function displayArch(platform, arch) {
+  if (arch === 'universal' && platform === 'mac') return 'Universal（Apple 芯片 / Apple silicon + Intel）'
+  if (arch === 'x64') return platform === 'mac' ? 'x64（Intel）' : 'x64（Intel / AMD）'
+  if (arch === 'arm64') return platform === 'mac' ? 'ARM64（Apple 芯片 / Apple silicon）' : 'ARM64（ARM）'
+  if (arch === 'x86') return 'x86（32 位 / 32-bit）'
   return arch
 }
 
@@ -143,12 +132,12 @@ function classify(platform, suffix) {
     if (s === '.zip') return { id: 'zip', label: 'ZIP', rank: 3 }
   }
   if (platform === 'windows') {
-    if (s.endsWith('-installer.exe')) return { id: 'installer', label: 'Installer', rank: 1 }
+    if (s === '-installer.exe') return { id: 'installer', label: '安装版 EXE / Installer', rank: 1 }
     if (s === '.exe') return { id: 'exe', label: 'EXE', rank: 2 }
-    if (s === '.zip') return { id: 'zip', label: 'Portable', rank: 3 }
+    if (s === '.zip') return { id: 'zip', label: '便携版 ZIP / Portable', rank: 3 }
   }
   if (platform === 'linux') {
-    if (s === '.deb') return { id: 'deb', label: 'DEB', rank: 1 }
+    if (s === '.deb') return { id: 'deb', label: 'DEB（Debian / Ubuntu）', rank: 1 }
     if (s === '.rpm') return { id: 'rpm', label: 'RPM', rank: 2 }
     if (s === '.appimage') return { id: 'appimage', label: 'AppImage', rank: 3 }
     if (s === '.tar.gz') return { id: 'tarball', label: 'tar.gz', rank: 4 }
@@ -171,7 +160,7 @@ for (const file of all) {
   const arch = normalizeArch(bits.join('-'))
   // hasOwn 而不是直接取值：产物名由 CI 生成，但别让 `constructor` 之类的
   // 原型属性混进来（`PLATFORM_META['constructor']` 是个函数，真值）
-  if (!Object.hasOwn(PLATFORM_META, platform) || !arch) continue
+  if (!Object.hasOwn(PLATFORM_META, platform) || !/^[a-z0-9]+$/.test(arch)) continue
 
   const kind = classify(platform, suffix)
   if (!kind) continue
@@ -199,49 +188,41 @@ const sortedGroups = [...groups.values()].sort(
     a.arch.localeCompare(b.arch),
 )
 
-// ===== 顶部三个快速下载：每个平台的主推包，分别直链三个镜像 =====
-const quickItems = new Set()
-const quickBadges = []
-
-for (const platform of PLATFORM_ORDER) {
-  const firstGroup = sortedGroups.find((group) => group.platform === platform)
-  if (!firstGroup) continue
-  const primary = [...firstGroup.items.values()].sort((a, b) => a.rank - b.rank)[0]
-  if (!primary) continue
+function renderPlatform(platform) {
   const meta = PLATFORM_META[platform]
-  const mirror = MIRRORS[PLATFORM_MIRROR[platform]]
-  quickItems.add(primary.file)
-  quickBadges.push(
-    badge({
-      label: mirror.label,
-      message: `${meta.name} ${displayArch(firstGroup.arch)} · ${primary.label}`,
-      color: mirror.color,
-      url: downloadUrl(PLATFORM_MIRROR[platform], primary.file),
-      logo: mirror.logo,
-    }),
-  )
+  const builds = sortedGroups.filter((group) => group.platform === platform)
+  const sections = []
+  for (const { arch, items } of builds) {
+    const rows = []
+    for (const item of [...items.values()].sort((a, b) => a.rank - b.rank)) {
+      // Gitee 和 CNB 上传脚本只上传清单可识别的产物。
+      const available = sources.filter((source) => source === 'github' || classifyAsset(item.file))
+      if (available.length === 0) continue
+      const recommended = rows.length === 0
+      const links = available.map((source, index) => {
+        const label = MIRRORS[source]
+        const url = downloadUrl(source, item.file)
+        return index === 0 && recommended
+          ? badge({ label: meta.name, message: label, color: meta.color, url, logo: meta.logo })
+          : `[${label}](${url})`
+      })
+      rows.push(`- **${item.label}**${recommended ? '（推荐 / Recommended）' : ''}：${links.join(' · ')}`)
+    }
+    if (rows.length) sections.push(`**${displayArch(platform, arch)}**\n\n${rows.join('\n')}`)
+  }
+  if (sections.length === 0) {
+    return `#### ${meta.name}\n\n_本版本未提供下载包 / No package in this release._`
+  }
+  if (!builds.some(({ arch }) => platform === 'mac' && arch === 'universal')) {
+    const missing = ['x64', 'arm64'].filter((arch) => !builds.some((group) => group.arch === arch))
+    if (missing.length) {
+      sections.push(`_本版本未提供 / Not in this release: ${missing.map((arch) => displayArch(platform, arch)).join('、')}._`)
+    }
+  }
+  return `#### ${meta.name}\n\n${sections.join('\n\n')}`
 }
 
-// ===== 其余架构与格式：同一平台沿用同一个镜像，全部直链 =====
-const moreBadges = sortedGroups
-  .flatMap((group) => {
-    const meta = PLATFORM_META[group.platform]
-    const mirror = MIRRORS[PLATFORM_MIRROR[group.platform]]
-    const label = `${meta.name} ${displayArch(group.arch)} · ${mirror.label}`
-    return [...group.items.values()]
-      .filter((item) => !quickItems.has(item.file))
-      .sort((a, b) => a.rank - b.rank)
-      .map((item) =>
-        badge({
-          label,
-          message: item.label,
-          color: meta.color,
-          url: downloadUrl(PLATFORM_MIRROR[group.platform], item.file),
-          logo: meta.logo,
-        }),
-      )
-  })
-  .join('\n')
+const downloads = PLATFORM_ORDER.map(renderPlatform).join('\n\n')
 
 // ===== 交流群 =====
 const qqBadge = badge({
@@ -252,7 +233,7 @@ const qqBadge = badge({
   logo: 'qq',
 })
 
-// ===== 平台说明（保留双语对照，但不再放下载矩阵） =====
+// ===== 平台说明 =====
 
 const notesTable = `| 🇨🇳 中文说明 | 🇺🇸 English Notes |
 |:---|:---|
@@ -295,16 +276,14 @@ function extractChangelog() {
 const changelogBody = extractChangelog()
 
 const body = `<!-- 此正文由 scripts/gen-release-notes.mjs 生成，请勿手动编辑 -->
-<div align="center">
 
 ### ⬇️ 直接下载 / Direct Downloads
 
-${quickBadges.join('\n') || '_产物生成中或未检测到可用安装包 / Generating artifacts or no packages found_'}
+**v${version}** · 选系统与芯片架构，再选下载源。同一行是同一个安装包。
 
-<sub>v${version} · macOS → GitHub · Windows → Gitee · Linux → CNB · 点击即下载<br>v${version} · macOS → GitHub · Windows → Gitee · Linux → CNB · click to download</sub>
+Choose your OS and processor architecture, then a download source. All links on a row are for the same package.
 
-${moreBadges ? `\n<br>\n\n### 📦 其他架构与格式 / More Builds & Formats\n\n${moreBadges}\n` : ''}
-</div>
+${downloads}
 
 ---
 

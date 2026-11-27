@@ -5,6 +5,7 @@
 
   const missing = $derived(app.missingRequiredDeps.map((dep) => dep.name).join(', '))
   const percent = $derived(Math.round(app.depsPromptProgress * 100))
+  const downloadBlocked = $derived(app.depsPromptBusy || app.deps.some((dep) => dep.busy))
 </script>
 
 <div
@@ -34,7 +35,7 @@
       <button class="btn btn-ghost" disabled={app.depsPromptBusy} onclick={() => (app.dialog = 'none')}>
         {t('depsPrompt.later')}
       </button>
-      <button class="btn btn-primary" disabled={app.depsPromptBusy} onclick={() => app.downloadPromptDeps()}>
+      <button class="btn btn-primary" disabled={downloadBlocked} onclick={() => app.downloadPromptDeps()}>
         <Icon name="cloud_download" size={16} />
         <span>{t('depsPrompt.download')}</span>
       </button>

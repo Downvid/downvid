@@ -74,8 +74,9 @@ git push origin main --tags
 
 ### 5. 观察构建
 
-三个平台（macOS 通用 / Windows x64 / Linux x64）并行构建，任一失败都不会发布。
-失败时先修复再重新打 tag（已推送的 tag 需要删除后重推）：
+当前构建目标为 macOS 通用（Apple 芯片和 Intel）、Windows x64、Linux x64。
+三组并行构建；只要有产物就会发布，缺包会在正文和工作流日志提示。
+构建失败时先排查原因，再按发布流程补齐：
 
 ```bash
 git tag -d v1.3.0 && git push origin :refs/tags/v1.3.0
@@ -158,10 +159,10 @@ git tag -d v1.3.0 && git push origin :refs/tags/v1.3.0
 | Windows x64 | `DownVid-Wails-windows-x64-<version>.zip` |
 | Linux x64 | `DownVid-Wails-linux-x64-<version>.tar.gz` |
 
-> Release 正文顶部是三枚直链大徽章：macOS 主推包放在 GitHub，Windows x64 主推包
-> 放在 Gitee，Linux x64 主推包放在 CNB；点击即下载，不经过 Release 页面。
-> 下方列出其余架构与格式，链接同样是资产直链。平台与架构从产物文件名解析——
-> 以后新增 `windows-arm64`、`linux-arm64` 等产物时徽章会自动出现，不需要改脚本。
+> Release 正文按 macOS、Windows、Linux 分组，每组先列架构，再列可下载的格式。
+> 同一个包的下载源排在同一行，不把系统绑到某一家镜像。GitHub 正文先只给 GitHub
+> 直链，镜像同步成功后才补上对应入口；Gitee 和 CNB 的正文优先用本站，保留 GitHub
+> 备用。缺少的架构不造下载链接；新增已有命名规则下的产物会自动出现。
 
 `pnpm lint:website` 会比对官网模板与 `release.yml`；`scripts/verify-release.mjs`
 会在发布后核对三个包是否都挂上了。

@@ -67,6 +67,9 @@ describe('sync-gitee-release upload', () => {
   let uploadedBody = Buffer.alloc(0)
   let uploadedPath = ''
   let uploadedContentLength = ''
+  let creationNotes = ''
+  let readyNotes = ''
+  const calls: string[] = []
 
   beforeAll(async () => {
     server = http.createServer((req, res) => {
@@ -80,7 +83,15 @@ describe('sync-gitee-release upload', () => {
         const url = req.url || ''
 
         if (req.method === 'GET' && url.includes('/releases/tags/')) {
-          res.end(JSON.stringify({ id: 1, tag_name: 'v1.8.0' }))
+          res.statusCode = 404
+          res.end('{}')
+          return
+        }
+        if (req.method === 'POST' && url.endsWith('/releases')) {
+          calls.push('创建')
+          creationNotes = JSON.parse(body.toString()).body
+          res.statusCode = 201
+          res.end(JSON.stringify({ id: 1, name: 'DownVid v1.8.0', body: creationNotes }))
           return
         }
         if (req.method === 'GET' && url.includes('/attach_files')) {
@@ -88,11 +99,18 @@ describe('sync-gitee-release upload', () => {
           return
         }
         if (req.method === 'POST' && url.includes('/attach_files')) {
+          calls.push('上传')
           uploadedBody = body
           uploadedPath = url
           uploadedContentLength = String(req.headers['content-length'] || '')
           res.statusCode = 201
           res.end(JSON.stringify({ id: 2, name: 'uploaded' }))
+          return
+        }
+        if (req.method === 'PATCH' && url.endsWith('/releases/1')) {
+          calls.push('更新正文')
+          readyNotes = JSON.parse(body.toString()).body
+          res.end('{}')
           return
         }
         res.statusCode = 404
@@ -112,18 +130,25 @@ describe('sync-gitee-release upload', () => {
       }),
   )
 
-  it('用流式 multipart 上传资产，Content-Length 与文件大小一致', async () => {
+  it('先发布 GitHub 备用入口，流式上传结束后再公开本镜像入口', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'downvid-gitee-upload-'))
     const artifacts = path.join(dir, 'artifacts')
     fs.mkdirSync(artifacts)
     const payload = 'downvid gitee upload test'
     fs.writeFileSync(path.join(artifacts, 'DownVid-Wails-mac-universal-1.8.0.zip'), payload)
     const out = path.join(dir, 'manifest.gitee.json')
+    const initial = path.join(dir, 'initial.md')
+    const ready = path.join(dir, 'ready.md')
+    fs.writeFileSync(initial, 'GitHub 备用')
+    fs.writeFileSync(ready, 'Gitee 已就绪 · GitHub 备用')
 
     const result = await new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
       execFile(
         process.execPath,
-        [SCRIPT, '--version', '1.8.0', '--tag', 'v1.8.0', '--artifacts', artifacts, '--out', out],
+        [
+          SCRIPT, '--version', '1.8.0', '--tag', 'v1.8.0', '--artifacts', artifacts, '--out', out,
+          '--notes-file', initial, '--ready-notes-file', ready,
+        ],
         {
           encoding: 'utf8',
           env: { ...process.env, GITEE_API: api, GITEE_TOKEN: 'test' },
@@ -144,7 +169,10 @@ describe('sync-gitee-release upload', () => {
     expect(uploadedBody.toString('utf8')).toContain('filename="DownVid-Wails-mac-universal-1.8.0.zip"')
     expect(uploadedBody.toString('utf8')).toContain(payload)
     expect(Number(uploadedContentLength)).toBe(uploadedBody.length)
-    expect(fs.existsSync(out)).toBe(true)
+    expect(calls).toEqual(['创建', '上传', '更新正文'])
+    expect(creationNotes).toBe('GitHub 备用')
+    expect(readyNotes).toBe('Gitee 已就绪 · GitHub 备用')
+    expect(JSON.parse(fs.readFileSync(out, 'utf8')).notes).toBe(readyNotes)
 
     fs.rmSync(dir, { recursive: true, force: true })
   })

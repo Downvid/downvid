@@ -17,6 +17,7 @@
  *     --version 1.8.0 --tag v1.8.0 --artifacts artifacts \
  *     --notes-file /tmp/release-notes.md --out website/updates/manifest.gitee.json
  *
+ *   --ready-notes-file 可在附件传完后换成带 Gitee 直链的正文。
  *   node scripts/sync-gitee-release.mjs --dry-run ...   # 只生成清单，不联网
  */
 
@@ -227,6 +228,7 @@ async function main() {
   const out = path.resolve(arg('out', DEFAULT_OUT))
   const repo = arg('repo', DEFAULT_REPO)
   const notesFile = arg('notes-file', '')
+  const readyNotesFile = arg('ready-notes-file', '')
   const dryRun = hasFlag('dry-run')
   const token = process.env.GITEE_TOKEN || ''
 
@@ -239,6 +241,7 @@ async function main() {
 
   const assets = readArtifacts(artifactsDir)
   const notes = notesFile ? fs.readFileSync(notesFile, 'utf8').trim() : ''
+  const readyNotes = readyNotesFile ? fs.readFileSync(readyNotesFile, 'utf8').trim() : ''
   const releaseBase = `https://gitee.com/${repo}/releases/download/${encodeURIComponent(tag)}`
 
   const manifest = buildManifest({
@@ -248,7 +251,7 @@ async function main() {
     tag,
     repo,
     assets,
-    notes,
+    notes: readyNotes || notes,
     releaseBase,
   })
   const writeManifest = () => {
@@ -281,6 +284,15 @@ async function main() {
     await uploadAttachment(repo, token, release.id, filePath, asset.name)
     uploaded++
     console.log(`上传 ${asset.name}`)
+  }
+
+  // Gitee 创建时已公开：先留 GitHub 下载入口，所有附件就绪后才添加 Gitee 直链。
+  if (readyNotes && release.body !== readyNotes) {
+    await gitee(repo, token, `/releases/${release.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tag_name: tag, name: release.name || `DownVid v${version}`, body: readyNotes }),
+    })
   }
 
   // 只有全部上传成功才写清单：CI 用 /tmp 文件的存在作为「可以提交」的信号，

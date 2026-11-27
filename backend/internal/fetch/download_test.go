@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -35,6 +36,79 @@ func gzipBytes(t *testing.T, payload []byte) []byte {
 		t.Fatal(err)
 	}
 	return buf.Bytes()
+}
+
+func TestInstallParallelBoundAndPartialFailure(t *testing.T) {
+	started := make(chan string, 4)
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	unblock := func() { releaseOnce.Do(func() { close(release) }) }
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		started <- r.URL.Path
+		<-release
+		if r.URL.Path == "/ffmpeg" {
+			http.Error(w, "fixture failure", http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte(r.URL.Path))
+	}))
+	defer srv.Close()
+	defer unblock()
+
+	var tasks []Task
+	dir := t.TempDir()
+	for _, name := range []string{"yt-dlp", "ffmpeg", "ffprobe", "aria2"} {
+		tasks = append(tasks, Task{Tool: name, URL: srv.URL + "/" + name, Target: filepath.Join(dir, name)})
+	}
+	var events []Event
+	done := make(chan error, 1)
+	go func() {
+		done <- Install(context.Background(), tasks, Options{SkipSign: true, Emit: func(event Event) {
+			events = append(events, event)
+		}})
+	}()
+	for range 3 {
+		select {
+		case <-started:
+		case <-time.After(5 * time.Second):
+			t.Fatal("批量安装未同时发出三个下载请求")
+		}
+	}
+	select {
+	case tool := <-started:
+		t.Fatalf("超出三个并发下载，上限外请求：%s", tool)
+	case <-time.After(100 * time.Millisecond):
+	}
+	unblock()
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "ffmpeg") {
+			t.Fatalf("批量安装应返回单项失败，实际：%v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("请求放行后批量安装未完成")
+	}
+	for i, task := range tasks {
+		if events[i].Event != "start" || events[i].Tool != task.Tool {
+			t.Fatalf("下载前应先宣布全部任务，前缀实际：%+v", events[:len(tasks)])
+		}
+		data, err := os.ReadFile(task.Target)
+		if task.Tool == "ffmpeg" {
+			if !os.IsNotExist(err) {
+				t.Fatalf("失败的文件不应落盘：%v", err)
+			}
+		} else if err != nil || string(data) != "/"+task.Tool {
+			t.Fatalf("一项失败不应中断其他依赖：%s %q %v", task.Tool, data, err)
+		}
+	}
+}
+
+func TestInstallRejectsDuplicateTarget(t *testing.T) {
+	target := filepath.Join(t.TempDir(), "tool")
+	err := Install(context.Background(), []Task{{Tool: "first", Target: target}, {Tool: "second", Target: target}}, Options{})
+	if err == nil || !strings.Contains(err.Error(), "安装目标重复") {
+		t.Fatalf("同一文件不可同时写入：%v", err)
+	}
 }
 
 // 校验值针对下载内容（gzip 时为压缩文件），通过后解压安装

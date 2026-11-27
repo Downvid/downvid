@@ -1,21 +1,11 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { QQ_GROUP_URL } from '../shared/app'
 
-/**
- * Release 正文的下载引导区。
- *
- * 模板是「三个直链大徽章 + 其余架构/格式」：
- *   - 顶部三个徽章分别直链 macOS / Windows / Linux 的主推包，而且分别放在
- *     GitHub / Gitee / CNB 上——点击即下载，不经过 Release 页面；
- *   - 下方列出其余格式与架构，链接仍是资产直链。
- *
- * 最容易坏的两点：镜像/平台的对应关系，以及「只给实际存在的产物生成链接」。
- */
-
+// 下载入口按系统和架构分组，同一行的每个下载源必须指向同一份资产。
 const SCRIPT = path.resolve(import.meta.dirname, '../scripts/gen-release-notes.mjs')
 
 const ARTIFACTS = [
@@ -29,89 +19,94 @@ const ARTIFACTS = [
   'DownVid-Wails-linux-arm64-1.9.0.deb',
 ]
 
-let body = ''
-let tmp = ''
+const BASE = {
+  github: 'https://github.com/Downvid/downvid/releases/download/v1.9.0',
+  gitee: 'https://gitee.com/Xynrin/downvid/releases/download/v1.9.0',
+  cnb: 'https://cnb.cool/yxxbc/downvid/-/releases/download/v1.9.0',
+}
 
-beforeAll(() => {
-  tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'downvid-notes-'))
-  const artifacts = path.join(tmp, 'artifacts')
-  fs.mkdirSync(artifacts)
-  for (const name of ARTIFACTS) fs.writeFileSync(path.join(artifacts, name), 'x')
-  body = execFileSync(process.execPath, [SCRIPT, artifacts, '1.9.0'], { encoding: 'utf8' })
-})
-
-afterAll(() => {
-  fs.rmSync(tmp, { recursive: true, force: true })
-})
+function render(artifacts: string[], ...args: string[]) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'downvid-notes-'))
+  try {
+    for (const name of artifacts) fs.writeFileSync(path.join(dir, name), 'x')
+    return execFileSync(process.execPath, [SCRIPT, dir, '1.9.0', ...args], { encoding: 'utf8' })
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true })
+  }
+}
 
 describe('gen-release-notes', () => {
-  it('三个大徽章分别直链不同平台、不同镜像的资产', () => {
-    // macOS → GitHub
-    expect(body).toContain(
-      'https://github.com/Downvid/downvid/releases/download/v1.9.0/DownVid-Wails-mac-universal-1.9.0.dmg',
-    )
-    // Windows x64 → Gitee
-    expect(body).toContain(
-      'https://gitee.com/Xynrin/downvid/releases/download/v1.9.0/DownVid-Wails-windows-x64-1.9.0-installer.exe',
-    )
-    // Linux x64 → CNB
-    expect(body).toContain(
-      'https://cnb.cool/yxxbc/downvid/-/releases/download/v1.9.0/DownVid-Wails-linux-x64-1.9.0.deb',
-    )
-
-    // 不再跳到 Release 页面让用户自己找
+  it('每个系统、架构和格式都提供同一份包的三个下载源', () => {
+    const body = render(ARTIFACTS, '--sources=github,gitee,cnb')
+    expect(body.match(/^#### .+$/gm)).toEqual(['#### macOS', '#### Windows', '#### Linux'])
+    for (const name of ARTIFACTS) {
+      const rows = body.split('\n').filter((line) => line.includes(name))
+      expect(rows, name).toHaveLength(1)
+      const urls = [...rows[0].matchAll(/\]\((https:\/\/[^)]+\/releases\/download\/[^)]+)\)/g)]
+      expect(urls.map((m) => m[1]), name).toEqual(
+        Object.values(BASE).map((base) => `${base}/${name}`),
+      )
+    }
+    expect(body).toContain('Universal（Apple 芯片 / Apple silicon + Intel）')
+    expect(body.match(/\*\*ARM64（ARM）\*\*/g)).toHaveLength(2)
+    expect(body).toContain('logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2C')
     expect(body).not.toContain('/releases/tag/')
   })
 
-  it('三个大徽章带各自平台的 logo', () => {
-    expect(body).toContain('logo=github')
-    expect(body).toContain('logo=gitee')
-    // CNB 在 Simple Icons 里的 slug 是 cloudnativebuild（其全称）
-    expect(body).toContain('logo=cloudnativebuild')
+  it('只展示就绪的下载源，各镜像以自己的地址为先且保留 GitHub', () => {
+    const github = render(ARTIFACTS)
+    for (const name of ARTIFACTS) expect(github).toContain(`${BASE.github}/${name}`)
+    expect(github).not.toContain(BASE.gitee)
+    expect(github).not.toContain(BASE.cnb)
+
+    for (const source of ['gitee', 'cnb'] as const) {
+      const other = source === 'gitee' ? 'cnb' : 'gitee'
+      const body = render(ARTIFACTS, `--sources=${source},github`)
+      expect(body).not.toContain(BASE[other])
+      for (const name of ARTIFACTS) {
+        const line = body.split('\n').find((row) => row.includes(name)) ?? ''
+        expect(line).toContain(`${BASE[source]}/${name}`)
+        expect(line).toContain(`${BASE.github}/${name}`)
+        expect(line.indexOf(BASE[source])).toBeLessThan(line.indexOf(BASE.github))
+      }
+    }
   })
 
-  it('其余架构与格式也保持资产直链，并按平台沿用同一个镜像', () => {
-    expect(body).toContain('label=Windows+arm64')
-    expect(body).toContain(
-      'https://gitee.com/Xynrin/downvid/releases/download/v1.9.0/DownVid-Wails-windows-arm64-1.9.0-installer.exe',
-    )
-    expect(body).toContain('label=Linux+arm64')
-    expect(body).toContain(
-      'https://cnb.cool/yxxbc/downvid/-/releases/download/v1.9.0/DownVid-Wails-linux-arm64-1.9.0.deb',
-    )
-
-    expect(body).toContain(
-      'https://github.com/Downvid/downvid/releases/download/v1.9.0/DownVid-Wails-mac-universal-1.9.0.zip',
-    )
-    expect(body).toContain(
-      'https://gitee.com/Xynrin/downvid/releases/download/v1.9.0/DownVid-Wails-windows-x64-1.9.0.zip',
-    )
-    expect(body).toContain(
-      'https://cnb.cool/yxxbc/downvid/-/releases/download/v1.9.0/DownVid-Wails-linux-x64-1.9.0.tar.gz',
-    )
-  })
-
-  it('只给实际存在的产物生成徽章', () => {
-    // 这台夹具没有 linux-arm64 的 tar.gz
+  it('缺系统、缺架构或某种格式时明确区分，不生成不存在的包', () => {
+    const body = render([
+      'DownVid-Wails-mac-arm64-1.9.0.dmg',
+      'DownVid-Wails-windows-x64-1.9.0.zip',
+      'DownVid-Wails-linux-x64-1.9.0-rc.1.deb',
+      'DownVid-Wails-windows-arm64-1.9.0-rc.1-installer.exe',
+      'DownVid-Wails-windows-arm64-1.8.9-installer.exe',
+      'DownVid-Wails-linux-x64-1.9.0.deb.sha256',
+    ], '--sources=github,gitee,cnb')
+    const [, mac, windows, linux] = body.split(/^#### (?:macOS|Windows|Linux)$/m)
+    expect(mac).toContain('**ARM64（Apple 芯片 / Apple silicon）**')
+    expect(mac).toContain('Not in this release: x64（Intel）')
+    expect(windows).toContain('Not in this release: ARM64（ARM）')
+    expect(linux).toContain('No package in this release.')
+    expect(windows).toContain('**便携版 ZIP / Portable**（推荐 / Recommended）')
+    expect(body).not.toContain('-rc.1')
+    expect(body).not.toContain('1.8.9-installer.exe')
+    expect(body).not.toContain('.deb.sha256')
+    expect(body).not.toContain('windows-x64-1.9.0-installer.exe')
     expect(body).not.toContain('linux-arm64-1.9.0.tar.gz')
-    expect(body).not.toContain('windows-arm64-1.9.0.zip')
   })
 
-  it('Windows 徽章用内联 SVG 图标（Simple Icons 已移除 windows）', () => {
-    // URLSearchParams 会把 data:image/svg+xml;base64, 编码成这样的前缀
-    expect(body).toContain('logo=data%3Aimage%2Fsvg%2Bxml%3Bbase64%2C')
-  })
-
-  it('带 QQ 交流群入口', () => {
+  it('没有构建时不声称可以下载，保留安装说明和交流群', () => {
+    const body = render([])
+    expect(body.match(/No package in this release\./g)).toHaveLength(3)
+    expect(body).not.toContain('/releases/download/')
+    expect(body).toContain('Platform Notes')
     expect(body).toContain(QQ_GROUP_URL)
     expect(body).toContain('logo=qq')
   })
 
-  it('不再生成下载对照表', () => {
-    expect(body).not.toContain('| 平台 / Platform |')
-    expect(body).not.toContain('Download Matrix')
-    expect(body).not.toContain('[GitHub](')
-    expect(body).not.toContain('[Gitee](')
-    expect(body).not.toContain('[CNB](')
+  it('非镜像脚本支持的格式只链接 GitHub，不捏造镜像链接', () => {
+    const file = 'DownVid-Wails-linux-x64-1.9.0.rpm'
+    const body = render([file], '--sources=cnb,github')
+    expect(body).toContain(`${BASE.github}/${file}`)
+    expect(body).not.toContain(BASE.cnb)
   })
 })

@@ -19,12 +19,11 @@ PyInstaller 的单文件包每次启动都要把 ~72MB 解压到临时目录，�
 
 ## 两条完全独立的下载路径
 
-- **`direct.go`**：`directUrl` 存在（解析器返回平台 CDN URL）→ 纯 HTTP 分块下载。
+- **`app/internal/fetch/direct.go`**：`directUrl` 存在 → 纯 HTTP 分块下载。
 
-  注意：抖音 / 快手当前会被平台的请求签名与人机验证挡住，解析阶段就失败，
-  **走不到这条路径**。解析器失败时 `parse.go` 直接上报类别错误（platform-blocked /
-  unsupported-url），不再回落 yt-dlp —— 回落只会把真实原因换成一句误导性的
-  「需要登录」。详见 `docs/faq.md`。
+  用户粘贴符合格式的抖音视频 CDN 直链时，直接生成单一 MP4 格式，不请求详情接口。
+  抖音 / 快手的作品页或分享短链仍可能被平台验证挡住。内置解析器失败时
+  `parse.go` 直接上报错误，不回落到会重复请求详情接口的 yt-dlp。详见 `docs/faq.md`。
 - 直链分块的调度细节：Range 可用时按小块队列调度，默认 8 路、最多 16 路；
   429/503 降低并发，分段失败从已写入位置重试。
   `.part.json` 保存逐段进度，兼容旧四段布局。
@@ -54,8 +53,8 @@ Windows 先 `taskkill /T /F` 再杀父进程。POSIX 上先 `SIGTERM` 给 aria2c
 
 ## 内存相关的两个坑
 
-- **解析缓存必须有条数上限**：只按 TTL 清理不够，每条缓存持有一份完整 info JSON
-  （长视频可到几 MB），「粘贴一批链接逐个看」30 分钟就能攒到几百 MB。
+- **只在内存保留第一条 JSON**：读取 yt-dlp 标准输出时丢弃其余条目，第一条共用同一份字节解码和落盘。
+- **解析缓存必须有条数上限**：内存里保留前端所需的元数据；完整 info JSON 单独落盘。
 - **临时 info JSON 退出时要清**：它们是下载时 `--load-info-json` 用的。
 
 ## 格式去重（`app/internal/parse/formats.go`）

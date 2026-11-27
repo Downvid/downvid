@@ -27,6 +27,7 @@ import (
 	"io"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -117,10 +118,28 @@ type Manager struct {
 	cache    *Snapshot
 	cachedAt time.Time
 	inflight *sync.WaitGroup
-	// active 是正在进行的下载（用于取消）
-	active    *exec.Cmd
-	activeCtx context.Context
-	canceling bool
+	// 每个会话只占用自己的依赖，空 Only 占用全部依赖。
+	active map[*installSession]struct{}
+}
+
+type installSession struct {
+	only     []Kind
+	cmd      *exec.Cmd
+	canceled bool
+}
+
+func installsOverlap(a, b []Kind) bool {
+	if len(a) == 0 || len(b) == 0 {
+		return true
+	}
+	for _, x := range a {
+		for _, y := range b {
+			if x == y {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // 探测结果缓存 60 秒：界面切来切去时不必反复起边车。
@@ -158,7 +177,7 @@ var ErrNoSidecar = errors.New("依赖探测程序缺失（downvid-deps 未打包
 //
 // force 为 true 时忽略缓存。
 func (m *Manager) Detect(force bool) (*Snapshot, error) {
-	if m.sidecarPath == "" {
+	if m.SidecarPath() == "" {
 		return nil, ErrNoSidecar
 	}
 
@@ -215,25 +234,36 @@ func (m *Manager) InvalidateCache() {
 // **流式**推送进度：边车每完成一块就写一行 NDJSON，这里逐行读并回调。
 // 等进程结束再一次性解析的话，界面在整个下载期间（可能几分钟）都看不到进度。
 func (m *Manager) Install(opts FetchOptions, onProgress func(Progress)) error {
-	if m.sidecarPath == "" {
+	for _, kind := range opts.Only {
+		if !slices.Contains(AllKinds, kind) {
+			return fmt.Errorf("未知运行依赖：%s", kind)
+		}
+	}
+	m.mu.Lock()
+	sidecar := m.sidecarPath
+	if sidecar == "" {
+		m.mu.Unlock()
 		return ErrNoSidecar
 	}
-
-	m.mu.Lock()
-	if m.active != nil {
-		m.mu.Unlock()
-		return errors.New("已有依赖下载正在进行")
+	for active := range m.active {
+		if installsOverlap(active.only, opts.Only) {
+			m.mu.Unlock()
+			return errors.New("已有依赖下载正在进行：本次请求包含正在安装的依赖")
+		}
 	}
-	ctx, cancel := context.WithCancel(context.Background())
-	m.activeCtx = ctx
-	m.canceling = false
+	session := &installSession{only: append([]Kind(nil), opts.Only...)}
+	if m.active == nil {
+		m.active = make(map[*installSession]struct{})
+	}
+	m.active[session] = struct{}{}
 	m.mu.Unlock()
 
 	defer func() {
-		cancel()
 		m.mu.Lock()
-		m.active = nil
-		m.activeCtx = nil
+		delete(m.active, session)
+		// 即使批量安装部分失败，也可能已有依赖成功装好。
+		m.cache = nil
+		m.cachedAt = time.Time{}
 		m.mu.Unlock()
 	}()
 
@@ -260,10 +290,10 @@ func (m *Manager) Install(opts FetchOptions, onProgress func(Progress)) error {
 		// 默认 10 分钟：一个 37MB 的 yt-dlp + 80MB 的 ffmpeg，慢网络下需要时间
 		timeout = 10 * time.Minute
 	}
-	runCtx, runCancel := context.WithTimeout(ctx, timeout)
+	runCtx, runCancel := context.WithTimeout(context.Background(), timeout)
 	defer runCancel()
 
-	cmd := exec.CommandContext(runCtx, m.sidecarPath, args...)
+	cmd := exec.CommandContext(runCtx, sidecar, args...)
 	hideWindow(cmd)
 	setProcessGroup(cmd)
 
@@ -277,10 +307,19 @@ func (m *Manager) Install(opts FetchOptions, onProgress func(Progress)) error {
 	}
 
 	m.mu.Lock()
-	m.active = cmd
+	if session.canceled {
+		m.mu.Unlock()
+		_ = stdout.Close()
+		_ = stderr.Close()
+		return errors.New("已取消")
+	}
+	err = cmd.Start()
+	if err == nil {
+		session.cmd = cmd
+	}
 	m.mu.Unlock()
 
-	if err := cmd.Start(); err != nil {
+	if err != nil {
 		return fmt.Errorf("无法启动依赖下载程序：%w", err)
 	}
 
@@ -331,8 +370,8 @@ func (m *Manager) Install(opts FetchOptions, onProgress func(Progress)) error {
 	waitErr := cmd.Wait()
 
 	m.mu.Lock()
-	wasCanceling := m.canceling
-	m.canceling = false
+	wasCanceling := session.canceled
+	session.cmd = nil
 	m.mu.Unlock()
 
 	if wasCanceling {
@@ -355,8 +394,6 @@ func (m *Manager) Install(opts FetchOptions, onProgress func(Progress)) error {
 		return fmt.Errorf("依赖下载失败：%w", waitErr)
 	}
 
-	// 下载完成后清缓存：界面上必须立刻看到新状态
-	m.InvalidateCache()
 	return nil
 }
 
@@ -368,28 +405,33 @@ func (m *Manager) Cancel() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	if m.activeCtx == nil || m.active == nil {
-		return false
-	}
-	m.canceling = true
-	if m.active.Process != nil {
-		signalTree(m.active, false)
+	for session := range m.active {
+		if session.canceled {
+			continue
+		}
+		session.canceled = true
+		if session.cmd == nil {
+			continue
+		}
+		cmd := session.cmd
+		signalTree(cmd, false)
 		// 宽限期后再强杀：SIGTERM 未必被处理（边车在解压时可能卡在 I/O 上）
-		go func(cmd *exec.Cmd) {
-			time.Sleep(3 * time.Second)
-			if cmd.ProcessState == nil { // 还在跑才强杀，避免 pid 复用误伤
+		time.AfterFunc(3*time.Second, func() {
+			m.mu.Lock()
+			defer m.mu.Unlock()
+			if session.cmd == cmd {
 				signalTree(cmd, true)
 			}
-		}(m.active)
+		})
 	}
-	return true
+	return len(m.active) > 0
 }
 
 // IsDownloading 报告是否有下载在进行。
 func (m *Manager) IsDownloading() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.active != nil
+	return len(m.active) > 0
 }
 
 // ManagedDir 返回托管目录（界面上的「打开目录」用它）。
@@ -400,7 +442,7 @@ func (m *Manager) runSidecar(timeout time.Duration, args ...string) (string, err
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, m.sidecarPath, args...)
+	cmd := exec.CommandContext(ctx, m.SidecarPath(), args...)
 	hideWindow(cmd)
 
 	var stdout, stderr strings.Builder

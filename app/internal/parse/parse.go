@@ -15,6 +15,7 @@ package parse
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -129,9 +130,8 @@ const (
 	cacheTTL = 30 * time.Minute
 	// cacheMax 是**条数**上限。
 	//
-	// 只按 TTL 清理不够：每条缓存持有一份完整 info JSON（长视频可到几 MB），
-	// 「粘贴一批链接逐个看」30 分钟能攒到几百 MB，全部留在内存里。
-	// 表现是「用久了越来越卡」，很难归因。
+	// 内存里只缓存给前端的元数据，完整 info JSON 在磁盘上。
+	// 条数上限同时限制内存中的结果和用于下载的缓存文件。
 	cacheMax = 60
 )
 
@@ -214,6 +214,9 @@ func (e wrappedError) Unwrap() error { return e.cause }
 // 失败时返回的错误消息带 `[[parse-error:kind]]` 标记（与 TS 版同一份契约），
 // 前端据此显示可行动的提示，而不是把 yt-dlp 的英文原文丢给用户。
 func (p *Parser) Parse(opts ParseOptions) (*VideoInfo, error) {
+	if info := ParseDouyinMediaURL(opts.URL); info != nil {
+		return info, nil
+	}
 	if opts.Timeout <= 0 {
 		opts.Timeout = 90 * time.Second
 	}
@@ -304,7 +307,8 @@ func (p *Parser) Parse(opts ParseOptions) (*VideoInfo, error) {
 		}
 	}
 
-	var stdout, stderr string
+	var line []byte
+	var stderr string
 	var lastErr error
 
 	for {
@@ -315,7 +319,7 @@ func (p *Parser) Parse(opts ParseOptions) (*VideoInfo, error) {
 		args = append(args, opts.CookieArgs...)
 		args = append(args, opts.URL)
 
-		stdout, stderr, lastErr = runYtdlp(opts, args)
+		line, stderr, lastErr = runYtdlp(opts, args)
 		if lastErr == nil {
 			break
 		}
@@ -345,29 +349,15 @@ func (p *Parser) Parse(opts ParseOptions) (*VideoInfo, error) {
 		*opts.RawStderr = stderr
 	}
 
-	// 多视频推文等播放列表会逐行输出多个 JSON，只取第一个条目
-	line := ""
-	sc := bufio.NewScanner(strings.NewReader(stdout))
-	sc.Buffer(make([]byte, 0, 64*1024), 64<<20) // info JSON 可能很大
-	for sc.Scan() {
-		if strings.HasPrefix(strings.TrimSpace(sc.Text()), "{") {
-			line = sc.Text()
-			break
-		}
-	}
-	if line == "" {
-		return nil, errors.New("[[parse-error:unknown]]解析响应格式无效")
-	}
-
 	var raw rawInfo
-	if err := json.Unmarshal([]byte(line), &raw); err != nil {
+	if err := json.Unmarshal(line, &raw); err != nil {
 		return nil, errors.New("[[parse-error:unknown]]解析响应格式无效")
 	}
 
 	info := p.buildInfo(&raw, isYoutube, allowManifests, opts)
 
 	// 保存原始 JSON：下载时用 --load-info-json 跳过二次提取
-	info.CacheFile = p.writeCacheFile(opts, raw, line)
+	info.CacheFile = p.writeCacheFile(opts, raw.ID, line)
 
 	p.toCache(key, info)
 	return info, nil
@@ -680,11 +670,11 @@ func langName(code string) string {
 
 // ===== 进程执行 =====
 
-// runYtdlp 跑一次 yt-dlp 并返回 stdout/stderr。
+// runYtdlp 跑一次 yt-dlp，只保留 stdout 的第一条 JSON 和诊断用的 stderr。
 //
 // 超时从 **opts.Timeout** 来而不是固定值：解析的时限与下载不同
 // （解析要等站点响应，下载要等字节）。
-func runYtdlp(opts ParseOptions, args []string) (stdout, stderr string, err error) {
+func runYtdlp(opts ParseOptions, args []string) (line []byte, stderr string, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), opts.Timeout)
 	defer cancel()
 
@@ -693,13 +683,40 @@ func runYtdlp(opts ParseOptions, args []string) (stdout, stderr string, err erro
 		cmd.Dir = dir
 	}
 	hideWindowParse(cmd)
+	cmd.WaitDelay = time.Second
 
-	var outBuf, errBuf strings.Builder
-	cmd.Stdout = &outBuf
+	var errBuf strings.Builder
 	cmd.Stderr = &errBuf
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, "", err
+	}
+	if err := cmd.Start(); err != nil {
+		return nil, "", err
+	}
+	// 子进程退出后，其后代仍可能持有管道；超时时也要唤醒扫描和排空。
+	stop := context.AfterFunc(ctx, func() { _ = stdout.Close() })
+	defer stop()
+	line = firstJSONLine(stdout)
+	// 不再保留后续输出，但必须读完才能 Wait，否则子进程可能阻塞在写管道。
+	_, _ = io.Copy(io.Discard, stdout)
+	if err := cmd.Wait(); err != nil {
+		return nil, errBuf.String(), err
+	}
+	return line, errBuf.String(), ctx.Err()
+}
 
-	err = cmd.Run()
-	return outBuf.String(), errBuf.String(), err
+func firstJSONLine(r io.Reader) []byte {
+	sc := bufio.NewScanner(r)
+	sc.Buffer(make([]byte, 0, 64*1024), 64<<20)
+	for sc.Scan() {
+		line := sc.Bytes()
+		if trimmed := bytes.TrimSpace(line); len(trimmed) > 0 && trimmed[0] == '{' {
+			// 此后不再使用 Scanner，解码和落盘共用这段字节。
+			return line
+		}
+	}
+	return nil
 }
 
 // ===== 缓存 =====
@@ -746,12 +763,11 @@ func (p *Parser) toCache(key string, info *VideoInfo) {
 }
 
 // writeCacheFile 把原始 info JSON 落盘（下载时 --load-info-json 用）。
-func (p *Parser) writeCacheFile(opts ParseOptions, raw rawInfo, line string) string {
+func (p *Parser) writeCacheFile(opts ParseOptions, id string, line []byte) string {
 	dir := opts.CacheDir
 	if dir == "" {
 		dir = os.TempDir()
 	}
-	id := raw.ID
 	if id == "" {
 		id = fmt.Sprintf("%d", time.Now().UnixNano())
 	}
@@ -771,7 +787,7 @@ func (p *Parser) writeCacheFile(opts ParseOptions, raw rawInfo, line string) str
 	}
 
 	path := filepath.Join(dir, "downvid-"+safe+".json")
-	if err := os.WriteFile(path, []byte(line), 0o644); err != nil {
+	if err := os.WriteFile(path, line, 0o644); err != nil {
 		return ""
 	}
 	return path
@@ -791,5 +807,3 @@ func (p *Parser) CleanupTempFiles() {
 	}
 	p.cache = map[string]*cacheEntry{}
 }
-
-var _ = io.Discard

@@ -14,10 +14,56 @@ func TestIsDouyin(t *testing.T) {
 		{"https://v.douyin.com/iabcXYZ/", true},
 		{"https://www.iesdouyin.com/share/video/123", true},
 		{"https://www.bilibili.com/video/BV1xx411c7mD", false},
+		{"https://notdouyin.com/video/123", false},
+		{"https://example.invalid/?u=https://www.douyin.com/video/123", false},
+		{"https://douyin.com@example.invalid/video/123", false},
 	}
 	for _, c := range cases {
 		if got := IsDouyin(c.url); got != c.want {
 			t.Errorf("IsDouyin(%q) = %v, want %v", c.url, got, c.want)
+		}
+	}
+}
+
+func TestParseDouyinMediaURL(t *testing.T) {
+	const media = "https://v26-web.douyinvod.com/path/video/tos/cn/object"
+	const signed = media + "?fixture-signature=a%2Fb"
+	p := NewParser()
+	info, err := p.Parse(ParseOptions{URL: signed})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.DirectURL != signed || info.WebpageURL != signed || info.CacheFile != "" {
+		t.Fatalf("应保留完整直链且不写解析缓存，got %+v", info)
+	}
+	if len(info.Formats) != 1 || info.Formats[0].Ext != "mp4" || !info.Formats[0].HasAudio {
+		t.Fatalf("应提供一个带音频的 MP4 格式，got %+v", info.Formats)
+	}
+	renewed := ParseDouyinMediaURL(media + "?fixture-signature=new")
+	other := ParseDouyinMediaURL("https://v26-web.douyinvod.com/other.mp4")
+	if renewed == nil || renewed.ID != info.ID || renewed.Title != info.Title ||
+		info.ID == "" || other == nil || other.ID == info.ID || strings.Contains(info.Title, "fixture-signature") {
+		t.Fatal("文件名应随素材变化，但不能随查询参数变化或泄露参数")
+	}
+
+	for _, raw := range []string{
+		"https://v.douyin.com/short/",
+		"https://www.douyin.com/video/123",
+		"https://douyinvod.com.example.invalid/a.mp4",
+		"https://notdouyinvod.com/a.mp4",
+		"https://douyinvod.com@example.invalid/a.mp4",
+		"https://user@douyinvod.com/a.mp4",
+		"http://douyinvod.com/a.mp4",
+		"https://douyinvod.com:8443/a.mp4",
+		"https://douyinvod.com/?file=a.mp4",
+		"https://douyinvod.com/video/tos/",
+		"https://douyinvod.com/video/tos/list.m3u8",
+		"https://douyinvod.com/video/tos/list.mpd",
+		"https://douyinvod.com/video/tos/audio.mp3",
+		"https://douyinvod.com/%xx",
+	} {
+		if ParseDouyinMediaURL(raw) != nil {
+			t.Errorf("不能把 %q 当成 MP4 直链", raw)
 		}
 	}
 }

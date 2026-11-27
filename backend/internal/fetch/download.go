@@ -22,6 +22,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -119,7 +120,10 @@ func (o *Options) client() (*http.Client, error) {
 	return &http.Client{Transport: transport, Timeout: timeout}, nil
 }
 
-// Install 依次执行全部任务；任一任务失败即返回，已完成的任务保留
+// 批量安装最多同时下载三项，避免慢网络上串行等候，也不打满连接和磁盘。
+const maxConcurrentDownloads = 3
+
+// Install 并发安装不同目标。单项失败不丢弃其他结果，最后一并返回错误。
 func Install(ctx context.Context, tasks []Task, opts Options) error {
 	if len(tasks) == 0 {
 		return errors.New("没有需要下载的依赖")
@@ -130,16 +134,52 @@ func Install(ctx context.Context, tasks []Task, opts Options) error {
 	}
 	opt := opts
 	opt.HTTPClient = client
-
+	var emitMu sync.Mutex
+	if opts.Emit != nil {
+		opt.Emit = func(event Event) {
+			emitMu.Lock()
+			defer emitMu.Unlock()
+			opts.Emit(event)
+		}
+	}
+	targets := make(map[string]bool, len(tasks))
+	for _, task := range tasks {
+		target := filepath.Clean(task.Target)
+		if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
+			target = strings.ToLower(target)
+		}
+		if targets[target] {
+			return fmt.Errorf("安装目标重复：%s", task.Target)
+		}
+		targets[target] = true
+	}
+	// 先宣布整批任务，前端计算总进度时不会随着新任务启动改变分母。
 	for _, task := range tasks {
 		opt.emit(Event{Event: "start", Tool: task.Tool})
-		if err := installOne(ctx, task, opt); err != nil {
-			opt.emit(Event{Event: "error", Tool: task.Tool, Message: err.Error()})
-			return fmt.Errorf("%s：%w", task.Tool, err)
-		}
-		opt.emit(Event{Event: "installed", Tool: task.Tool, Path: task.Target})
 	}
-	return nil
+	errs := make([]error, len(tasks))
+	slots := make(chan struct{}, maxConcurrentDownloads)
+	var wg sync.WaitGroup
+	for i, task := range tasks {
+		wg.Go(func() {
+			select {
+			case slots <- struct{}{}:
+				defer func() { <-slots }()
+			case <-ctx.Done():
+				errs[i] = ctx.Err()
+				return
+			}
+			if err := installOne(ctx, task, opt); err != nil {
+				opt.emit(Event{Event: "error", Tool: task.Tool, Message: err.Error()})
+				errs[i] = fmt.Errorf("%s：%w", task.Tool, err)
+				return
+			}
+			Finalize(task.Target, opt, opt.Emit)
+			opt.emit(Event{Event: "installed", Tool: task.Tool, Path: task.Target})
+		})
+	}
+	wg.Wait()
+	return errors.Join(errs...)
 }
 
 func installOne(ctx context.Context, task Task, opts Options) error {

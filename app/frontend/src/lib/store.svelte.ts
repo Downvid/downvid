@@ -89,6 +89,7 @@ import {
 } from './settings'
 import { fetchAnnouncement, loadLocalAnnouncement, type AnnouncementDoc } from './announcement'
 import { fetchSponsors, type Sponsor } from './sponsors'
+import { applyDepInstallEvent, totalDepInstallProgress, type DepInstallEvent } from './dep-install-progress'
 import type {
   DepItem,
   Dialog,
@@ -225,6 +226,9 @@ class AppStore {
   // ===== 依赖 =====
   deps = $state<DepItem[]>([])
   depsChecking = $state(false)
+  private depsCheckTask: Promise<void> | null = null
+  private depsRefreshPending = false
+  private depsBatchProgress = new Map<string, number>()
   /** 插件列表（索引 + 本机状态） */
   plugins = $state<PluginList>({ entries: [], dir: '' })
   pluginsLoading = $state(false)
@@ -370,9 +374,10 @@ class AppStore {
     this.cleanups.push(await onProgress((p) => this.onBackendProgress(p as never)))
     this.cleanups.push(
       await onDepsProgress((p) => {
-        const ev = p as { event?: string; downloaded?: number; total?: number; message?: string }
-        if (ev.event === 'progress' && ev.total) {
-          this.depsPromptProgress = (ev.downloaded ?? 0) / ev.total
+        const batch = this.depsPromptBusy ? this.depsBatchProgress : undefined
+        this.deps = applyDepInstallEvent(this.deps, p as DepInstallEvent, batch)
+        if (batch) {
+          this.depsPromptProgress = totalDepInstallProgress(batch)
         }
       }),
     )
@@ -403,7 +408,7 @@ class AppStore {
     )
 
     // 依赖探测：不阻塞首屏，失败也不弹错（缺依赖时解析会给出可行动提示）
-    void this.checkDepsSilently()
+    void this.checkDeps()
 
     // 自动检查更新（用户关掉就不查）
     if (this.settings.autoCheckUpdate) {
@@ -853,7 +858,6 @@ class AppStore {
       // 缺依赖时弹「一键下载」——这是用户能自己解决的事
       if (res.missingKind) {
         this.dialog = 'deps'
-        this.depsPromptBusy = false
         void this.checkDeps(true)
       }
       return
@@ -1392,17 +1396,20 @@ class AppStore {
     })
   }
 
-  private async checkDepsSilently(): Promise<void> {
-    const list = await detectDeps()
-    if (list) this.deps = toDepItems(list, this.deps)
+  checkDeps(interactive = false): Promise<void> {
+    if (this.depsCheckTask) return this.depsCheckTask
+    this.depsChecking = true
+    this.depsCheckTask = this.runDepsCheck(interactive)
+    return this.depsCheckTask
   }
 
-  async checkDeps(interactive = false): Promise<void> {
-    if (this.depsChecking) return
-    this.depsChecking = true
+  private async runDepsCheck(interactive: boolean): Promise<void> {
     try {
-      const list = await detectDeps()
-      if (list) this.deps = toDepItems(list, this.deps)
+      do {
+        this.depsRefreshPending = false
+        const list = await detectDeps()
+        if (list) this.deps = toDepItems(list, this.deps)
+      } while (this.depsRefreshPending)
       if (interactive) {
         const missing = this.deps.filter((d) => !d.found && !d.optional)
         this.toast(
@@ -1411,34 +1418,27 @@ class AppStore {
         )
       }
     } finally {
+      this.depsCheckTask = null
       this.depsChecking = false
     }
+  }
+
+  private refreshDepsAfterInstall(): Promise<void> {
+    // 若当前探测早于另一个下载完成，探测结束后再补一次，不能丢掉较晚的更新。
+    this.depsRefreshPending = true
+    return this.checkDeps()
   }
 
   /**
    * 安装（或更新）一个依赖。
    *
    * `kind` 是**后端 kind**：`yt-dlp` / `ffmpeg` / `ffprobe` / `aria2`。
-   * 传二进制名（`aria2c`）会被后端当成未知种类静默忽略——下载「完成」了
-   * 但什么都没装上，所以调用方一律用 `dep.id` 而不是 `dep.name`。
+   * 二进制名（`aria2c`）不属于种类，调用方一律用 `dep.id` 而不是 `dep.name`。
    */
   async installDep(kind: string): Promise<void> {
-    this.depsPromptBusy = true
-    this.depsPromptProgress = 0
+    if (this.depsPromptBusy || this.deps.find((d) => d.id === kind)?.busy) return
     // 让这一行立刻进入「下载中」：接口是异步的，用户点了按钮要马上有反应
     this.deps = this.deps.map((d) => (d.id === kind ? { ...d, busy: true, progress: 0 } : d))
-
-    const unsubscribe = await onDepsProgress((p) => {
-      const ev = p as { event?: string; tool?: string; downloaded?: number; total?: number; message?: string }
-      // tool 是依赖种类；老版本边车可能不带它，那就按「当前正在装的那个」算
-      if (ev.event === 'progress' && (!ev.tool || ev.tool === kind)) {
-        const ratio = ev.total ? (ev.downloaded ?? 0) / ev.total : 0
-        this.depsPromptProgress = ratio
-        this.deps = this.deps.map((d) =>
-          d.id === kind ? { ...d, busy: true, progress: ratio } : d,
-        )
-      }
-    })
 
     try {
       const res = await installDeps({ only: [kind], mirror: this.settings.depMirror })
@@ -1447,27 +1447,31 @@ class AppStore {
         return
       }
       // 装完重新探测：界面必须立刻看到新状态（版本号、来源都可能变）
-      await this.checkDeps(false)
+      await this.refreshDepsAfterInstall()
       this.toast(t('toast.depInstalled'), 'success')
     } finally {
-      unsubscribe()
-      this.depsPromptBusy = false
-      this.depsPromptProgress = 0
       this.deps = this.deps.map((d) => (d.id === kind ? { ...d, busy: false, progress: 0 } : d))
     }
   }
 
   async downloadPromptDeps(): Promise<void> {
+    if (this.depsPromptBusy || this.deps.some((dep) => dep.busy)) return
     this.depsPromptBusy = true
+    this.depsPromptProgress = 0
     try {
       const res = await installDeps({ mirror: this.settings.depMirror })
+      // 有依赖失败时，其余已完成的安装也要更新到界面。
+      await this.refreshDepsAfterInstall()
       if (!res.ok) {
         this.toast(res.message || t('toast.depInstallFailed'), 'error')
         return
       }
-      await this.checkDeps(false)
       this.dialog = 'none'
     } finally {
+      this.deps = this.deps.map((dep) =>
+        this.depsBatchProgress.has(dep.id) ? { ...dep, busy: false, progress: 0 } : dep,
+      )
+      this.depsBatchProgress.clear()
       this.depsPromptBusy = false
     }
   }

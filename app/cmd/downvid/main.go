@@ -151,9 +151,14 @@ func run(args []string, stdout, stderr io.Writer) int {
 		effectiveProxy = proxy
 	}
 
-	ytdlp, ok := appdir.FindTool("yt-dlp", st.DepPaths)
-	if !ok {
-		return fail("没找到 yt-dlp。先打开 DownVid 在「设置 → 运行依赖」下载，或把它放进 PATH / %s", filepath.Join(appdir.Home(), "runtime", "bin"))
+	mediaInfo := parse.ParseDouyinMediaURL(url)
+	ytdlp := ""
+	if mediaInfo == nil {
+		var ok bool
+		ytdlp, ok = appdir.FindTool("yt-dlp", st.DepPaths)
+		if !ok {
+			return fail("没找到 yt-dlp。先打开 DownVid 在「设置 → 运行依赖」下载，或把它放进 PATH / %s", filepath.Join(appdir.Home(), "runtime", "bin"))
+		}
 	}
 	ffmpeg, hasFFmpeg := appdir.FindTool("ffmpeg", st.DepPaths)
 	if !hasFFmpeg {
@@ -168,16 +173,20 @@ func run(args []string, stdout, stderr io.Writer) int {
 	if manualCookies == "" && st.CookieMode == "manual" {
 		manualCookies = st.CookiesFile
 	}
-	directCookies := manualCookies
-	if directCookies == "" {
-		if p := cookie.NewManager(userData).SnapshotPath(); fileExists(p) {
-			directCookies = p
-		}
-	}
 	cookieManager := cookie.NewManager(userData)
-	attempts := cookieManager.GetAttempts(manualCookies, false)
-	if len(attempts) == 0 {
-		attempts = []cookie.Attempt{{Label: "none"}}
+	var directCookies string
+	var attempts []cookie.Attempt
+	if mediaInfo == nil {
+		directCookies = manualCookies
+		if directCookies == "" {
+			if p := cookieManager.SnapshotPath(); fileExists(p) {
+				directCookies = p
+			}
+		}
+		attempts = cookieManager.GetAttempts(manualCookies, false)
+		if len(attempts) == 0 {
+			attempts = []cookie.Attempt{{Label: "none"}}
+		}
 	}
 
 	var jsOnce sync.Once
@@ -197,7 +206,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	parser := parse.NewParser()
 	defer parser.CleanupTempFiles()
 
-	var info *parse.VideoInfo
+	info := mediaInfo
 	var chosen = -1
 	var lastErr error
 	for i := range attempts {
@@ -233,7 +242,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 		return fail("解析失败：%v", lastErr)
 	}
-	defer attempts[chosen].Cleanup()
+	if chosen >= 0 {
+		defer attempts[chosen].Cleanup()
+	}
 
 	accel := download.NormalizeAccelerationPtr(&download.Acceleration{
 		Enabled:        st.Acceleration.Enabled,

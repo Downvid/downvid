@@ -16,7 +16,7 @@ import (
 // 多行 JSON 只取第一行、stdout/stderr 分流、超时、退出码。
 // mock 掉这些等于什么都没测。
 
-func fakeYtdlp(t *testing.T, script string) string {
+func fakeYtdlp(t testing.TB, script string) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("用 shell 脚本做夹具，Windows 上跳过")
@@ -80,16 +80,50 @@ func TestParseBilibiliRealShape(t *testing.T) {
 func TestParseTakesFirstJSONLine(t *testing.T) {
 	first := `{"id":"A","title":"第一个"}`
 	second := `{"id":"B","title":"第二个"}`
-	fake := fakeYtdlp(t, "printf '%s\\n' '"+first+"'\nprintf '%s\\n' '"+second+"'\nexit 0\n")
+	fake := fakeYtdlp(t, "printf '%s\\n' '非 JSON 输出' '  "+first+"' '"+second+"'\n"+
+		"dd if=/dev/zero bs=65536 count=4 2>/dev/null\nprintf '尾部诊断\\n' >&2\n")
 
+	var stderr string
 	info, err := NewParser().Parse(ParseOptions{
-		YtdlpPath: fake, URL: "https://x/v", CacheDir: t.TempDir(), Timeout: 10 * time.Second,
+		YtdlpPath: fake, URL: "https://x/v", CacheDir: t.TempDir(), Timeout: 10 * time.Second, RawStderr: &stderr,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if info.ID != "A" || info.Title != "第一个" {
 		t.Fatalf("应取第一行，got %+v", info)
+	}
+	if data, err := os.ReadFile(info.CacheFile); err != nil || string(data) != "  "+first {
+		t.Fatalf("缓存应保留第一条 JSON 的原始字节，got %q, err %v", data, err)
+	}
+	if stderr != "尾部诊断\n" {
+		t.Fatalf("子进程应正常写完尾部诊断，got %q", stderr)
+	}
+}
+
+func BenchmarkParseLargeYtdlpOutput(b *testing.B) {
+	dir := b.TempDir()
+	payload := `{"id":"fixture","title":"视频","unused":"` + strings.Repeat("x", 4<<20) + "\"}\n"
+	if err := os.WriteFile(filepath.Join(dir, "fixture.json"), []byte(payload), 0o600); err != nil {
+		b.Fatal(err)
+	}
+	fake := fakeYtdlp(b, "cat \""+filepath.Join(dir, "fixture.json")+"\"\n")
+	opts := ParseOptions{YtdlpPath: fake, URL: "https://example.invalid/video", CacheDir: dir}
+	b.ReportAllocs()
+	for b.Loop() {
+		p := NewParser()
+		if _, err := p.Parse(opts); err != nil {
+			b.Fatal(err)
+		}
+		p.CleanupTempFiles()
+	}
+}
+
+func TestParseRejectsJSONFromFailedProcess(t *testing.T) {
+	fake := fakeYtdlp(t, "printf '%s\\n' '{\"id\":\"fixture\"}'\nprintf 'ERROR: Unsupported URL\\n' >&2\nexit 1\n")
+	info, err := NewParser().Parse(ParseOptions{URL: "https://example.invalid/video", YtdlpPath: fake, CacheDir: t.TempDir()})
+	if info != nil || err == nil || !strings.Contains(err.Error(), "[[parse-error:unsupported-url]]") {
+		t.Fatalf("yt-dlp 退出失败时不应采用已输出的 JSON，got %+v, err %v", info, err)
 	}
 }
 

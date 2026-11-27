@@ -503,13 +503,12 @@ jobs:
         with:
           node-version: 22
 
-      # 正文顶部生成「点徽章即下载」的引导区：Release 里 CHANGELOG 内容较长，
-      # 此前不少用户拉到页面后不知道点哪里下载。下载链接按实际产物生成，
-      # 不会出现指向不存在文件的死链。
+      # GitHub 先发布自己的可下载产物；两份镜像正文分别优先链接自己的资产，
+      # 只在各自资产就绪后公开。
       - name: Generate release notes
         id: changelog
         run: |
-          node scripts/gen-release-notes.mjs artifacts "$VERSION" CHANGELOG.md > /tmp/release-notes.md
+          : > /tmp/missing-notice.md
           # 产物缺失时必须**写在正文最上面**，否则用户会以为这是一个正常发布、
           # 只是自己没找到对应的包。
           if [ -n "${{ steps.platforms.outputs.missing }}" ]; then
@@ -519,12 +518,18 @@ jobs:
               echo "> 构建在 CI 侧未完成（通常是 runner 不可用）。补齐后会重新发布。"
               echo ""
             } > /tmp/missing-notice.md
-            cat /tmp/missing-notice.md /tmp/release-notes.md > /tmp/rn.md
-            mv /tmp/rn.md /tmp/release-notes.md
           fi
+          for source in github gitee cnb; do
+            sources="$source"
+            if [ "$source" != github ]; then sources="$sources,github"; fi
+            {
+              cat /tmp/missing-notice.md
+              node scripts/gen-release-notes.mjs artifacts "$VERSION" CHANGELOG.md --sources="$sources"
+            } > "/tmp/release-notes.$source.md"
+          done
           {
             echo "notes<<RELEASE_NOTES_EOF"
-            cat /tmp/release-notes.md
+            cat /tmp/release-notes.github.md
             echo "RELEASE_NOTES_EOF"
           } >> "$GITHUB_OUTPUT"
 
@@ -594,8 +599,10 @@ jobs:
             --version "$VERSION" \
             --tag "v$VERSION" \
             --artifacts artifacts \
-            --notes-file /tmp/release-notes.md \
+            --notes-file /tmp/release-notes.github.md \
+            --ready-notes-file /tmp/release-notes.gitee.md \
             --out /tmp/manifest.gitee.json
+          echo "ready=true" >> "$GITHUB_OUTPUT"
 
       # ===== CNB 完整镜像：Release 资产 + 固定的 update 清单 =====
       #
@@ -616,8 +623,26 @@ jobs:
             --version "$VERSION" \
             --tag "v$VERSION" \
             --artifacts artifacts \
-            --notes-file /tmp/release-notes.md \
+            --notes-file /tmp/release-notes.cnb.md \
             --out /tmp/manifest.cnb.json
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: 在 GitHub Release 中补充已同步的镜像入口
+        if: steps.gitee.outputs.ready == 'true' || steps.cnb.outputs.ready == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITEE_READY: ${{ steps.gitee.outputs.ready }}
+          CNB_READY: ${{ steps.cnb.outputs.ready }}
+        run: |
+          sources=github
+          if [ "$GITEE_READY" = true ]; then sources="$sources,gitee"; fi
+          if [ "$CNB_READY" = true ]; then sources="$sources,cnb"; fi
+          {
+            cat /tmp/missing-notice.md
+            node scripts/gen-release-notes.mjs artifacts "$VERSION" CHANGELOG.md --sources="$sources"
+          } > /tmp/release-notes.synced.md
+          gh release edit "v$VERSION" --notes-file /tmp/release-notes.synced.md
 
       # ===== 官网版本号：只在确认发布成功之后才刷 =====
       #

@@ -939,6 +939,11 @@ func runSidecar(sidecar string, args ...string) (string, error) {
 // 失败时返回带 `[[parse-error:kind]]` 标记的错误消息，前端据此显示可行动提示
 // （分类逻辑在 `internal/parse`，前端不重复实现——两处各判一次必然漂移）。
 func (a *App) Parse(url string, proxy string) (*parse.VideoInfo, error) {
+	// 文件地址不需要站点解析，也不要把它附带的临时签名传给第三方插件。
+	if info := parse.ParseDouyinMediaURL(url); info != nil {
+		return info, nil
+	}
+
 	// 插件优先。插件是用户自己装的，认领链接时应当先于内置解析器与 yt-dlp：
 	// 用户装它就是为了覆盖某个站点，若让 yt-dlp 先答，插件永远轮不到。
 	//
