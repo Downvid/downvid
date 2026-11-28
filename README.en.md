@@ -1,5 +1,5 @@
 <p>
-  <a href="./README.md">简体中文</a> | <strong>English</strong>
+  <a href="./README.md">简体中文</a> | <strong>English</strong> | <a href="./README.tr.md">Türkçe</a>
 </p>
 <div align="center">
 
@@ -153,7 +153,7 @@ See the [Installation Guide](./docs/installation.md) for detailed steps.
 
 - Node.js ≥ 22
 - pnpm ≥ 8
-- Go ≥ 1.25
+- Go ≥ 1.27.3
 - Wails CLI v2.16
 
 ### Steps
