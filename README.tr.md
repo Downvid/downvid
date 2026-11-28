@@ -149,7 +149,7 @@ Ayrıntılı adımlar için [Kurulum Rehberi](./docs/installation.md) belgesine 
 
 - Node.js ≥ 22
 - pnpm ≥ 8
-- Go ≥ 1.25
+- Go ≥ 1.27.3
 - Wails CLI v2.16
 
 ### Adımlar
